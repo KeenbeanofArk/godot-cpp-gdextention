@@ -5,10 +5,10 @@ import sys
 from methods import print_error
 
 
-libname = "EXTENSION-NAME"
+libname = "godot-cpp-gdextension"
 projectdir = "demo"
 
-localEnv = Environment(tools=["default"], PLATFORM="")
+localEnv = Environment(tools=["default"], PLATFORM="windows", target="template_debug", suffix=".dev.universal")
 
 # Build profiles can be used to decrease compile times.
 # You can either specify "disabled_classes", OR
