@@ -1,12 +1,7 @@
-extends Node2D
+extends Node3D
 
 func _ready() -> void:
-	var summator = Summator.new()
+
+	var v_gen = $VoxelGenerator 
 	
-	summator.add(3)
-	summator.add(4)
-	print(summator.get_total())
-	summator.reset()
-	print(summator.get_total())
-	
-	
+	v_gen.generate()

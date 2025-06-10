@@ -88,9 +88,9 @@ TrafficLightState TrafficLight::get_current_state() const {
 
 void TrafficLight::show_next_light() {
     TrafficLightState next_state;
-    if(GDVIRTUAL_CALL(get_current_state, light_type, next_state)) {
-       set_current_state(next_state);
-    }
+    //if(GDVIRTUAL_CALL(get_current_state, light_type, next_state)) {
+       //set_current_state(next_state);
+    //}
 }   
 
 TrafficLight::TrafficLight() {
