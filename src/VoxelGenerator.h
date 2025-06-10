@@ -12,7 +12,7 @@
 using namespace godot;
 
 class VoxelGenerator : public Node3D {
-	GDCLASS(VoxelGenerator, Node3D);
+	GDCLASS(VoxelGenerator, Node3D)
 
 private:
 	int size = 1;
