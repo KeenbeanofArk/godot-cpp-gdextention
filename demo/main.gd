@@ -1,5 +1,18 @@
 extends Node3D
 
-func _ready() -> void:
+@onready var v_gen = $VoxelGenerator
 
-	pass
+func _ready() -> void:
+	
+	add_child(v_gen)
+	v_gen.auto_generate = false
+	v_gen.debug_mode = true
+	v_gen.debug_verbosity = 2
+	v_gen.size = 8
+	v_gen.resolution = 8
+	v_gen.show_centers = false
+	v_gen.show_grid = false
+	v_gen.generate()
+	
+func _process(_delta: float) -> void:
+	v_gen.log_message("Testing", 3)

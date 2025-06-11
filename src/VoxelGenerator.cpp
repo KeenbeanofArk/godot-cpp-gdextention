@@ -55,8 +55,28 @@ void VoxelGenerator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "debug_verbosity", PROPERTY_HINT_RANGE, "0,3,1"), "set_debug_verbosity", "get_debug_verbosity");
 }
 
-void VoxelGenerator::_notification(int p_what) {
-}
+void VoxelGenerator::_notification(int p_what){
+    switch (p_what) {
+        case NOTIFICATION_READY: {
+            remove_children();
+            randomize_seed();
+            size = 1;
+            resolution = 1;
+            cutoff = 0.1f;
+            show_centers = true;
+            show_grid = true;
+            seeder = 1234;
+
+	        if (auto_generate)
+		        generate();
+	        else
+		        UtilityFunctions::print("VoxelGenerator is ready, but auto generation is disabled. Call generate() to create the voxel grid.");
+            break;
+        }
+        default:
+            break;
+    }
+};
 
 void VoxelGenerator::reset() {
 	remove_children();
@@ -67,24 +87,11 @@ void VoxelGenerator::reset() {
 	show_centers = true;
 	show_grid = true;
 	seeder = 1234;
-	auto_generate = false;
-}
 
-void VoxelGenerator::_ready() {
-	remove_children();
-	randomize_seed();
-	size = 1;
-	resolution = 1;
-	cutoff = 0.1f;
-	show_centers = true;
-	show_grid = true;
-	seeder = 1234;
-	auto_generate = false;
-
-	if (auto_generate)
-		generate();
-	else
-		UtilityFunctions::print("VoxelGenerator is ready, but auto generation is disabled. Call generate() to create the voxel grid.");
+    if (auto_generate)
+        generate();
+    else
+        UtilityFunctions::print("VoxelGenerator reset, but auto generation is disabled. Call generate() to create the voxel grid.");
 }
 
 void VoxelGenerator::set_auto_generate(bool value) {
@@ -180,9 +187,10 @@ void VoxelGenerator::randomize_seed() {
 }
 
 void VoxelGenerator::generate() {
-	log_message("Starting voxel generation with:");
+    log_message("VoxelGenerator::generate() called", 2);
+	log_message("Starting voxel generation with:", 2);
 	log_message(String("  Size: {0}, Resolution: {1}, Cutoff: {2}, Seed: {3}")
-					.format(Array::make(size, resolution, cutoff, seeder)));
+					.format(Array::make(size, resolution, cutoff, seeder)), 2);
 
 	remove_children();
 
@@ -249,13 +257,20 @@ void VoxelGenerator::generate() {
 
 				if (center_value < cutoff) {
 					add_cubes_vertices(mesh_cubes, cube_vertices);
+				} // Get the lookup index for the current cube
+				int lookup_index = get_lookup_index(cube_values, cutoff); // Bounds check to prevent crash with incomplete lookup table
+				const auto &marching_triangles = Constants::get_marching_triangles();
+				if (lookup_index >= marching_triangles.size()) {
+					if (debug_mode && debug_verbosity >= 2) {
+						log_message(String("Warning: lookup_index {0} exceeds table size {1}, skipping cube")
+											.format(Array::make(lookup_index, (int)marching_triangles.size())),
+								1);
+					}
+					continue; // Skip this cube to prevent crash
 				}
 
-				// Get the lookup index for the current cube
-				int lookup_index = get_lookup_index(cube_values, cutoff);
-
 				// Get triangles
-				std::vector<int> triangles(Constants::marching_triangles[lookup_index].begin(), Constants::marching_triangles[lookup_index].end());
+				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
 
 				Color color(
 						(center.x + size) / (size * 2.0f),
@@ -310,7 +325,7 @@ void VoxelGenerator::generate() {
 		}
 	}
 
-	log_message(String("Generation completed: {0} triangles created").format(Array::make(triangle_count)));
+	log_message(String("Generation completed: {0} triangles created").format(Array::make(triangle_count)), 2);
 
 	// # End surfaces
 	mesh_centers->surface_end();
@@ -322,7 +337,7 @@ void VoxelGenerator::generate() {
 	material_centers.instantiate();
 	material_centers->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
 	material_centers->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
-	material_centers->set_point_size(10.0);
+	material_centers->set_point_size(20.0);
 
 	// # Create cubes material
 	Ref<StandardMaterial3D> material_cubes;
@@ -359,7 +374,7 @@ void VoxelGenerator::generate() {
 	add_child(mi_triangles);
 
 	if (visualize_noise_values) {
-		log_message("Creating noise visualization");
+		log_message("Creating noise visualization", 2);
 		visualize_noise_field();
 	}
 }

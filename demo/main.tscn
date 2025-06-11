@@ -1,8 +1,31 @@
-[gd_scene load_steps=2 format=3 uid="uid://etd11wxpmror"]
+[gd_scene load_steps=5 format=3 uid="uid://etd11wxpmror"]
 
 [ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://main.gd" id="1_ig7tw"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_ig7tw"]
+
+[sub_resource type="Sky" id="Sky_0xm2m"]
+sky_material = SubResource("ProceduralSkyMaterial_ig7tw")
+
+[sub_resource type="Environment" id="Environment_h2yge"]
+background_mode = 2
+sky = SubResource("Sky_0xm2m")
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_ig7tw")
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="."]
+size = 16
+resolution = 6
+cutoff = 0.3
+auto_generate = true
+visualize_noise_values = false
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_h2yge")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.825409, 0.564535, 0, -0.564535, 0.825409, -0.0251886, 9.14801, 23.4874)
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.920784, 0.109467, 0.374397, 0, -0.959815, 0.280633, 0.390072, -0.258403, -0.883783, 6.35108, 4.05186, 0.919071)

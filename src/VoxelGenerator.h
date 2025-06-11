@@ -18,14 +18,14 @@ private:
 	int size = 1;
 	int resolution = 1;
 	float cutoff = 0.1f;
-	bool show_centers = true;
-	bool show_grid = true;
+	bool show_centers = false;
+	bool show_grid = false;
 	int seeder = 1;
 	bool auto_generate = false;
 
 	// Debug properties
-	bool debug_mode = false;
-	bool visualize_noise_values = false;
+	bool debug_mode = true;
+	bool visualize_noise_values = true;
 	int debug_verbosity = 1;
 
 protected:
@@ -34,7 +34,7 @@ protected:
 	void _notification(int p_what);
 
 public:
-	void _ready() override;
+	//void _ready() override;
 
 	void set_size(int value);
 	int get_size() const;
