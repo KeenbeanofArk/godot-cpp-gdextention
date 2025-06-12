@@ -15,10 +15,10 @@ sky = SubResource("Sky_0xm2m")
 script = ExtResource("1_ig7tw")
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="."]
-size = 16
-resolution = 6
-cutoff = 0.3
+chunk_size = 16
+resolution = 7
 auto_generate = true
+debug_mode = false
 visualize_noise_values = false
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]

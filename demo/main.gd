@@ -4,11 +4,10 @@ extends Node3D
 
 func _ready() -> void:
 	
-	add_child(v_gen)
 	v_gen.auto_generate = false
 	v_gen.debug_mode = true
 	v_gen.debug_verbosity = 2
-	v_gen.size = 8
+	v_gen.chunk_size = 16
 	v_gen.resolution = 8
 	v_gen.show_centers = false
 	v_gen.show_grid = false

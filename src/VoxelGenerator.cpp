@@ -14,8 +14,8 @@
 void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("generate"), &VoxelGenerator::generate);
 
-	ClassDB::bind_method(D_METHOD("set_size", "value"), &VoxelGenerator::set_size);
-	ClassDB::bind_method(D_METHOD("get_size"), &VoxelGenerator::get_size);
+	ClassDB::bind_method(D_METHOD("set_chunk_size", "value"), &VoxelGenerator::set_chunk_size);
+	ClassDB::bind_method(D_METHOD("get_chunk_size"), &VoxelGenerator::get_chunk_size);
 	ClassDB::bind_method(D_METHOD("set_resolution", "value"), &VoxelGenerator::set_resolution);
 	ClassDB::bind_method(D_METHOD("get_resolution"), &VoxelGenerator::get_resolution);
 	ClassDB::bind_method(D_METHOD("set_cutoff", "value"), &VoxelGenerator::set_cutoff);
@@ -43,7 +43,7 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("debug_draw_noise_slice", "y_level"), &VoxelGenerator::debug_draw_noise_slice);
 	ClassDB::bind_method(D_METHOD("log_message", "message", "verbosity_level"), &VoxelGenerator::log_message, DEFVAL(1));
 
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "size", PROPERTY_HINT_RANGE, "1,50,1"), "set_size", "get_size");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "chunk_size", PROPERTY_HINT_RANGE, "8,32,8"), "set_chunk_size", "get_chunk_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "resolution", PROPERTY_HINT_RANGE, "1,10,1"), "set_resolution", "get_resolution");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cutoff", PROPERTY_HINT_RANGE, "-1,1,0.1"), "set_cutoff", "get_cutoff");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "randomizer"), "set_randomizer", "get_randomizer");
@@ -60,7 +60,7 @@ void VoxelGenerator::_notification(int p_what){
         case NOTIFICATION_READY: {
             remove_children();
             randomize_seed();
-            size = 1;
+            chunk_size = 8;
             resolution = 1;
             cutoff = 0.1f;
             show_centers = true;
@@ -81,7 +81,7 @@ void VoxelGenerator::_notification(int p_what){
 void VoxelGenerator::reset() {
 	remove_children();
 	randomize_seed();
-	size = 1;
+	chunk_size = 8;
 	resolution = 1;
 	cutoff = 0.1f;
 	show_centers = true;
@@ -104,14 +104,14 @@ bool VoxelGenerator::get_auto_generate() const {
 	return auto_generate;
 }
 
-void VoxelGenerator::set_size(int value) {
-	size = value;
+void VoxelGenerator::set_chunk_size(int value) {
+	chunk_size = value;
 	if (auto_generate)
 		generate();
 }
 
-int VoxelGenerator::get_size() const {
-	return size;
+int VoxelGenerator::get_chunk_size() const {
+	return chunk_size;
 }
 
 void VoxelGenerator::set_resolution(int value) {
@@ -189,8 +189,8 @@ void VoxelGenerator::randomize_seed() {
 void VoxelGenerator::generate() {
     log_message("VoxelGenerator::generate() called", 2);
 	log_message("Starting voxel generation with:", 2);
-	log_message(String("  Size: {0}, Resolution: {1}, Cutoff: {2}, Seed: {3}")
-					.format(Array::make(size, resolution, cutoff, seeder)), 2);
+	log_message(String("  Chunk Size: {0}, Resolution: {1}, Cutoff: {2}, Seed: {3}")
+					.format(Array::make(chunk_size, resolution, cutoff, seeder)), 2);
 
 	remove_children();
 
@@ -217,8 +217,8 @@ void VoxelGenerator::generate() {
 
 	log_message("Meshes created", 2);
 
-	int start = -size * resolution;
-	int end = (size + 1) * resolution;
+	int start = -chunk_size * resolution;
+	int end = (chunk_size + 1) * resolution;
 
 	int total_cubes = (end - start) * (end - start) * (end - start);
 	int current_cube = 0;
@@ -273,9 +273,9 @@ void VoxelGenerator::generate() {
 				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
 
 				Color color(
-						(center.x + size) / (size * 2.0f),
-						(center.y + size) / (size * 2.0f),
-						(center.z + size) / (size * 2.0f));
+						(center.x + chunk_size) / (chunk_size * 2.0f),
+						(center.y + chunk_size) / (chunk_size * 2.0f),
+						(center.z + chunk_size) / (chunk_size * 2.0f));
 
 				if (triangles.size() > 1) {
 					mesh_centers->surface_set_color(color);
@@ -506,7 +506,7 @@ int VoxelGenerator::get_debug_verbosity() const {
 
 void VoxelGenerator::debug_print_state() {
 	String debug_info = "VoxelGenerator Debug Information:\n";
-	debug_info += String("- Size: {0}\n").format(Array::make(size));
+	debug_info += String("- Chunk Size: {0}\n").format(Array::make(chunk_size));
 	debug_info += String("- Resolution: {0}\n").format(Array::make(resolution));
 	debug_info += String("- Cutoff: {0}\n").format(Array::make(cutoff));
 	debug_info += String("- Seed: {0}\n").format(Array::make(seeder));
@@ -531,10 +531,10 @@ void VoxelGenerator::debug_draw_noise_slice(float y_level) {
 
 	int slice_resolution = resolution * 2; // Higher resolution for better visualization
 	float step = 1.0f / slice_resolution;
-	float width = size * 2.0f;
+	float width = chunk_size * 2.0f;
 
-	for (float x = -size; x < size; x += step) {
-		for (float z = -size; z < size; z += step) {
+	for (float x = -chunk_size; x < chunk_size; x += step) {
+		for (float z = -chunk_size; z < chunk_size; z += step) {
 			float noise_val = noise->get_noise_3d(x, y_level, z);
 
 			// Normalize noise to color (blue = negative, red = positive)

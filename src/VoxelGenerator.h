@@ -15,7 +15,7 @@ class VoxelGenerator : public Node3D {
 	GDCLASS(VoxelGenerator, Node3D)
 
 private:
-	int size = 1;
+	int chunk_size = 1;
 	int resolution = 1;
 	float cutoff = 0.1f;
 	bool show_centers = false;
@@ -36,8 +36,8 @@ protected:
 public:
 	//void _ready() override;
 
-	void set_size(int value);
-	int get_size() const;
+	void set_chunk_size(int value);
+	int get_chunk_size() const;
 
 	void set_resolution(int value);
 	int get_resolution() const;
