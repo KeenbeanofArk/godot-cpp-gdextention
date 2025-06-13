@@ -1,7 +1,5 @@
 #include "chunk.h"
 #include "voxel_constants.h"
-//#include "generation/biome_generator.h"
-//#include "../../binding/enum_bindings.h"
 
 // Godot includes
 #include <godot_cpp/core/class_db.hpp>
