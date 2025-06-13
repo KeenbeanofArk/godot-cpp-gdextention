@@ -1,0 +1,33 @@
+[gd_scene load_steps=4 format=3 uid="uid://cp6m8e8v6rkjm"]
+
+[ext_resource type="Script" uid="uid://lcsgmwhdrvcx" path="res://player/player.gd" id="1_quahh"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_u3e8p"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_gqy3g"]
+
+[node name="Player" type="CharacterBody3D" groups=["player"]]
+collision_mask = 7
+script = ExtResource("1_quahh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.00909, 0.322823, -0.899971)
+shape = SubResource("CapsuleShape3D_u3e8p")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_gqy3g")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.999595, -0.0284625, 0, 0.0284625, 0.999595, 0, 0.484954, -0.0489391)
+
+[node name="RayCast3D" type="RayCast3D" parent="Camera3D"]
+target_position = Vector3(0, 0, -5)
+collision_mask = 6
+
+[node name="SpotLight3D" type="SpotLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+light_color = Color(0.960851, 0.961824, 0.899352, 1)
+spot_range = 150.0
+spot_attenuation = 2.0
+spot_angle = 60.0
+spot_angle_attenuation = 0.225313

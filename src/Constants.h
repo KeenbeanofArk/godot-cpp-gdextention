@@ -10,6 +10,7 @@ namespace Constants {
 static constexpr std::array<int, 12> cornerIndexAFromEdge = {
 	0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3
 };
+
 static constexpr std::array<int, 12> cornerIndexBFromEdge = {
 	1, 2, 3, 0, 5, 6, 7, 4, 4, 5, 6, 7
 };

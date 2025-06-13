@@ -5,8 +5,8 @@ cmake_minimum_required(VERSION 3.17)
 if(CMAKE_C_COMPILER)
 endif()
 
-set(LIBNAME "godot-cpp-gdextension" CACHE STRING "The name of the library")
-set(GODOT_PROJECT_DIR "demo" CACHE STRING "The directory of a Godot project folder")
+set(LIBNAME "voxel-engine-gd" CACHE STRING "The name of the library")
+set(GODOT_PROJECT_DIR "VoxelEngine" CACHE STRING "The directory of a Godot project folder")
 
 # Make sure all the dependencies are satisfied
 find_package(Python3 3.4 REQUIRED)

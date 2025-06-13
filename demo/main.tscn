@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3 uid="uid://etd11wxpmror"]
+[gd_scene load_steps=7 format=3 uid="uid://etd11wxpmror"]
 
 [ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://main.gd" id="1_ig7tw"]
+[ext_resource type="PackedScene" uid="uid://cp6m8e8v6rkjm" path="res://player/player.tscn" id="2_0xm2m"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_ig7tw"]
 
@@ -11,15 +12,19 @@ sky_material = SubResource("ProceduralSkyMaterial_ig7tw")
 background_mode = 2
 sky = SubResource("Sky_0xm2m")
 
+[sub_resource type="Theme" id="Theme_0xm2m"]
+
 [node name="Main" type="Node3D"]
 script = ExtResource("1_ig7tw")
 
+[node name="Player" parent="." instance=ExtResource("2_0xm2m")]
+buoyancy_force = 0.0
+
 [node name="VoxelGenerator" type="VoxelGenerator" parent="."]
-chunk_size = 16
-resolution = 7
+chunk_size = 32
 auto_generate = true
-debug_mode = false
 visualize_noise_values = false
+debug_verbosity = 2
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_h2yge")
@@ -29,3 +34,38 @@ transform = Transform3D(1, 0, 0, 0, 0.825409, 0.564535, 0, -0.564535, 0.825409, 
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.920784, 0.109467, 0.374397, 0, -0.959815, 0.280633, 0.390072, -0.258403, -0.883783, 6.35108, 4.05186, 0.919071)
+
+[node name="UI" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_0xm2m")
+
+[node name="FPS" type="Panel" parent="UI"]
+modulate = Color(0.12549, 0.654902, 0.105882, 1)
+self_modulate = Color(0.2, 0.447059, 1, 0.45098)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -108.0
+offset_top = 8.0
+offset_right = -6.0
+offset_bottom = 48.0
+grow_horizontal = 0
+
+[node name="FPSLabel" type="Label" parent="UI/FPS"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = -2.0
+offset_top = -21.0
+offset_right = 102.0
+offset_bottom = 21.0
+grow_vertical = 2
+theme_override_font_sizes/font_size = 30
+text = "FPS:"

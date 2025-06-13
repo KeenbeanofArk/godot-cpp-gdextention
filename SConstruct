@@ -5,8 +5,8 @@ import sys
 from methods import print_error
 
 
-libname = "godot-cpp-gdextension"
-projectdir = "demo"
+libname = "voxel-engine-gd"
+projectdir = "VoxelEngine"
 
 localEnv = Environment(tools=["default"], PLATFORM="windows", target="template_debug", suffix=".dev.universal")
 
