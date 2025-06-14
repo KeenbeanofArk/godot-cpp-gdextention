@@ -11,8 +11,8 @@ func _ready():
 	voxel_generator.debug_mode = true
 	voxel_generator.debug_verbosity = 2
 	voxel_generator.auto_generate = false
-	voxel_generator.chunk_size = 16
-	voxel_generator.resolution = 8
+	voxel_generator.chunk_size = 8
+	voxel_generator.resolution = 2
 	voxel_generator.show_centers = false
 	voxel_generator.show_grid = false
 	

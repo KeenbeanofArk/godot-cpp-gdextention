@@ -1,6 +1,9 @@
 // VoxelGenerator.h
 #pragma once
 
+#include "core/voxel.h"
+#include "core/chunk.h"
+
 #include <godot_cpp/classes/fast_noise_lite.hpp>
 #include <godot_cpp/classes/immediate_mesh.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
@@ -29,6 +32,9 @@ namespace voxel_engine
 		bool debug_mode = true;
 		bool visualize_noise_values = true;
 		int debug_verbosity = 1;
+
+		// Add a container for chunks, e.g.:
+        std::vector<std::unique_ptr<Chunk>> chunks;
 
 	protected:
 		static void _bind_methods();
@@ -91,5 +97,9 @@ namespace voxel_engine
 		// Debug helpers
 		void create_debug_visualization();
 		void visualize_noise_field();
+
+        // Optionally, add helpers to manage chunks/voxels
+        void create_chunks();
+        void fill_chunk_with_voxels(Chunk *chunk);
 	};
 } // namespace voxel_engine

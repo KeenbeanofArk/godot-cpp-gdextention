@@ -9,7 +9,7 @@
 
 using namespace godot;
 
-void initialize_gdextension_types(ModuleInitializationLevel p_level) {
+void initialize_voxel_engine_types(ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
@@ -17,7 +17,7 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(voxel_engine::VoxelGenerator);
 }
 
-void uninitialize_gdextension_types(ModuleInitializationLevel p_level) {
+void uninitialize_voxel_engine_types(ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
@@ -25,10 +25,10 @@ void uninitialize_gdextension_types(ModuleInitializationLevel p_level) {
 
 extern "C" {
 // Initialization
-GDExtensionBool GDE_EXPORT godot_cpp_gdextension_library_init(GDExtensionInterfaceGetProcAddress p_get_proc_address, GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization) {
+GDExtensionBool GDE_EXPORT voxel_engine_gd_library_init(GDExtensionInterfaceGetProcAddress p_get_proc_address, GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization) {
 	GDExtensionBinding::InitObject init_obj(p_get_proc_address, p_library, r_initialization);
-	init_obj.register_initializer(initialize_gdextension_types);
-	init_obj.register_terminator(uninitialize_gdextension_types);
+	init_obj.register_initializer(initialize_voxel_engine_types);
+	init_obj.register_terminator(uninitialize_voxel_engine_types);
 	init_obj.set_minimum_library_initialization_level(MODULE_INITIALIZATION_LEVEL_SCENE);
 
 	return init_obj.init();

@@ -1,7 +1,7 @@
-#ifndef EXAMPLE_REGISTER_TYPES_H
-#define EXAMPLE_REGISTER_TYPES_H
+#ifndef VOXEL_ENGINE_REGISTER_TYPES_H
+#define VOXEL_ENGINE_REGISTER_TYPES_H
 
-void initialize_gdextension_types();
-void uninitialize_gdextension_types();
+void initialize_voxel_engine_types();
+void uninitialize_voxel_engine_types();
 
-#endif // EXAMPLE_REGISTER_TYPES_H
+#endif // VOXEL_ENGINE_REGISTER_TYPES_H

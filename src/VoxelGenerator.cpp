@@ -47,6 +47,8 @@ namespace voxel_engine
         ClassDB::bind_method(D_METHOD("debug_draw_noise_slice", "y_level"), &VoxelGenerator::debug_draw_noise_slice);
         ClassDB::bind_method(D_METHOD("log_message", "message", "verbosity_level"), &VoxelGenerator::log_message, DEFVAL(1));
 
+        ClassDB::bind_method(D_METHOD("reset"), &VoxelGenerator::reset);
+
         ADD_PROPERTY(PropertyInfo(Variant::INT, "chunk_size", PROPERTY_HINT_RANGE, "8,32,8"), "set_chunk_size", "get_chunk_size");
         ADD_PROPERTY(PropertyInfo(Variant::INT, "resolution", PROPERTY_HINT_RANGE, "1,10,1"), "set_resolution", "get_resolution");
         ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cutoff", PROPERTY_HINT_RANGE, "-1,1,0.1"), "set_cutoff", "get_cutoff");
@@ -71,10 +73,12 @@ namespace voxel_engine
                 show_grid = true;
                 seeder = 1234;
 
-                if (auto_generate)
+                if (auto_generate) {
                     generate();
-                else
+                    create_chunks();
+                } else {
                     UtilityFunctions::print("VoxelGenerator is ready, but auto generation is disabled. Call generate() to create the voxel grid.");
+                }
                 break;
             }
             default:
@@ -92,10 +96,11 @@ namespace voxel_engine
         show_grid = true;
         seeder = 1234;
 
-        if (auto_generate)
+        if (auto_generate) {
             generate();
-        else
+        } else {
             UtilityFunctions::print("VoxelGenerator reset, but auto generation is disabled. Call generate() to create the voxel grid.");
+        }
     }
 
     void VoxelGenerator::set_auto_generate(bool value) {
@@ -615,5 +620,23 @@ namespace voxel_engine
 
         log_message("Creating debug visualization...", 2);
         visualize_noise_field();
-}
+    }
+
+    void VoxelGenerator::create_chunks() {
+        chunks.clear();
+        Chunk *chunk = memnew(Chunk);
+        fill_chunk_with_voxels(chunk);
+        // Optionally store chunk in a container if needed
+        add_child(chunk);
+    }
+
+    void VoxelGenerator::fill_chunk_with_voxels(Chunk *chunk) {
+        for (int x = 0; x < Chunk::CHUNK_SIZE; ++x) {
+            for (int y = 0; y < Chunk::CHUNK_SIZE; ++y) {
+                for (int z = 0; z < Chunk::CHUNK_SIZE; ++z) {
+                    chunk->set_voxel(Vector3i(x, y, z), Voxel::DIRT);
+                }
+            }
+        }
+    }
 } // namespace voxel_engine

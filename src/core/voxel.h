@@ -13,9 +13,9 @@ using namespace godot;
 namespace voxel_engine
 {
 
-    class Voxel : public Node3D
+    class Voxel : public RefCounted
     {
-        GDCLASS(Voxel, Node3D);
+        GDCLASS(Voxel, RefCounted);
 
     protected:
         static void _bind_methods();
@@ -43,14 +43,14 @@ namespace voxel_engine
         Vector3 get_position() const;
         void set_position(const Vector3 &position);
 
-        VoxelType get_type() const;
-        void set_type(VoxelType type);
+        int get_type() const;
+        void set_type(int type);
 
         bool is_solid() const;
 
     private:
         Vector3 position;
-        VoxelType type;
+        int type;
     };
 
 } // VOXEL_H

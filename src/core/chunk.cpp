@@ -57,7 +57,7 @@ namespace voxel_engine
         }
     }
 
-    void Chunk::set_voxel(Vector3i local_pos, Voxel::VoxelType type)
+    void Chunk::set_voxel(Vector3i local_pos, int type)
     {
         if (local_pos.x < 0 || local_pos.x >= CHUNK_SIZE ||
             local_pos.y < 0 || local_pos.y >= CHUNK_SIZE ||
@@ -80,6 +80,7 @@ namespace voxel_engine
         // Update mesh and notify neighbors if needed
         rebuild_mesh();
         notify_neighbor_chunks_if_on_border(local_pos);
+        UtilityFunctions::print("Set voxel at ", local_pos, " to type ", type);
     }
 
     Ref<Voxel> Chunk::get_voxel(Vector3i local_pos)
@@ -105,11 +106,8 @@ namespace voxel_engine
 
     void Chunk::rebuild_mesh()
     {
-        // Placeholder for mesh rebuilding logic
-        // This would typically:
-        // 1. Clear the existing mesh
-        // 2. Generate new mesh data based on voxels
-        // 3. Apply the mesh data to a MeshInstance
+        // Rebuild the mesh with the highest detail level (LOD 0)
+        rebuild_mesh_with_lod(0);
     }
 
     void Chunk::update_lod(Vector3 camera_position)
@@ -242,7 +240,7 @@ namespace voxel_engine
         }
 
         // Determine material category based on voxel type
-        Voxel::VoxelType type = voxels[local_pos.x][local_pos.y][local_pos.z].get_type();
+        int type = voxels[local_pos.x][local_pos.y][local_pos.z].get_type();
 
         switch (type)
         {

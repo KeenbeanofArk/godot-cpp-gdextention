@@ -36,19 +36,19 @@ namespace voxel_engine
         position = p_position;
     }
 
-    Voxel::VoxelType Voxel::get_type() const
+    int Voxel::get_type() const
     {
-        return type;
+        return static_cast<int>(type);
     }
 
-    void Voxel::set_type(VoxelType p_type)
+    void Voxel::set_type(int p_type)
     {
-        type = p_type;
+        type = static_cast<VoxelType>(p_type);
     }
 
     bool Voxel::is_solid() const
     {
-        return type != VoxelType::AIR;
+        return type != static_cast<int>(VoxelType::AIR);
     }
 
 } // namespace voxel_engine

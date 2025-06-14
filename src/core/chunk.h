@@ -36,7 +36,7 @@ namespace voxel_engine
         ~Chunk();
 
         void generate();
-        void set_voxel(Vector3i local_pos, Voxel::VoxelType type);
+        void set_voxel(Vector3i local_pos, int type);
         Ref<Voxel> get_voxel(Vector3i local_pos);
         void rebuild_mesh();
         void update_lod(Vector3 camera_position);

@@ -21,7 +21,8 @@ script = ExtResource("1_ig7tw")
 buoyancy_force = 0.0
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="."]
-chunk_size = 32
+show_centers = true
+show_grid = true
 auto_generate = true
 visualize_noise_values = false
 debug_verbosity = 2
