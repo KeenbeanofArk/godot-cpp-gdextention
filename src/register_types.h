@@ -1,7 +1,7 @@
-#ifndef VOXEL_ENGINE_REGISTER_TYPES_H
-#define VOXEL_ENGINE_REGISTER_TYPES_H
+#ifndef VOXEL_ENGINE_REGISTER_MODULE_H
+#define VOXEL_ENGINE_REGISTER_MODULE_H
 
-void initialize_voxel_engine_types();
-void uninitialize_voxel_engine_types();
+void initialize_voxel_engine_module();
+void uninitialize_voxel_engine_module();
 
-#endif // VOXEL_ENGINE_REGISTER_TYPES_H
+#endif // VOXEL_ENGINE_REGISTER_MODULE_H

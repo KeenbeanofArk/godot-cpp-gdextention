@@ -17,15 +17,13 @@ sky = SubResource("Sky_0xm2m")
 [node name="Main" type="Node3D"]
 script = ExtResource("1_ig7tw")
 
+[node name="VoxelGenerator" type="VoxelGenerator" parent="."]
+visualize_noise_values = false
+
+[node name="Chunk" type="Chunk" parent="."]
+
 [node name="Player" parent="." instance=ExtResource("2_0xm2m")]
 buoyancy_force = 0.0
-
-[node name="VoxelGenerator" type="VoxelGenerator" parent="."]
-show_centers = true
-show_grid = true
-auto_generate = true
-visualize_noise_values = false
-debug_verbosity = 2
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_h2yge")

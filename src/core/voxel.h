@@ -1,56 +1,64 @@
 // voxel.h
 
-#pragma once
+#ifndef VOXEL_H
+#define VOXEL_H
 
 // Godot includes
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
-#include <godot_cpp/variant/vector3.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/vector3.hpp>
 
 using namespace godot;
 
-namespace voxel_engine
-{
+namespace voxel_engine {
 
-    class Voxel : public RefCounted
-    {
-        GDCLASS(Voxel, RefCounted);
+// Move the enum outside the class to make it accessible to Godot's type system
+enum VoxelType {
+	AIR,
+	DIRT,
+	GRASS,
+	STONE,
+	WATER,
+	SAND,
+	LAVA,
+	GOLD,
+	DIAMOND,
+	IRON,
+	COAL
+	// Add more voxel types as needed
+};
 
-    protected:
-        static void _bind_methods();
+class Voxel : public RefCounted {
+	GDCLASS(Voxel, RefCounted);
 
-    public:
-        enum VoxelType
-        {
-            AIR,
-            DIRT,
-            GRASS,
-            STONE,
-            WATER,
-            SAND,
-            LAVA,
-            GOLD,
-            DIAMOND,
-            IRON,
-            COAL
-            // Add more voxel types as needed
-        };
+protected:
+	static void _bind_methods();
 
-        Voxel();
-        ~Voxel();
+public:
+	Voxel();
+	~Voxel();
 
-        Vector3 get_position() const;
-        void set_position(const Vector3 &position);
+	Vector3 get_position() const;
+	void set_position(const Vector3 &position);
 
-        int get_type() const;
-        void set_type(int type);
+	int get_type() const;
+	void set_type(int type);
 
-        bool is_solid() const;
+	bool is_solid() const;
 
-    private:
-        Vector3 position;
-        int type;
-    };
+	void set_size(int size);
+	int get_size() const;
 
-} // VOXEL_H
+private:
+	Vector3 position;
+	int type;
+	int size;
+};
+
+} //namespace voxel_engine
+
+// Register the VoxelType enum with Godot's type system
+VARIANT_ENUM_CAST(voxel_engine::VoxelType);
+
+#endif // VOXEL_H
