@@ -9,22 +9,26 @@ func _ready():
 	create_debug_ui()
 	
 	# Enable debug mode
-	voxel_generator.debug_mode = false
-	voxel_generator.debug_verbosity = 1
+	voxel_generator.debug_mode = true
+	voxel_generator.debug_verbosity = 2
 	voxel_generator.auto_generate = false
-	voxel_generator.generate_size = 1
-	voxel_generator.resolution = 1
+	voxel_generator.gen_size_x = 20
+	voxel_generator.gen_size_y = 5
+	voxel_generator.gen_size_z = 20
+	voxel_generator.resolution = 5
 	voxel_generator.show_centers = false
 	voxel_generator.show_grid = false
 	voxel_generator.visualize_noise_values = false
+	voxel_generator.cutoff = 0.1
+	voxel_generator.seeder = 1234
 	
 	# Print initial state
 	voxel_generator.debug_print_state()
 	
 	# Start the generator
-	#voxel_generator.generate()
+	voxel_generator.generate()
 	
-	chunk.generate()
+	#chunk.generate()
 	
 
 func create_debug_ui():

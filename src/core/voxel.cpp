@@ -6,7 +6,7 @@
 namespace voxel_engine {
 void Voxel::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_size"), &Voxel::get_size);
-	ClassDB::bind_method(D_METHOD("set_size"), &Voxel::set_size);
+	ClassDB::bind_method(D_METHOD("set_size", "size"), &Voxel::set_size);
 	ClassDB::bind_method(D_METHOD("get_position"), &Voxel::get_position);
 	ClassDB::bind_method(D_METHOD("set_position", "position"), &Voxel::set_position);
 	ClassDB::bind_method(D_METHOD("get_type"), &Voxel::get_type);

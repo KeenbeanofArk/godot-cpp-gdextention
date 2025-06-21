@@ -1,10 +1,21 @@
 // Constants.h
-#pragma once
+
+#ifndef CONSTANTS_H
+#define CONSTANTS_H
 
 #include <array>
 #include <vector>
 
 namespace Constants {
+
+// Define the maximum number of vertices for the mesh
+static constexpr int MAX_VERTICES = 65536; // 64K vertices, adjust as needed
+// Define the maximum number of triangles for the mesh
+static constexpr int MAX_TRIANGLES = 65536; // 64K triangles, adjust as needed
+// Define the maximum number of cubes to generate
+static constexpr int MAX_CUBES = 65536; // 64K cubes, adjust as needed
+// Define the maximum number of chunks to generate
+static constexpr int MAX_CHUNKS = 1024; // 1K chunks, adjust as needed
 
 // Edge-to-corner mapping (12 edges per cube)
 static constexpr std::array<int, 12> cornerIndexAFromEdge = {
@@ -286,4 +297,7 @@ inline const std::vector<std::array<int, 16>> &get_marching_triangles() {
 	return marching_triangles;
 }
 
+
 } // namespace Constants
+
+#endif // CONSTANTS_H

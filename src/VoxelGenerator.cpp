@@ -46,8 +46,18 @@ namespace voxel_engine {
 void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("generate"), &VoxelGenerator::generate);
 
-	ClassDB::bind_method(D_METHOD("set_generate_size", "value"), &VoxelGenerator::set_generate_size);
-	ClassDB::bind_method(D_METHOD("get_generate_size"), &VoxelGenerator::get_generate_size);
+	ClassDB::bind_method(D_METHOD("set_world_size", "value"), &VoxelGenerator::set_world_size);
+	ClassDB::bind_method(D_METHOD("get_world_size"), &VoxelGenerator::get_world_size);
+
+	///////////////////////////////////////////////////////////////////////////////////
+	ClassDB::bind_method(D_METHOD("set_gen_size_x", "value"), &VoxelGenerator::set_gen_size_x);
+	ClassDB::bind_method(D_METHOD("get_gen_size_x"), &VoxelGenerator::get_gen_size_x);
+	ClassDB::bind_method(D_METHOD("set_gen_size_y", "value"), &VoxelGenerator::set_gen_size_y);
+	ClassDB::bind_method(D_METHOD("get_gen_size_y"), &VoxelGenerator::get_gen_size_y);
+	ClassDB::bind_method(D_METHOD("set_gen_size_z", "value"), &VoxelGenerator::set_gen_size_z);
+	ClassDB::bind_method(D_METHOD("get_gen_size_z"), &VoxelGenerator::get_gen_size_z);
+	/////////////////////////////////////////////////////////////////////////////////////
+
 	ClassDB::bind_method(D_METHOD("set_resolution", "value"), &VoxelGenerator::set_resolution);
 	ClassDB::bind_method(D_METHOD("get_resolution"), &VoxelGenerator::get_resolution);
 	ClassDB::bind_method(D_METHOD("set_cutoff", "value"), &VoxelGenerator::set_cutoff);
@@ -62,6 +72,8 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_auto_generate"), &VoxelGenerator::get_auto_generate);
 	ClassDB::bind_method(D_METHOD("set_seeder", "value"), &VoxelGenerator::set_seeder);
 	ClassDB::bind_method(D_METHOD("get_seeder"), &VoxelGenerator::get_seeder);
+	ClassDB::bind_method(D_METHOD("get_vertex_limit"), &VoxelGenerator::get_vertex_limit);
+	ClassDB::bind_method(D_METHOD("set_vertex_limit", "value"), &VoxelGenerator::set_vertex_limit);
 
 	// Bind debug methods
 	ClassDB::bind_method(D_METHOD("set_debug_mode", "enabled"), &VoxelGenerator::set_debug_mode);
@@ -81,17 +93,28 @@ void VoxelGenerator::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("is_object_binding_set_by_parent_constructor"), &VoxelGenerator::is_object_binding_set_by_parent_constructor);
 
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "generate_size", PROPERTY_HINT_RANGE, "1,100,1"), "set_generate_size", "get_generate_size");
+	ADD_GROUP("Generator Settings", "voxel_generator_");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3I, "voxel_generator_world_size", PROPERTY_HINT_RANGE, "1,50,1"), "set_world_size", "get_world_size"); // How many chunks to generate in each direction
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "voxel_generator_auto_generate"), "set_auto_generate", "get_auto_generate");
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_gen_size_x", PROPERTY_HINT_RANGE, "1,100,1"), "set_gen_size_x", "get_gen_size_x");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_gen_size_y", PROPERTY_HINT_RANGE, "1,100,1"), "set_gen_size_y", "get_gen_size_y");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_gen_size_z", PROPERTY_HINT_RANGE, "1,100,1"), "set_gen_size_z", "get_gen_size_z");
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "resolution", PROPERTY_HINT_RANGE, "1,10,1"), "set_resolution", "get_resolution");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cutoff", PROPERTY_HINT_RANGE, "-1,1,0.1"), "set_cutoff", "get_cutoff");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "seeder", PROPERTY_HINT_RANGE, "0,1000000,1"), "set_seeder", "get_seeder");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "randomizer"), "set_randomizer", "get_randomizer");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "show_centers"), "set_show_centers", "get_show_centers");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "show_grid"), "set_show_grid", "get_show_grid");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_generate"), "set_auto_generate", "get_auto_generate");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_mode"), "set_debug_mode", "get_debug_mode");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "visualize_noise_values"), "set_visualize_noise_values", "get_visualize_noise_values");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "debug_verbosity", PROPERTY_HINT_RANGE, "0,3,1"), "set_debug_verbosity", "get_debug_verbosity");
+	
+	ADD_GROUP("Debug Settings", "debug_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_debug_mode"), "set_debug_mode", "get_debug_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_visualize_noise_values"), "set_visualize_noise_values", "get_visualize_noise_values");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "debug_debug_verbosity", PROPERTY_HINT_RANGE, "0,3,1"), "set_debug_verbosity", "get_debug_verbosity");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_vertex_limit"), "set_vertex_limit", "get_vertex_limit");
 }
 
 bool VoxelGenerator::has_object_instance_binding() const {
@@ -101,13 +124,16 @@ bool VoxelGenerator::has_object_instance_binding() const {
 VoxelGenerator::VoxelGenerator() :
 		object_instance_binding_set_by_parent_constructor(false) {
 	// Initialize default values only - don't call Godot API functions yet
-	generate_size = 1;
+	gen_size_x = 1;
+	gen_size_y = 1;
+	gen_size_z = 1;
 	resolution = 1;
 	cutoff = 0.1f;
 	show_centers = false;
 	show_grid = false;
 	seeder = 1234;
 	auto_generate = false;
+	vertex_limit = false;
 }
 
 VoxelGenerator::~VoxelGenerator() {
@@ -119,6 +145,12 @@ VoxelGenerator::~VoxelGenerator() {
 	}
 	chunks.clear();
 	log_message("VoxelGenerator destroyed and chunks cleaned up.", 1);
+}
+
+void VoxelGenerator::calculate_world_size() {
+	// Calculate the world size based on the chunk size and generator sizes
+	world_size = Vector3(gen_size_x, gen_size_y, gen_size_z);
+	log_message(String("World size calculated: {0}").format(Array::make(world_size)), 1);
 }
 
 bool VoxelGenerator::is_object_binding_set_by_parent_constructor() const {
@@ -173,12 +205,15 @@ void VoxelGenerator::reset() {
 
 	remove_children();
 	randomize_seed();
-	generate_size = 1;
+	gen_size_x = 1;
+	gen_size_y = 1;
+	gen_size_z = 1;
 	resolution = 1;
 	cutoff = 0.1f;
 	show_centers = false;
 	show_grid = false;
 	seeder = 1234;
+	vertex_limit = false;
 
 	if (auto_generate) {
 		generate();
@@ -187,8 +222,20 @@ void VoxelGenerator::reset() {
 	}
 }
 
+void VoxelGenerator::set_vertex_limit(bool value) {
+	vertex_limit = value;
+	log_message(String("Vertex limit set to: {0}").format(Array::make(vertex_limit)), 2);
+	if (auto_generate)
+		generate();
+}
+
+bool VoxelGenerator::get_vertex_limit() const {
+	return vertex_limit;
+}
+
 void VoxelGenerator::set_auto_generate(bool value) {
 	auto_generate = value;
+	log_message(String("Auto generation set to: {0}").format(Array::make(auto_generate)), 2);
 	if (auto_generate)
 		generate();
 }
@@ -197,14 +244,45 @@ bool VoxelGenerator::get_auto_generate() const {
 	return auto_generate;
 }
 
-void VoxelGenerator::set_generate_size(int value) {
-	generate_size = value;
+void VoxelGenerator::set_world_size(const Vector3i &value) {
+	world_size = value;
+	log_message(String("World size set to: {0}").format(Array::make(world_size)), 2);
 	if (auto_generate)
 		generate();
 }
 
-int VoxelGenerator::get_generate_size() const {
-	return generate_size;
+Vector3i VoxelGenerator::get_world_size() const {
+	return world_size;
+}
+
+void VoxelGenerator::set_gen_size_x(int value) {
+	gen_size_x = value;
+	if (auto_generate)
+		generate();
+}
+
+int VoxelGenerator::get_gen_size_x() const {
+	return gen_size_x;
+}
+
+void VoxelGenerator::set_gen_size_y(int value) {
+	gen_size_y = value;
+	if (auto_generate)
+		generate();
+}
+
+int VoxelGenerator::get_gen_size_y() const {
+	return gen_size_y;
+}
+
+void VoxelGenerator::set_gen_size_z(int value) {
+	gen_size_z = value;
+	if (auto_generate)
+		generate();
+}
+
+int VoxelGenerator::get_gen_size_z() const {
+	return gen_size_z;
 }
 
 void VoxelGenerator::set_resolution(int value) {
@@ -287,17 +365,19 @@ void VoxelGenerator::remove_children() {
 
 void VoxelGenerator::randomize_seed() {
 	seeder = UtilityFunctions::randi();
-	log_message(String("Random seed generated: {0}").format(Array::make(seeder)), 1);
+	log_message(String("Random seed generated: {0}").format(Array::make(seeder)), 2);
 }
 
 void VoxelGenerator::generate() {
 	log_message("VoxelGenerator::generate() called", 2);
-	log_message("Starting voxel generation with:", 2);
-	log_message(String("  Chunk Size: {0}, Resolution: {1}, Cutoff: {2}, Seed: {3}")
-						.format(Array::make(generate_size, resolution, cutoff, seeder)),
-			2);
+	log_message("Starting voxel generation with:", 3);
+	log_message(String("  Gen x Size: {0}, Gen y Size: {1}, Gen z Size: {2}, Resolution: {3}, Cutoff: {4}, Seed: {5}")
+						.format(Array::make(gen_size_x, gen_size_y, gen_size_z, resolution, cutoff, seeder)),
+			3);
 
 	remove_children();
+
+	///////////////////////////////////////////////////////////////////////////////////
 
 	Ref<FastNoiseLite> noise;
 	noise.instantiate();
@@ -322,17 +402,31 @@ void VoxelGenerator::generate() {
 
 	log_message("Meshes created", 2);
 
-	int start = -generate_size * resolution;
-	int end = (generate_size + 1) * resolution;
+	int start_x = -world_size.x * resolution;
+	int end_x = (world_size.x + 1) * resolution;
+	int start_y = -world_size.y * resolution;
+	int end_y = (world_size.y + 1) * resolution;
+	int start_z = -world_size.z * resolution;
+	int end_z = (world_size.z + 1) * resolution;
 
-	int total_cubes = (end - start) * (end - start) * (end - start);
+	int total_cubes = (end_x - start_x) * (end_y - start_y) * (end_z - start_z);
 	int current_cube = 0;
 	int triangle_count = 0;
+	
+    int vertex_count = 0;
 
-	for (int x = start; x < end; ++x) {
-		for (int y = start; y < end; ++y) {
-			for (int z = start; z < end; ++z) {
+	for (int x = start_x; x < end_x; ++x) {
+		for (int y = start_y; y < end_y; ++y) {
+			for (int z = start_z; z < end_z; ++z) {
 				current_cube++;
+				
+				// Check vertex limits before adding vertices  
+				if( vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
+					log_message("Vertex limit reached, stopping generation", 1);
+					break; // Stop processing if vertex limit is reached
+				}
+
+#pragma region Debug
 				if (debug_mode && debug_verbosity >= 3) {
 					// Progress update for very verbose mode
 					if (current_cube % 1000 == 0 || current_cube == total_cubes) {
@@ -341,18 +435,28 @@ void VoxelGenerator::generate() {
 								3);
 					}
 				}
+#pragma endregion
 
 				// Calculate the center position of the voxel
 				Vector3 center = Vector3((float)x / resolution, (float)y / resolution, (float)z / resolution);
+				
+				// Adjust the center position based on the world size
+				center.x *= world_size.x / (gen_size_x * 2.0f);
+				center.y *= world_size.y / (gen_size_y * 2.0f);
+				center.z *= world_size.z / (gen_size_z * 2.0f);
+
+				log_message(String("Processing cube at {0},{1},{2}").format(Array::make(center.x, center.y, center.z)), 3);
 
 				// Get the noise value at the center position
 				float center_value = noise->get_noise_3d(center.x, center.y, center.z);
 
+#pragma region Debug
 				if (debug_mode && debug_verbosity >= 3) {
 					log_message(String("  Cube at {0},{1},{2}: noise={3}")
 										.format(Array::make(center.x, center.y, center.z, center_value)),
 							3);
 				}
+#pragma endregion
 
 				// Create marching cube vertices
 				Vector<Vector3> cube_vertices = create_cube_vertices(center);
@@ -363,8 +467,11 @@ void VoxelGenerator::generate() {
 				if (center_value < cutoff) {
 					add_cubes_vertices(mesh_cubes, cube_vertices);
 				} // Get the lookup index for the current cube
+
 				int lookup_index = get_lookup_index(cube_values, cutoff); // Bounds check to prevent crash with incomplete lookup table
 				const auto &marching_triangles = Constants::get_marching_triangles();
+
+#pragma region Debug
 				if (lookup_index >= marching_triangles.size()) {
 					if (debug_mode && debug_verbosity >= 2) {
 						log_message(String("Warning: lookup_index {0} exceeds table size {1}, skipping cube")
@@ -373,18 +480,20 @@ void VoxelGenerator::generate() {
 					}
 					continue; // Skip this cube to prevent crash
 				}
+#pragma endregion
 
 				// Get triangles
 				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
 
 				Color color(
-						(center.x + generate_size) / (generate_size * 2.0f),
-						(center.y + generate_size) / (generate_size * 2.0f),
-						(center.z + generate_size) / (generate_size * 2.0f));
+						(center.x + gen_size_x) / (gen_size_x * 2.0f),
+						(center.y + gen_size_y) / (gen_size_y * 2.0f),
+						(center.z + gen_size_z) / (gen_size_z * 2.0f));
 
 				if (triangles.size() > 1) {
 					mesh_centers->surface_set_color(color);
 					mesh_centers->surface_add_vertex(center);
+					//log_message(String("Cube center at {0} with value {1}").format(Array::make(center, center_value)), 3);
 				};
 
 				for (size_t index = 0; index < triangles.size(); index += 3) {
@@ -422,9 +531,15 @@ void VoxelGenerator::generate() {
 
 					mesh_triangles->surface_set_color(color);
 					mesh_triangles->surface_set_normal(normal);
-					mesh_triangles->surface_add_vertex(vertex1);
-					mesh_triangles->surface_add_vertex(vertex2);
-					mesh_triangles->surface_add_vertex(vertex3);
+
+					if(vertex_count < Constants::MAX_VERTICES || !vertex_limit) {
+						mesh_triangles->surface_add_vertex(vertex1);
+						mesh_triangles->surface_add_vertex(vertex2);
+						mesh_triangles->surface_add_vertex(vertex3);
+						vertex_count += 3;
+					} else {
+						log_message("Vertex limit reached, skipping additional vertices", 1);
+					}
 				}
 			}
 		}
@@ -613,7 +728,9 @@ int VoxelGenerator::get_debug_verbosity() const {
 
 void VoxelGenerator::debug_print_state() {
 	String debug_info = "VoxelGenerator Debug Information:\n";
-	debug_info += String("- Generate Size: {0}\n").format(Array::make(generate_size));
+	debug_info += String("- Generate Size X: {0}\n").format(Array::make(gen_size_x));
+	debug_info += String("- Generate Size Y: {0}\n").format(Array::make(gen_size_y));
+	debug_info += String("- Generate Size Z: {0}\n").format(Array::make(gen_size_z));
 	debug_info += String("- Resolution: {0}\n").format(Array::make(resolution));
 	debug_info += String("- Cutoff: {0}\n").format(Array::make(cutoff));
 	debug_info += String("- Seed: {0}\n").format(Array::make(seeder));
@@ -625,7 +742,7 @@ void VoxelGenerator::debug_print_state() {
 }
 
 void VoxelGenerator::debug_draw_noise_slice(float y_level) {
-	log_message(String("Drawing noise slice at y={0}").format(Array::make(y_level)), 2);
+	log_message(String("Drawing noise slice at y={0}").format(Array::make(y_level)), 3);
 
 	// Create a new mesh for visualizing the noise slice
 
@@ -639,10 +756,10 @@ void VoxelGenerator::debug_draw_noise_slice(float y_level) {
 
 	int slice_resolution = resolution * 2; // Higher resolution for better visualization
 	float step = 1.0f / slice_resolution;
-	float width = generate_size * 2.0f;
+	float width = gen_size_x * 2.0f;
 
-	for (float x = -generate_size; x < generate_size; x += step) {
-		for (float z = -generate_size; z < generate_size; z += step) {
+	for (float x = -gen_size_x; x < gen_size_x; x += step) {
+		for (float z = -gen_size_z; z < gen_size_z; z += step) {
 			float noise_val = noise->get_noise_3d(x, y_level, z);
 
 			// Normalize noise to color (blue = negative, red = positive)
@@ -731,9 +848,9 @@ void VoxelGenerator::create_chunks() {
 	chunks.clear();
 
 	// Create new chunks properly
-	for (int x = 0; x < generate_size; x++) {
-		for (int y = 0; y < generate_size; y++) {
-			for (int z = 0; z < generate_size; z++) {
+	for (int x = 0; x < gen_size_x; x++) {
+		for (int y = 0; y < gen_size_y; y++) {
+			for (int z = 0; z < gen_size_z; z++) {
 				Chunk *chunk = memnew(Chunk);
 				chunk->set_name(String("Chunk_{0}_{1}_{2}").format(Array::make(x, y, z)));
 				add_child(chunk); // Add to scene tree first

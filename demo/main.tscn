@@ -18,7 +18,10 @@ sky = SubResource("Sky_0xm2m")
 script = ExtResource("1_ig7tw")
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="."]
-visualize_noise_values = false
+seeder = -666483275
+show_centers = true
+show_grid = true
+auto_generate = true
 
 [node name="Chunk" type="Chunk" parent="."]
 

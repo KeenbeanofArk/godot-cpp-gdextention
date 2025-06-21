@@ -30,13 +30,17 @@ class VoxelGenerator : public Node3D {
 	GDCLASS(VoxelGenerator, Node3D)
 
 private:
-	int generate_size = 1;
+	int gen_size_x = 1; // Size of the generator in the X dimension based on the chunk size
+	int gen_size_y = 1; // Size of the generator in the Y dimension based on the chunk size
+	int gen_size_z = 1; // Size of the generator in the Z dimension based on the chunk size
+	inline static Vector3i world_size = Vector3i(1, 1, 1);
 	int resolution = 1;
 	float cutoff = 0.1f;
 	bool show_centers = false;
 	bool show_grid = false;
 	int seeder = 1;
 	bool auto_generate = false;
+	bool vertex_limit = false; // Limit the number of vertices generated
 
 	// Debug properties
 	bool debug_mode = true;
@@ -58,8 +62,17 @@ public:
 	VoxelGenerator();
 	~VoxelGenerator();
 
-	void set_generate_size(int value);
-	int get_generate_size() const;
+	void set_world_size(const Vector3i &value);
+ 	Vector3i get_world_size() const;
+
+	void set_gen_size_x(int value);
+	int get_gen_size_x() const;
+
+	void set_gen_size_y(int value);
+	int get_gen_size_y() const;
+
+	void set_gen_size_z(int value);
+	int get_gen_size_z() const;
 
 	void set_resolution(int value);
 	int get_resolution() const;
@@ -81,6 +94,9 @@ public:
 
 	void set_auto_generate(bool value);
 	bool get_auto_generate() const;
+
+	void set_vertex_limit(bool value);
+	bool get_vertex_limit() const;
 
 	void reset();
 
@@ -111,6 +127,7 @@ private:
 	int get_lookup_index(const std::vector<float> &cube_values, float cutoff);
 	Vector3 interpolate(const Vector3 &vertex_1, float value_1, const Vector3 &vertex_2, float value_2);
 	void add_cube_edges(Ref<ImmediateMesh> mesh, const std::vector<Vector3> &v);
+	void calculate_world_size();
 
 	// Debug helpers
 	void create_debug_visualization();

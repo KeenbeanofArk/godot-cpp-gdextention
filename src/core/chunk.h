@@ -27,7 +27,6 @@ protected:
 
 public:
 	int chunk_size = 8;
-	inline static const Vector3i WORLD_SIZE = Vector3i(0, 0, 0);
 
 	int chunk_id = 0; // Unique identifier for the chunk
 	Ref<Voxel> voxels[8][8][8];

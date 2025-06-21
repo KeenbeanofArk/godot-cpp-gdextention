@@ -33,8 +33,8 @@ Chunk::Chunk() {
 				voxels[x][y][z].instantiate();
 				voxels[x][y][z]->set_type(VoxelType::AIR);
 				voxels[x][y][z]->set_position(Vector3(x, y, z));
-				UtilityFunctions::print("Voxel initialized at position: " + String::num_int64(x) + ", " + String::num_int64(y) + ", " + String::num_int64(z) +
-							" with type: " + String::num_int64(voxels[x][y][z]->get_type()));
+				/*UtilityFunctions::print("Voxel initialized at position: " + String::num_int64(x) + ", " + String::num_int64(y) + ", " + String::num_int64(z) +
+							" with type: " + String::num_int64(voxels[x][y][z]->get_type()));*/
 			}
 		}
 	}
@@ -53,8 +53,8 @@ void Chunk::generate() {
 				} else {
 					voxels[x][y][z]->set_type(VoxelType::AIR);
 				}
-				UtilityFunctions::print("Voxel at position: " + String::num_int64(x) + ", " + String::num_int64(y) + ", " + String::num_int64(z) +
-	   " set to type: " + String::num_int64(voxels[x][y][z]->get_type()));
+				/*UtilityFunctions::print("Voxel at position: " + String::num_int64(x) + ", " + String::num_int64(y) + ", " + String::num_int64(z) +
+	   " set to type: " + String::num_int64(voxels[x][y][z]->get_type()));*/
 			}
 		}
 	}
