@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  Chunk.h                                                               */
+/*  VoxelEngine.h                                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             KEEN VOXEL ENGINE                          */
@@ -28,73 +28,74 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef CHUNK_H
-#define CHUNK_H
+#ifndef VOXEL_ENGINE_H
+#define VOXEL_ENGINE_H
 
-#include "direction.h"
-#include "voxel.h"
-#include "voxel_constants.h"
-#include "generators/BiomeGenerator.h"
+// We don't need windows.h in this example plugin but many others do, and it can
+// lead to annoying situations due to the ton of macros it defines.
+// So we include it and make sure CI warns us if we use something that conflicts
+// with a Windows define.
+#ifdef WIN32
+#include <windows.h>
+#endif
 
 // Godot includes
-#include <godot_cpp/classes/node3d.hpp>
-#include <godot_cpp/classes/ref_counted.hpp>
-#include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
-#include <godot_cpp/variant/array.hpp>
-#include <godot_cpp/variant/vector3.hpp>
+#include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/vector3i.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
+#include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/classes/node3d.hpp>
 
 using namespace godot;
 
-namespace voxel_engine {
+namespace voxel_engine
+{
+    class Chunk;
+    class Voxel;
+    class VoxelGenerator;
+    class BiomeGenerator;
 
-class Chunk : public Node3D {
-	GDCLASS(Chunk, Node3D);
+    class VoxelEngine : public Node3D
+    {
+        GDCLASS(VoxelEngine, Node3D);
 
-protected:
-	static void _bind_methods();
+    protected:
+        static void _bind_methods();
 
-public:
-	int chunk_id = 0; // Unique identifier for the chunk
-	Ref<Voxel> voxels[8][8][8];
-	Vector3 position;
+    public:
+        VoxelEngine();
+        ~VoxelEngine();
 
-	Chunk();
-	~Chunk();
+        void _init(); // Called when the object is instantiated
 
-	void generate();
+        // Core engine methods
+        void initialize();
+        void generate_voxel_world();
+        void update_voxel_world();
 
-	void set_biome_generator(const Ref<voxel_engine::BiomeGenerator> &generator);
-    Ref<voxel_engine::BiomeGenerator> get_biome_generator() const;
+        // Voxel manipulation methods
+        void set_voxel(const Vector3i &position, int type);
+        int get_voxel(const Vector3i &position);
 
-	void set_voxel(Vector3i local_pos, int type);
-	Ref<Voxel> get_voxel(Vector3i local_pos);
+        // Property getters
+        VoxelGenerator *get_voxel_generator() const { return voxel_generator; }
+        Ref<voxel_engine::BiomeGenerator> biome_generator;
 
-	static void set_chunk_size(int p_chunk_size);
-	static int get_chunk_size();
-	int get_chunk_size_instance() const { return get_chunk_size(); }
-    void set_chunk_size_instance(int size) { set_chunk_size(size); }
+        // Chunk management methods
+        Chunk *get_chunk(const Vector3i &position);
+        Chunk *create_chunk(const Vector3i &position);
+        void destroy_chunk(const Vector3i &position);
 
-	void rebuild_mesh();
-	void update_lod(Vector3 camera_position);
-	bool is_voxel_solid(Vector3i local_pos);
-	void notify_neighbor_chunks_if_on_border(Vector3i local_pos);
-	int get_voxel_material_category_id(Vector3i local_pos);
-	
+    private:
+        // Components
+        VoxelGenerator *voxel_generator;
 
-private:
-	Ref<voxel_engine::BiomeGenerator> biome_generator;
-
-	// Static chunk size
-	static int chunk_size;
-
-	// Private helper methods can be added here if needed
-	int current_lod_level = 0; // Current LOD level
-	void rebuild_mesh_with_lod(int lod_level);
-
-};
+        // Chunk storage
+        HashMap<Vector3i, Chunk *> chunks;
+    };
 
 } // namespace voxel_engine
 
-#endif // CHUNK_H
+#endif // VOXEL_ENGINE_H

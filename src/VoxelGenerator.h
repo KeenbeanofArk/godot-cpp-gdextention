@@ -13,6 +13,7 @@
 
 #include "core/chunk.h"
 #include "core/voxel.h"
+#include "Constants.h"
 
 #include <godot_cpp/classes/fast_noise_lite.hpp>
 #include <godot_cpp/classes/immediate_mesh.hpp>
@@ -38,8 +39,8 @@ private:
 	float cutoff = 0.1f;
 	bool show_centers = false;
 	bool show_grid = false;
-	int seeder = 1;
-	bool auto_generate = false;
+	int seeder = 1234;
+	bool auto_generate = true;
 	bool vertex_limit = false; // Limit the number of vertices generated
 
 	// Debug properties
@@ -48,7 +49,8 @@ private:
 	int debug_verbosity = 1;
 
 	// Add a container for chunks, e.g.:
-	std::vector<Chunk *> chunks; 
+	std::vector<Chunk *> chunks;
+	int chunk_size = Constants::DEFAULT_CHUNK_SIZE; // Default value from voxel_constants.h
 
 	const bool object_instance_binding_set_by_parent_constructor;
 	bool has_object_instance_binding() const;
@@ -97,6 +99,9 @@ public:
 
 	void set_vertex_limit(bool value);
 	bool get_vertex_limit() const;
+
+	void set_chunk_size(int value);
+    int get_chunk_size() const;
 
 	void reset();
 

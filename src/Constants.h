@@ -16,6 +16,9 @@ static constexpr int MAX_TRIANGLES = 65536; // 64K triangles, adjust as needed
 static constexpr int MAX_CUBES = 65536; // 64K cubes, adjust as needed
 // Define the maximum number of chunks to generate
 static constexpr int MAX_CHUNKS = 1024; // 1K chunks, adjust as needed
+static constexpr int DEFAULT_CHUNK_SIZE = 8; // Default chunk size
+static constexpr int MAX_CHUNK_SIZE = 64; // Maximum chunk size
+static constexpr int MIN_CHUNK_SIZE = 8; // Minimum chunk size
 
 // Edge-to-corner mapping (12 edges per cube)
 static constexpr std::array<int, 12> cornerIndexAFromEdge = {

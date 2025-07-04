@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  Chunk.h                                                               */
+/*  NoiseGenerator.h                                                      */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             KEEN VOXEL ENGINE                          */
@@ -28,73 +28,64 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef CHUNK_H
-#define CHUNK_H
-
-#include "direction.h"
-#include "voxel.h"
-#include "voxel_constants.h"
-#include "generators/BiomeGenerator.h"
+#ifndef NOISE_GENERATOR_H
+#define NOISE_GENERATOR_H
 
 // Godot includes
-#include <godot_cpp/classes/node3d.hpp>
-#include <godot_cpp/classes/ref_counted.hpp>
-#include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
-#include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/classes/ref_counted.hpp>
+#include <godot_cpp/classes/noise.hpp>
 #include <godot_cpp/variant/vector3.hpp>
-#include <godot_cpp/variant/vector3i.hpp>
 
 using namespace godot;
 
-namespace voxel_engine {
+namespace voxel_engine
+{
 
-class Chunk : public Node3D {
-	GDCLASS(Chunk, Node3D);
+    // NoiseGenerator class for generating terrain height and density values
+    class NoiseGenerator : public RefCounted
+    {
+        GDCLASS(NoiseGenerator, RefCounted);
 
-protected:
-	static void _bind_methods();
+    protected:
+        static void _bind_methods();
 
-public:
-	int chunk_id = 0; // Unique identifier for the chunk
-	Ref<Voxel> voxels[8][8][8];
-	Vector3 position;
+    public:
+        NoiseGenerator();
+        ~NoiseGenerator();
 
-	Chunk();
-	~Chunk();
+        // Noise generation methods
+        float get_noise_3d(float x, float y, float z) const;
+        float get_noise_2d(float x, float z) const;
 
-	void generate();
+        // Configuration methods
+        void set_seed(int p_seed);
+        int get_seed() const;
 
-	void set_biome_generator(const Ref<voxel_engine::BiomeGenerator> &generator);
-    Ref<voxel_engine::BiomeGenerator> get_biome_generator() const;
+        void set_noise(Ref<Noise> p_noise);
+        Ref<Noise> get_noise() const;
 
-	void set_voxel(Vector3i local_pos, int type);
-	Ref<Voxel> get_voxel(Vector3i local_pos);
+        void set_octaves(int p_octaves);
+        int get_octaves() const;
 
-	static void set_chunk_size(int p_chunk_size);
-	static int get_chunk_size();
-	int get_chunk_size_instance() const { return get_chunk_size(); }
-    void set_chunk_size_instance(int size) { set_chunk_size(size); }
+        void set_period(float p_period);
+        float get_period() const;
 
-	void rebuild_mesh();
-	void update_lod(Vector3 camera_position);
-	bool is_voxel_solid(Vector3i local_pos);
-	void notify_neighbor_chunks_if_on_border(Vector3i local_pos);
-	int get_voxel_material_category_id(Vector3i local_pos);
-	
+        void set_persistence(float p_persistence);
+        float get_persistence() const;
 
-private:
-	Ref<voxel_engine::BiomeGenerator> biome_generator;
+        void set_lacunarity(float p_lacunarity);
+        float get_lacunarity() const;
 
-	// Static chunk size
-	static int chunk_size;
-
-	// Private helper methods can be added here if needed
-	int current_lod_level = 0; // Current LOD level
-	void rebuild_mesh_with_lod(int lod_level);
-
-};
+    private:
+        int seed;
+        Ref<Noise> noise;
+        int octaves;
+        float period;
+        float persistence;
+        float lacunarity;
+    };
 
 } // namespace voxel_engine
 
-#endif // CHUNK_H
+#endif // NOISE_GENERATOR_H

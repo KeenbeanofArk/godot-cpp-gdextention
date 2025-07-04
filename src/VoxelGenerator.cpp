@@ -48,6 +48,8 @@ void VoxelGenerator::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_world_size", "value"), &VoxelGenerator::set_world_size);
 	ClassDB::bind_method(D_METHOD("get_world_size"), &VoxelGenerator::get_world_size);
+	ClassDB::bind_method(D_METHOD("set_chunk_size", "value"), &VoxelGenerator::set_chunk_size);
+	ClassDB::bind_method(D_METHOD("get_chunk_size"), &VoxelGenerator::get_chunk_size);
 
 	///////////////////////////////////////////////////////////////////////////////////
 	ClassDB::bind_method(D_METHOD("set_gen_size_x", "value"), &VoxelGenerator::set_gen_size_x);
@@ -94,8 +96,9 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_object_binding_set_by_parent_constructor"), &VoxelGenerator::is_object_binding_set_by_parent_constructor);
 
 	ADD_GROUP("Generator Settings", "voxel_generator_");
-	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3I, "voxel_generator_world_size", PROPERTY_HINT_RANGE, "1,50,1"), "set_world_size", "get_world_size"); // How many chunks to generate in each direction
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3I, "voxel_generator_world_size", PROPERTY_HINT_RANGE, "1,100,1"), "set_world_size", "get_world_size"); // How many chunks to generate in each direction
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "voxel_generator_auto_generate"), "set_auto_generate", "get_auto_generate");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_chunk_size", PROPERTY_HINT_RANGE, "8,64,8"), "set_chunk_size", "get_chunk_size");
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_gen_size_x", PROPERTY_HINT_RANGE, "1,100,1"), "set_gen_size_x", "get_gen_size_x");
@@ -132,7 +135,7 @@ VoxelGenerator::VoxelGenerator() :
 	show_centers = false;
 	show_grid = false;
 	seeder = 1234;
-	auto_generate = false;
+	auto_generate = true;
 	vertex_limit = false;
 }
 
@@ -220,6 +223,33 @@ void VoxelGenerator::reset() {
 	} else {
 		log_message("VoxelGenerator reset. Call generate() to create the voxel grid.", 1);
 	}
+}
+
+void VoxelGenerator::set_chunk_size(int value) {
+    // Ensure the value is within allowed range
+    if (value >= Constants::MIN_CHUNK_SIZE && value <= Constants::MAX_CHUNK_SIZE) {
+        // Only update if value has changed
+        if (chunk_size != value) {
+            chunk_size = value;
+            
+            // Add safer iteration through chunks
+            for (size_t i = 0; i < chunks.size(); i++) {
+                Chunk* chunk = chunks[i];
+                if (chunk && is_instance_valid(chunk)) {
+                    chunk->set_chunk_size(chunk_size);
+                }
+            }
+            
+            // If auto_generate is enabled, regenerate with new chunk size
+            if (auto_generate) {
+                create_chunks();
+            }
+        }
+    }
+}
+
+int VoxelGenerator::get_chunk_size() const {
+	return chunk_size;
 }
 
 void VoxelGenerator::set_vertex_limit(bool value) {
@@ -853,6 +883,7 @@ void VoxelGenerator::create_chunks() {
 			for (int z = 0; z < gen_size_z; z++) {
 				Chunk *chunk = memnew(Chunk);
 				chunk->set_name(String("Chunk_{0}_{1}_{2}").format(Array::make(x, y, z)));
+				chunk->set_chunk_size(chunk_size); // Set the chunk size
 				add_child(chunk); // Add to scene tree first
 
 				chunks.push_back(chunk);

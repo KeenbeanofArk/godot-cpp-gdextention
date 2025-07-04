@@ -41,7 +41,8 @@ env.Append(CPPPATH=["src/"])
 sources = [
     Glob("src/*.cpp"), 
     Glob("src/core/*.cpp"),
-    Glob("VoxelEngine/*.cpp")
+    Glob("VoxelEngine/*.cpp"),
+    Glob("src/generators/*.cpp")
 ]
 
 if env["target"] in ["editor", "template_debug"]:

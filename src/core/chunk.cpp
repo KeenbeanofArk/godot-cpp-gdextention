@@ -1,29 +1,67 @@
+/**************************************************************************/
+/*  chunk.cpp                                                             */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             KEEN VOXEL ENGINE                          */
+/*                        https://keenvoxelengine.org                     */
+/**************************************************************************/
+/* Copyright (c) 2025-present Keen Voxel Engine                           */
+/*                   All rights reserved.                                 */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "chunk.h"
 #include "voxel.h"
 #include "voxel_constants.h"
+#include "Constants.h"
 
 // Godot includes
 #include <godot_cpp/core/class_db.hpp>
 
 namespace voxel_engine {
 
+int voxel_engine::Chunk::chunk_size = Constants::DEFAULT_CHUNK_SIZE;
+
 void Chunk::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("generate"), &Chunk::generate);
+	// Bind the biome generator methods
+	ClassDB::bind_method(D_METHOD("set_biome_generator", "generator"), &Chunk::set_biome_generator);
+	ClassDB::bind_method(D_METHOD("get_biome_generator"), &Chunk::get_biome_generator);
 	ClassDB::bind_method(D_METHOD("set_voxel", "local_pos", "type"), &Chunk::set_voxel);
 	ClassDB::bind_method(D_METHOD("get_voxel", "local_pos"), &Chunk::get_voxel);
-	ClassDB::bind_method(D_METHOD("set_chunk_size", "lod_level"), &Chunk::set_chunk_size);
-	ClassDB::bind_method(D_METHOD("get_chunk_size"), &Chunk::get_chunk_size);
+	ClassDB::bind_method(D_METHOD("get_chunk_size_instance"), &Chunk::get_chunk_size_instance);
+	ClassDB::bind_method(D_METHOD("set_chunk_size_instance", "chunk_size"), &Chunk::set_chunk_size_instance);
 	ClassDB::bind_method(D_METHOD("rebuild_mesh"), &Chunk::rebuild_mesh);
 	ClassDB::bind_method(D_METHOD("update_lod", "camera_position"), &Chunk::update_lod);
 	ClassDB::bind_method(D_METHOD("is_voxel_solid", "local_pos"), &Chunk::is_voxel_solid);
 	ClassDB::bind_method(D_METHOD("notify_neighbor_chunks_if_on_border", "local_pos"), &Chunk::notify_neighbor_chunks_if_on_border);
 	ClassDB::bind_method(D_METHOD("get_voxel_material_category_id", "local_pos"), &Chunk::get_voxel_material_category_id);
 
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "chunk_size", PROPERTY_HINT_RANGE, "8,64,8"), "set_chunk_size", "get_chunk_size");
+	ADD_GROUP("Chunk Settings", "voxel_generator_");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_chunk_size", PROPERTY_HINT_RANGE, "8,64,8"), "set_chunk_size_instance", "get_chunk_size_instance");
 
 }
 
 Chunk::Chunk() {
+	chunk_size = Constants::DEFAULT_CHUNK_SIZE; // Default chunk size from Constants.h
 	position = Vector3();
 	current_lod_level = 0;
 	// Initialize all voxels to air
@@ -62,13 +100,21 @@ void Chunk::generate() {
 	rebuild_mesh();
 }
 
+void Chunk::set_biome_generator(const Ref<voxel_engine::BiomeGenerator> &generator) {
+    biome_generator = generator;
+}
+
+Ref<voxel_engine::BiomeGenerator> Chunk::get_biome_generator() const {
+    return biome_generator;
+}
+
 void Chunk::set_chunk_size(int p_chunk_size) {
 	if (p_chunk_size > 0 && p_chunk_size <= 64) {
 		chunk_size = p_chunk_size;
 	}
 }
 
-int Chunk::get_chunk_size() const {
+int Chunk::get_chunk_size() {
 	return chunk_size;
 }
 

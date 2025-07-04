@@ -8,6 +8,8 @@
 #include "VoxelGenerator.h"
 #include "core/chunk.h"
 #include "core/voxel.h"
+#include "generators/BiomeGenerator.h"
+#include "generators/NoiseGenerator.h"
 
 using namespace godot;
 using namespace voxel_engine;
@@ -23,6 +25,11 @@ void initialize_voxel_engine_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(Chunk);
 	// Register the VoxelGenerator class
 	GDREGISTER_CLASS(VoxelGenerator);
+	// Register the NoiseGenerator class
+	GDREGISTER_CLASS(NoiseGenerator);
+	// Register the BiomeGenerator class
+	GDREGISTER_CLASS(BiomeGenerator);	
+
 }
 
 void uninitialize_voxel_engine_module(ModuleInitializationLevel p_level) {
