@@ -1,7 +1,38 @@
-// direction.h
+/**************************************************************************/
+/*  direction.h                                                           */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             KEEN VOXEL ENGINE                          */
+/*                        https://keenvoxelengine.org                     */
+/**************************************************************************/
+/* Copyright (c) 2025-present Keen Voxel Engine                           */
+/*                   All rights reserved.                                 */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #pragma once
 
 #include <godot_cpp/variant/vector3i.hpp>
+
+using namespace godot;
 
 namespace voxel_engine {
 
@@ -33,21 +64,21 @@ public:
 	}
 
 	// Get a unit vector representing the given direction
-	static godot::Vector3i get_direction_vector(Value direction) {
-		static const godot::Vector3i vectors[COUNT] = {
-			godot::Vector3i(-1, 0, 0), // NEGATIVE_X
-			godot::Vector3i(1, 0, 0), // POSITIVE_X
-			godot::Vector3i(0, -1, 0), // NEGATIVE_Y
-			godot::Vector3i(0, 1, 0), // POSITIVE_Y
-			godot::Vector3i(0, 0, -1), // NEGATIVE_Z
-			godot::Vector3i(0, 0, 1) // POSITIVE_Z
+	static Vector3i get_direction_vector(Value direction) {
+		static const Vector3i vectors[COUNT] = {
+			Vector3i(-1, 0, 0), // NEGATIVE_X
+			Vector3i(1, 0, 0), // POSITIVE_X
+			Vector3i(0, -1, 0), // NEGATIVE_Y
+			Vector3i(0, 1, 0), // POSITIVE_Y
+			Vector3i(0, 0, -1), // NEGATIVE_Z
+			Vector3i(0, 0, 1) // POSITIVE_Z
 		};
 
 		return vectors[direction];
 	}
 
 	// Get the direction value from a normalized direction vector
-	static Value from_vector(const godot::Vector3i &vector) {
+	static Value from_vector(const Vector3i &vector) {
 		if (vector.x < 0)
 			return NEGATIVE_X;
 		if (vector.x > 0)

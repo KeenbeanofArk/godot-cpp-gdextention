@@ -11,13 +11,13 @@ func _ready():
 	# Enable debug mode
 	voxel_generator.debug_debug_mode = true
 	voxel_generator.debug_debug_verbosity = 2
-	voxel_generator.voxel_generator_auto_generate = false
-	voxel_generator.voxel_generator_gen_size_x = 10
-	voxel_generator.voxel_generator_gen_size_y = 5
-	voxel_generator.voxel_generator_gen_size_z = 10
-	voxel_generator.resolution = 5
-	voxel_generator.show_centers = false
-	voxel_generator.show_grid = false
+	voxel_generator.voxel_generator_auto_generate = true
+	voxel_generator.voxel_generator_gen_size_x = 1
+	voxel_generator.voxel_generator_gen_size_y = 1
+	voxel_generator.voxel_generator_gen_size_z = 1
+	voxel_generator.resolution = 1
+	voxel_generator.show_centers = true
+	voxel_generator.show_grid = true
 	voxel_generator.debug_visualize_noise_values = false
 	voxel_generator.cutoff = 0.1
 	voxel_generator.seeder = 1234

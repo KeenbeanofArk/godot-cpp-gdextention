@@ -18,9 +18,6 @@ sky = SubResource("Sky_0xm2m")
 script = ExtResource("1_ig7tw")
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="."]
-voxel_generator_world_size = Vector3i(2, 2, 2)
-seeder = -1691691203
-show_centers = true
 show_grid = true
 debug_visualize_noise_values = false
 debug_debug_verbosity = 3
@@ -28,6 +25,7 @@ debug_debug_verbosity = 3
 [node name="Chunk" type="Chunk" parent="."]
 
 [node name="Player" parent="." instance=ExtResource("2_0xm2m")]
+visible = false
 buoyancy_force = 0.0
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
