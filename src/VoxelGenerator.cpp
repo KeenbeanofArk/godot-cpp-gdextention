@@ -433,11 +433,11 @@ void VoxelGenerator::generate() {
 	log_message("Meshes created", 2);
 
 	int start_x = -world_size.x * resolution;
-	int end_x = (world_size.x + 1) * resolution;
+	int end_x = (world_size.x) * resolution;
 	int start_y = -world_size.y * resolution;
-	int end_y = (world_size.y + 1) * resolution;
+	int end_y = (world_size.y) * resolution;
 	int start_z = -world_size.z * resolution;
-	int end_z = (world_size.z + 1) * resolution;
+	int end_z = (world_size.z) * resolution;
 
 	int total_cubes = (end_x - start_x) * (end_y - start_y) * (end_z - start_z);
 	int current_cube = 0;
@@ -471,9 +471,9 @@ void VoxelGenerator::generate() {
 				Vector3 center = Vector3((float)x / resolution, (float)y / resolution, (float)z / resolution);
 				
 				// Adjust the center position based on the world size
-				center.x *= world_size.x / (gen_size_x * 2.0f);
-				center.y *= world_size.y / (gen_size_y * 2.0f);
-				center.z *= world_size.z / (gen_size_z * 2.0f);
+				center.x *= world_size.x / (2.0f);
+				center.y *= world_size.y / (2.0f);
+				center.z *= world_size.z / (2.0f);
 
 				log_message(String("Processing cube at {0},{1},{2}").format(Array::make(center.x, center.y, center.z)), 3);
 

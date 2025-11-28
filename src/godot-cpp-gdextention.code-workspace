@@ -71,6 +71,7 @@
 			"xtr1common": "cpp",
 			"xtree": "cpp",
 			"xutility": "cpp"
-		}
+		},
+		"godotTools.editorPath.godot4": "c:\\dev\\Godot Files\\Godot_v4.5.1-stable_mono_win64\\Godot_v4.5.1-stable_mono_win64\\Godot_v4.5.1-stable_mono_win64_console.exe"
 	}
 }
