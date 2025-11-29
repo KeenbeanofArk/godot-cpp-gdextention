@@ -1,29 +1,59 @@
-# godot-cpp template
-This repository serves as a quickstart template for GDExtension development with Godot 4.0+.
+# godot-cpp GDExtension Template (Voxel Engine)
 
-## Contents
-* An empty Godot project (`demo/`)
-* godot-cpp as a submodule (`godot-cpp/`)
-* GitHub Issues template (`.github/ISSUE_TEMPLATE.yml`)
-* GitHub CI/CD workflows to publish your library packages when creating a release (`.github/workflows/builds.yml`)
-* preconfigured source files for C++ development of the GDExtension (`src/`)
-* setup to automatically generate `.xml` files in a `doc_classes/` directory to be parsed by Godot as [GDExtension built-in documentation](https://docs.godotengine.org/en/stable/tutorials/scripting/gdextension/gdextension_docs_system.html)
+This repository is a starter template for building a Godot 4 GDExtension in C++ using the `godot-cpp` bindings. It contains a minimal voxel engine example (source in `src/`) and a small demo Godot project (`demo/`) so you can build and test the extension quickly.
 
-## Usage - Template
+**Contents**
 
-To use this template, log in to GitHub and click the green "Use this template" button at the top of the repository page.
-This will let you create a copy of this repository with a clean git history. Make sure you clone the correct branch as these are configured for development of their respective Godot development branches and differ from each other. Refer to the docs to see what changed between the versions.
+- `demo/`: example Godot project configured to load the built `.gdextension` file.
+- `godot-cpp/`: the `godot-cpp` bindings submodule (required).
+- `src/`: C++ source for the example extension (`register_types.cpp`, classes, generators, core code).
+- `doc_classes/`: generated XML docs for the GDExtension API.
+- `SConstruct`, `CMakeLists.txt`: build scaffolding (SCons is the classic build used here; CMake is available too).
 
-For getting started after cloning your own copy to your local machine, you should: 
-* initialize the godot-cpp git submodule via `git submodule update --init`
-* change the name of your library
-  * change the name of the compiled library file inside the `SConstruct` file by modifying the `libname` string.
-  * change the pathnames of the to be loaded library name inside the `demo/bin/example.gdextension` file. By replacing `libgdexample` to the name specified in your `SConstruct` file.
-  * change the name of the `demo/bin/example.gdextension` file
-* change the `entry_symbol` string inside your `demo/bin/your-extension.gdextension` file to be configured for your GDExtension name. This should be the same as the `GDExtensionBool GDE_EXPORT` external C function. As the name suggests, this sets the entry function for your GDExtension to be loaded by the Godot editors C API.
-* register the classes you want Godot to interact with inside the `register_types.cpp` file in the initialization method (here `initialize_gdextension_types`) in the syntax `GDREGISTER_CLASS(CLASS-NAME);`.
+**Quickstart (local)**
 
-## Usage - Actions
+1. Initialize the `godot-cpp` submodule:
 
-This repository comes with a GitHub action that builds the GDExtension for cross-platform use. It triggers automatically for each pushed change. You can find and edit it in [builds.yml](.github/workflows/builds.yml).
-After a workflow run is complete, you can find the file `godot-cpp-template.zip` on the `Actions` tab on GitHub.
+```powershell
+git submodule update --init --recursive
+```
+
+2. Build with SCons (example for Windows PowerShell):
+
+```powershell
+# From repository root
+scons -j12 target=template_debug debug_symbols=yes
+```
+
+3. (Optional) Use CMake if you prefer the CMake workflow — follow the `godot-cpp` README for details.
+
+4. Copy or point the built `.gdextension` file into `demo/bin/` (the SConstruct and demo files are preconfigured to match names). Then open the `demo/` folder in the Godot editor and run the project to test the extension.
+
+**Important files to edit when renaming your library**
+
+- `SConstruct`: change the `libname` string to control the output library name.
+- `demo/bin/*.gdextension`: update the `library`/`entry_symbol` fields to match your library name and exported entry function (the entry symbol is the C function exported from C++ e.g. `GDExtensionBool GDE_EXPORT voxel_engine_library_init(...)`).
+
+**Where classes are registered**
+
+- The module registers classes with Godot in `src/register_types.cpp` (see `initialize_voxel_engine_module` and the exported init function `voxel_engine_library_init`). Use `GDREGISTER_CLASS(YourClass);` to expose classes.
+
+**Build tips**
+
+- Ensure you have a compatible C++ toolchain for your platform and the correct Godot headers (managed via `godot-cpp`).
+- If you run into linking or symbol issues, re-run the `godot-cpp` build step (CMake or SCons) to regenerate bindings for your compiler.
+
+**CI / Releases**
+
+- This template includes a GitHub Actions workflow (`.github/workflows/builds.yml`) that builds cross-platform release artifacts when creating releases.
+
+**License**
+
+- See `LICENSE.md` for licensing details.
+
+If you want, I can also:
+
+- Add a short `BUILD_WINDOWS.md` with step-by-step PowerShell commands for common Windows toolchains.
+- Confirm and update the extension name and `entry_symbol` across `SConstruct` and `demo/bin/*.gdextension` for you.
+
+Enjoy building — tell me if you want me to run the build or adjust the demo configuration.

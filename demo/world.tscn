@@ -1,0 +1,55 @@
+[gd_scene load_steps=7 format=3 uid="uid://etd11wxpmror"]
+
+[ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://main.gd" id="1_fj7yv"]
+[ext_resource type="PackedScene" uid="uid://cp6m8e8v6rkjm" path="res://player/player.tscn" id="2_tlwt5"]
+[ext_resource type="PackedScene" uid="uid://deg7mq7jukfdi" path="res://gui.tscn" id="3_tlwt5"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_fj7yv"]
+sky_top_color = Color(0.13206878, 0.4293424, 0.85518116, 1)
+sky_horizon_color = Color(0.56853783, 0.6826531, 0.75222355, 1)
+ground_bottom_color = Color(0.10085208, 0.26003972, 0.11248263, 1)
+ground_horizon_color = Color(0.56853783, 0.6826531, 0.75222355, 1)
+
+[sub_resource type="Sky" id="Sky_tlwt5"]
+sky_material = SubResource("ProceduralSkyMaterial_fj7yv")
+
+[sub_resource type="Environment" id="Environment_aqk2v"]
+background_mode = 2
+sky = SubResource("Sky_tlwt5")
+tonemap_mode = 2
+glow_enabled = true
+
+[node name="World" type="Node3D"]
+script = ExtResource("1_fj7yv")
+
+[node name="Lighting" type="Node3D" parent="."]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="Lighting"]
+environment = SubResource("Environment_aqk2v")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="Lighting"]
+transform = Transform3D(-0.5976251, -0.24376634, 0.7638208, 0, 0.9526615, 0.30403307, -0.8017757, 0.1816978, -0.5693344, 0, 0, 0)
+light_color = Color(1, 1, 0.8392157, 1)
+shadow_enabled = true
+directional_shadow_max_distance = 1.0
+
+[node name="Terrain" type="Node3D" parent="."]
+
+[node name="Chunk" type="Chunk" parent="Terrain"]
+
+[node name="VoxelGenerator" type="VoxelGenerator" parent="Terrain"]
+voxel_generator_world_size = Vector3i(5, 2, 5)
+resolution = 8
+seeder = 1235
+debug_visualize_noise_values = false
+debug_debug_verbosity = 2
+
+[node name="Player" parent="." instance=ExtResource("2_tlwt5")]
+visible = false
+buoyancy_force = 0.0
+
+[node name="WorldCamera" type="Camera3D" parent="."]
+transform = Transform3D(-0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, -0.70710677, -40, 0, -40)
+fov = 26.8
+
+[node name="GUI" parent="." instance=ExtResource("3_tlwt5")]

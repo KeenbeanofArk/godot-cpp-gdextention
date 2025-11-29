@@ -1,24 +1,25 @@
 extends Node3D
 
-@onready var voxel_generator = $VoxelGenerator
-@onready var chunk = $Chunk
-@onready var fps_counter = $UI/FPS/FPSLabel
+@onready var voxel_generator: VoxelGenerator = $Terrain/VoxelGenerator
+@onready var chunk: Chunk = $Terrain/Chunk
+@onready var fps_counter: Label = $GUI/UI/FPS/FpsCounter
 
 func _ready():
 	# Setup UI elements
-	create_debug_ui()
+	#create_debug_ui()
 	
 	# Enable debug mode
 	voxel_generator.debug_debug_mode = true
-	voxel_generator.debug_debug_verbosity = 2
+	voxel_generator.set_debug_verbosity(2)
+
 	voxel_generator.voxel_generator_auto_generate = true
-	voxel_generator.voxel_generator_world_size = Vector3i(3, 3, 3)
-	voxel_generator.resolution = 5
-	voxel_generator.show_centers = false
-	voxel_generator.show_grid = false
+	voxel_generator.voxel_generator_world_size = Vector3i(5, 2, 5)
+	voxel_generator.resolution = 8
+	voxel_generator.show_centers = true
+	voxel_generator.show_grid = true
 	voxel_generator.debug_visualize_noise_values = false
-	voxel_generator.cutoff = 0.1
-	voxel_generator.seeder = 1234
+	voxel_generator.cutoff = 0.2
+	voxel_generator.seeder = 1235
 	
 	# Print initial state
 	voxel_generator.debug_print_state()
@@ -26,7 +27,7 @@ func _ready():
 	# Start the generator
 	voxel_generator.generate()
 	
-	#chunk.generate()
+	chunk.generate()
 	
 
 func create_debug_ui():

@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://lcsgmwhdrvcx" path="res://player/player.gd" id="1_quahh"]
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_u3e8p"]
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_oul6g"]
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_gqy3g"]
 
@@ -11,16 +11,16 @@ collision_mask = 7
 script = ExtResource("1_quahh")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.00909, 0.322823, -0.899971)
-shape = SubResource("CapsuleShape3D_u3e8p")
+shape = SubResource("CapsuleShape3D_oul6g")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 mesh = SubResource("CapsuleMesh_gqy3g")
 
-[node name="Camera3D" type="Camera3D" parent="."]
+[node name="PlayerCamera" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.999595, -0.0284625, 0, 0.0284625, 0.999595, 0, 0.484954, -0.0489391)
+current = true
 
-[node name="RayCast3D" type="RayCast3D" parent="Camera3D"]
+[node name="PlayerRayCast" type="RayCast3D" parent="PlayerCamera"]
 target_position = Vector3(0, 0, -5)
 collision_mask = 6
 

@@ -8,7 +8,9 @@ from methods import print_error
 libname = "voxel-engine-gd"
 projectdir = "VoxelEngine"
 
-localEnv = Environment(tools=["default"], PLATFORM="windows", target="template_debug", suffix=".dev.universal")
+# Override on PowerShell or CLI: 
+#   scons platform=windows target=template_debug suffix=.dev.universal
+localEnv = Environment(tools=["default"], PLATFORM=ARGUMENTS.get('platform','windows'), target=ARGUMENTS.get('target','template_debug'), suffix=ARGUMENTS.get('suffix','.dev.universal'))
 
 # Build profiles can be used to decrease compile times.
 # You can either specify "disabled_classes", OR
@@ -54,10 +56,13 @@ if env["target"] in ["editor", "template_debug"]:
 
 # .dev doesn't inhibit compatibility, so we don't need to key it.
 # .universal just means "compatible with all relevant arches" so we don't need to key it.
+# Normalize suffix: strip `.dev` and `.universal` so produced filenames match demo `.gdextension` entries.
 suffix = env['suffix'].replace(".dev", "").replace(".universal", "")
 
 lib_filename = "{}{}{}{}".format(env.subst('$SHLIBPREFIX'), libname, suffix, env.subst('$SHLIBSUFFIX'))
 
+# Output: library is placed at `bin/<platform>/<lib_filename>` and then copied to
+# `<projectdir>/bin/<platform>/` so demo projects can load the built extension.
 library = env.SharedLibrary(
     "bin/{}/{}".format(env['platform'], lib_filename),
     source=sources,

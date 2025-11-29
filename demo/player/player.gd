@@ -42,14 +42,14 @@ var inventory = {
 var max_inventory_size = 100
 
 # References
-@onready var camera = $Camera3D
-@onready var ray_cast = $Camera3D/RayCast3D
+@onready var player_camera: Camera3D = $PlayerCamera
+@onready var player_ray_cast: RayCast3D = $PlayerCamera/PlayerRayCast
 @onready var oxygen_bar = get_node_or_null("../UI/OxygenBar")
 @onready var health_bar = get_node_or_null("../UI/HealthBar")
 @onready var depth_gauge = get_node_or_null("../UI/DepthGauge")
 
 
-func _ready():
+func _ready() -> void:
 	# Lock mouse cursor to center of screen
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	add_to_group("player")
@@ -57,7 +57,7 @@ func _ready():
 	current_oxygen = max_oxygen
 	# Set position immediately - ensure we have closing parenthesis
 	# global_position = Vector3.ZERO
-	global_position = Vector3(0.0, 20.0, 0.0)
+	global_position = Vector3(0.0, 1.0, 0.0)
 
 	print("Player initial position set in _ready: ", global_position)
 
@@ -110,8 +110,8 @@ func _input(event):
 	# Camera rotation with mouse
 	if event is InputEventMouseMotion:
 		rotate_y(-event.relative.x * look_sensitivity)
-		camera.rotate_x(-event.relative.y * look_sensitivity)
-		camera.rotation.x = clamp(camera.rotation.x, -PI / 2, PI / 2)
+		player_camera.rotate_x(-event.relative.y * look_sensitivity)
+		player_camera.rotation.x = clamp(player_camera.rotation.x, -PI / 2, PI / 2)
 	
 	# Toggle mouse capture with escape
 	if event.is_action_pressed("ui_cancel"):
@@ -121,16 +121,16 @@ func _input(event):
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func collect_resource():
-	if ray_cast.is_colliding():
-		var collider = ray_cast.get_collider()
+	if player_ray_cast.is_colliding():
+		var collider = player_ray_cast.get_collider()
 		if collider != null and collider.is_in_group("resources") and collider.has_method("collect"):
 			var resource = collider.collect()
 			add_to_inventory(resource)
 
 func terraform():
-	if ray_cast.is_colliding():
-		var collision_point = ray_cast.get_collision_point()
-		var terrain = ray_cast.get_collider()
+	if player_ray_cast.is_colliding():
+		var collision_point = player_ray_cast.get_collision_point()
+		var terrain = player_ray_cast.get_collider()
 		if terrain != null and terrain.get_parent() == get_parent().get_node("UnderwaterWorld"):
 			if terrain.get_parent().has_method("modify_terrain"):
 				terrain.get_parent().modify_terrain(collision_point, terraforming_strength)
@@ -155,8 +155,8 @@ func get_inventory_weight():
 
 func _highlight_resources():
 	# Check if raycast hits a resource
-	if ray_cast.is_colliding():
-		var collider = ray_cast.get_collider()
+	if player_ray_cast.is_colliding():
+		var collider = player_ray_cast.get_collider()
 		
 		# Unhighlight all resources first
 		var resources = get_tree().get_nodes_in_group("resources")

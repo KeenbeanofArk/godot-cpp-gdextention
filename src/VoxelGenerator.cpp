@@ -112,7 +112,7 @@ void VoxelGenerator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "randomizer"), "set_randomizer", "get_randomizer");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "show_centers"), "set_show_centers", "get_show_centers");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "show_grid"), "set_show_grid", "get_show_grid");
-	
+
 	ADD_GROUP("Debug Settings", "debug_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_debug_mode"), "set_debug_mode", "get_debug_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_visualize_noise_values"), "set_visualize_noise_values", "get_visualize_noise_values");
@@ -172,7 +172,7 @@ void VoxelGenerator::_notification(int p_what) {
 			set_name("VoxelGenerator");
 			set_process(false);
 			set_physics_process(false);
-			
+
 			remove_children();
 			randomize_seed();
 
@@ -226,26 +226,26 @@ void VoxelGenerator::reset() {
 }
 
 void VoxelGenerator::set_chunk_size(int value) {
-    // Ensure the value is within allowed range
-    if (value >= Constants::MIN_CHUNK_SIZE && value <= Constants::MAX_CHUNK_SIZE) {
-        // Only update if value has changed
-        if (chunk_size != value) {
-            chunk_size = value;
-            
-            // Add safer iteration through chunks
-            for (size_t i = 0; i < chunks.size(); i++) {
-                Chunk* chunk = chunks[i];
-                if (chunk && is_instance_valid(chunk)) {
-                    chunk->set_chunk_size(chunk_size);
-                }
-            }
-            
-            // If auto_generate is enabled, regenerate with new chunk size
-            if (auto_generate) {
-                create_chunks();
-            }
-        }
-    }
+	// Ensure the value is within allowed range
+	if (value >= Constants::MIN_CHUNK_SIZE && value <= Constants::MAX_CHUNK_SIZE) {
+		// Only update if value has changed
+		if (chunk_size != value) {
+			chunk_size = value;
+
+			// Add safer iteration through chunks
+			for (size_t i = 0; i < chunks.size(); i++) {
+				Chunk *chunk = chunks[i];
+				if (chunk && is_instance_valid(chunk)) {
+					chunk->set_chunk_size(chunk_size);
+				}
+			}
+
+			// If auto_generate is enabled, regenerate with new chunk size
+			if (auto_generate) {
+				create_chunks();
+			}
+		}
+	}
 }
 
 int VoxelGenerator::get_chunk_size() const {
@@ -430,6 +430,9 @@ void VoxelGenerator::generate() {
 	mesh_triangles.instantiate();
 	mesh_triangles->surface_begin(Mesh::PRIMITIVE_TRIANGLES);
 
+	int centers_vertex_count = 0;
+	int cubes_vertex_count = 0;
+
 	log_message("Meshes created", 2);
 
 	int start_x = -world_size.x * resolution;
@@ -442,16 +445,16 @@ void VoxelGenerator::generate() {
 	int total_cubes = (end_x - start_x) * (end_y - start_y) * (end_z - start_z);
 	int current_cube = 0;
 	int triangle_count = 0;
-	
-    int vertex_count = 0;
+
+	int vertex_count = 0;
 
 	for (int x = start_x; x < end_x; ++x) {
 		for (int y = start_y; y < end_y; ++y) {
 			for (int z = start_z; z < end_z; ++z) {
 				current_cube++;
-				
-				// Check vertex limits before adding vertices  
-				if( vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
+
+				// Check vertex limits before adding vertices
+				if (vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
 					log_message("Vertex limit reached, stopping generation", 1);
 					break; // Stop processing if vertex limit is reached
 				}
@@ -469,7 +472,7 @@ void VoxelGenerator::generate() {
 
 				// Calculate the center position of the voxel
 				Vector3 center = Vector3((float)x / resolution, (float)y / resolution, (float)z / resolution);
-				
+
 				// Adjust the center position based on the world size
 				center.x *= world_size.x / (2.0f);
 				center.y *= world_size.y / (2.0f);
@@ -496,6 +499,8 @@ void VoxelGenerator::generate() {
 
 				if (center_value < cutoff) {
 					add_cubes_vertices(mesh_cubes, cube_vertices);
+					// add_cubes_vertices adds 24 line-vertices (12 lines * 2 ends)
+					cubes_vertex_count += 24;
 				} // Get the lookup index for the current cube
 
 				int lookup_index = get_lookup_index(cube_values, cutoff); // Bounds check to prevent crash with incomplete lookup table
@@ -523,6 +528,7 @@ void VoxelGenerator::generate() {
 				if (triangles.size() > 1) {
 					mesh_centers->surface_set_color(color);
 					mesh_centers->surface_add_vertex(center);
+					centers_vertex_count++;
 					//log_message(String("Cube center at {0} with value {1}").format(Array::make(center, center_value)), 3);
 				};
 
@@ -562,7 +568,7 @@ void VoxelGenerator::generate() {
 					mesh_triangles->surface_set_color(color);
 					mesh_triangles->surface_set_normal(normal);
 
-					if(vertex_count < Constants::MAX_VERTICES || !vertex_limit) {
+					if (vertex_count < Constants::MAX_VERTICES || !vertex_limit) {
 						mesh_triangles->surface_add_vertex(vertex1);
 						mesh_triangles->surface_add_vertex(vertex2);
 						mesh_triangles->surface_add_vertex(vertex3);
@@ -577,10 +583,16 @@ void VoxelGenerator::generate() {
 
 	log_message(String("Generation completed: {0} triangles created").format(Array::make(triangle_count)), 2);
 
-	// # End surfaces
-	mesh_centers->surface_end();
-	mesh_cubes->surface_end();
-	mesh_triangles->surface_end();
+	// # End surfaces - only end surfaces that actually have vertices to avoid ImmediateMesh errors
+	if (centers_vertex_count > 0) {
+		mesh_centers->surface_end();
+	}
+	if (cubes_vertex_count > 0) {
+		mesh_cubes->surface_end();
+	}
+	if (vertex_count > 0) {
+		mesh_triangles->surface_end();
+	}
 
 	// # Create centers material
 	Ref<StandardMaterial3D> material_centers;
@@ -600,9 +612,13 @@ void VoxelGenerator::generate() {
 	material_triangles.instantiate();
 	material_triangles->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
 
-	mesh_centers->surface_set_material(0, material_centers);
-	mesh_cubes->surface_set_material(0, material_cubes);
-	mesh_triangles->surface_set_material(0, material_triangles);
+	// Only set materials for surfaces that actually exist to avoid out-of-bounds errors
+	if (centers_vertex_count > 0)
+		mesh_centers->surface_set_material(0, material_centers);
+	if (cubes_vertex_count > 0)
+		mesh_cubes->surface_set_material(0, material_cubes);
+	if (vertex_count > 0)
+		mesh_triangles->surface_set_material(0, material_triangles);
 
 	// # Create mesh instance nodes and add them to the scene
 	MeshInstance3D *mi_centers = memnew(MeshInstance3D);
@@ -758,6 +774,9 @@ int VoxelGenerator::get_debug_verbosity() const {
 
 void VoxelGenerator::debug_print_state() {
 	String debug_info = "VoxelGenerator Debug Information:\n";
+	debug_info += String("- Debug Mode: {0}\n").format(Array::make(debug_mode));
+	debug_info += String("- Debug Verbosity: {0}\n").format(Array::make(debug_verbosity));
+	debug_info += String("- World Size: {0}\n").format(Array::make(world_size));
 	debug_info += String("- Generate Size X: {0}\n").format(Array::make(gen_size_x));
 	debug_info += String("- Generate Size Y: {0}\n").format(Array::make(gen_size_y));
 	debug_info += String("- Generate Size Z: {0}\n").format(Array::make(gen_size_z));

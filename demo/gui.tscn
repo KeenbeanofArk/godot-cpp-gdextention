@@ -1,0 +1,40 @@
+[gd_scene load_steps=2 format=3 uid="uid://deg7mq7jukfdi"]
+
+[sub_resource type="Theme" id="Theme_0xm2m"]
+
+[node name="GUI" type="CanvasLayer"]
+
+[node name="UI" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_0xm2m")
+
+[node name="FPS" type="Panel" parent="UI"]
+modulate = Color(0.12549, 0.654902, 0.105882, 1)
+self_modulate = Color(0.2, 0.447059, 1, 0.45098)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -108.0
+offset_top = 8.0
+offset_right = -6.0
+offset_bottom = 48.0
+grow_horizontal = 0
+
+[node name="FpsCounter" type="Label" parent="UI/FPS"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = -2.0
+offset_top = -21.0
+offset_right = 102.0
+offset_bottom = 21.0
+grow_vertical = 2
+theme_override_font_sizes/font_size = 30
+text = "FPS:"
