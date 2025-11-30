@@ -31,10 +31,12 @@
 #ifndef CHUNK_H
 #define CHUNK_H
 
+#include <memory>
+
 #include "direction.h"
+#include "generators/BiomeGenerator.h"
 #include "voxel.h"
 #include "voxel_constants.h"
-#include "generators/BiomeGenerator.h"
 
 // Godot includes
 #include <godot_cpp/classes/node3d.hpp>
@@ -57,7 +59,7 @@ protected:
 
 public:
 	int chunk_id = 0; // Unique identifier for the chunk
-	Ref<Voxel> voxels[8][8][8];
+	std::unique_ptr<Ref<Voxel>[]> voxels; // Flattened 1D array for cache efficiency (smart pointer)
 	Vector3 position;
 
 	Chunk();
@@ -66,33 +68,39 @@ public:
 	void generate();
 
 	void set_biome_generator(const Ref<voxel_engine::BiomeGenerator> &generator);
-    Ref<voxel_engine::BiomeGenerator> get_biome_generator() const;
+	Ref<voxel_engine::BiomeGenerator> get_biome_generator() const;
 
 	void set_voxel(Vector3i local_pos, int type);
 	Ref<Voxel> get_voxel(Vector3i local_pos);
 
-	static void set_chunk_size(int p_chunk_size);
-	static int get_chunk_size();
-	int get_chunk_size_instance() const { return get_chunk_size(); }
-    void set_chunk_size_instance(int size) { set_chunk_size(size); }
+	void set_chunk_size(int p_chunk_size);
+	int get_chunk_size() const;
+	static int get_default_chunk_size();
+	static void set_default_chunk_size(int p_chunk_size);
 
 	void rebuild_mesh();
 	void update_lod(Vector3 camera_position);
 	bool is_voxel_solid(Vector3i local_pos);
 	void notify_neighbor_chunks_if_on_border(Vector3i local_pos);
 	int get_voxel_material_category_id(Vector3i local_pos);
-	
 
 private:
 	Ref<voxel_engine::BiomeGenerator> biome_generator;
 
-	// Static chunk size
-	static int chunk_size;
+	// Static default chunk size (class-wide default)
+	static int default_chunk_size;
+	// Instance chunk size (actual size for this chunk)
+	int m_chunk_size = 0;
+	int size_cubed = 0; // Cached size^3 for voxel array
+
+	// Inline accessor for 1D flattened array indexing
+	inline int get_voxel_index(int x, int y, int z) const {
+		return x * m_chunk_size * m_chunk_size + y * m_chunk_size + z;
+	}
 
 	// Private helper methods can be added here if needed
 	int current_lod_level = 0; // Current LOD level
 	void rebuild_mesh_with_lod(int lod_level);
-
 };
 
 } // namespace voxel_engine

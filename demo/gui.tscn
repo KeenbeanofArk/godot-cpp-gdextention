@@ -1,8 +1,133 @@
-[gd_scene load_steps=2 format=3 uid="uid://deg7mq7jukfdi"]
+[gd_scene load_steps=3 format=3 uid="uid://deg7mq7jukfdi"]
+
+[ext_resource type="Script" uid="uid://bauyh07bob54l" path="res://gui.gd" id="1_80edf"]
 
 [sub_resource type="Theme" id="Theme_0xm2m"]
 
 [node name="GUI" type="CanvasLayer"]
+layer = 100
+script = ExtResource("1_80edf")
+
+[node name="DebugDisplay" type="Control" parent="."]
+self_modulate = Color(0.21176471, 0.49411765, 0.9372549, 0.6431373)
+layout_mode = 3
+anchors_preset = 0
+offset_right = 400.0
+offset_bottom = 400.0
+
+[node name="DebugContainer" type="VBoxContainer" parent="DebugDisplay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="DebugDisplay/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "VoxelGenerator Debug"
+horizontal_alignment = 1
+
+[node name="DebugMode" type="CheckButton" parent="DebugDisplay/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Debug Mode"
+
+[node name="VisualizeNoise" type="CheckButton" parent="DebugDisplay/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Visualize Noise"
+
+[node name="AutoGenerate" type="CheckButton" parent="DebugDisplay/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Auto Regenerate"
+
+[node name="SliderGrid" type="GridContainer" parent="DebugDisplay/DebugContainer"]
+layout_mode = 2
+columns = 2
+
+[node name="VerbosityLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Verbosity: 0"
+
+[node name="VerbositySlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ChunkSizeLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Chunk Size: 8"
+
+[node name="ChunkSizeSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ResolutionLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Resolution: 1"
+
+[node name="ResolutionSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="WorldSizeXLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "World X: 1"
+
+[node name="WorldSizeXSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="WorldSizeYLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "World Y: 1"
+
+[node name="WorldSizeYSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="WorldSizeZLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "World Z: 1"
+
+[node name="WorldSizeZSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GenerateButton" type="Button" parent="DebugDisplay/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Regenerate"
+
+[node name="SliceButton" type="Button" parent="DebugDisplay/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Draw Noise Slice at Y=0"
+
+[node name="PrintStateButton" type="Button" parent="DebugDisplay/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Print Debug State"
 
 [node name="UI" type="Control" parent="."]
 layout_mode = 3
@@ -11,6 +136,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 theme = SubResource("Theme_0xm2m")
 
 [node name="FPS" type="Panel" parent="UI"]

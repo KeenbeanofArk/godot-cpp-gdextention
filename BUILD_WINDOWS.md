@@ -34,7 +34,7 @@ Set-Location -Path ..
 From the repository root (replace path as needed):
 
 ```powershell
-Set-Location -Path "C:\Path\To\your\godot-cpp-gdextention"
+Set-Location -Path "C:\Users\Brian\godot-cpp-gdextention"
 scons -j12 target=template_debug debug_symbols=yes platform=windows
 ```
 

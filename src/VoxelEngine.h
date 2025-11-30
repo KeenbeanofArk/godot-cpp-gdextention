@@ -40,61 +40,62 @@
 #endif
 
 // Godot includes
-#include <godot_cpp/godot.hpp>
+#include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
-#include <godot_cpp/variant/vector3i.hpp>
+#include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/godot.hpp>
 #include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
-#include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/variant/vector3i.hpp>
 
 using namespace godot;
 
-namespace voxel_engine
-{
-    class Chunk;
-    class Voxel;
-    class VoxelGenerator;
-    class BiomeGenerator;
+namespace voxel_engine {
+class Chunk;
+class Voxel;
+class VoxelGenerator;
+class BiomeGenerator;
 
-    class VoxelEngine : public Node3D
-    {
-        GDCLASS(VoxelEngine, Node3D);
+class VoxelEngine : public Node3D {
+	GDCLASS(VoxelEngine, Node3D);
 
-    protected:
-        static void _bind_methods();
+protected:
+	static void _bind_methods();
 
-    public:
-        VoxelEngine();
-        ~VoxelEngine();
+public:
+	VoxelEngine();
+	~VoxelEngine();
 
-        void _init(); // Called when the object is instantiated
+	void _init(); // Called when the object is instantiated
 
-        // Core engine methods
-        void initialize();
-        void generate_voxel_world();
-        void update_voxel_world();
+	// Core engine methods
+	void initialize();
+	void generate_voxel_world();
+	void update_voxel_world();
 
-        // Voxel manipulation methods
-        void set_voxel(const Vector3i &position, int type);
-        int get_voxel(const Vector3i &position);
+	// Voxel manipulation methods
+	void set_voxel(const Vector3i &position, int type);
+	int get_voxel(const Vector3i &position);
 
-        // Property getters
-        VoxelGenerator *get_voxel_generator() const { return voxel_generator; }
-        Ref<voxel_engine::BiomeGenerator> biome_generator;
+	// Property getters
+	VoxelGenerator *get_voxel_generator() const { return voxel_generator; }
+	Ref<voxel_engine::BiomeGenerator> biome_generator;
 
-        // Chunk management methods
-        Chunk *get_chunk(const Vector3i &position);
-        Chunk *create_chunk(const Vector3i &position);
-        void destroy_chunk(const Vector3i &position);
+	// Voxel count calculation
+	int64_t get_total_voxel_count() const;
 
-    private:
-        // Components
-        VoxelGenerator *voxel_generator;
+	// Chunk management methods
+	Chunk *get_chunk(const Vector3i &position);
+	Chunk *create_chunk(const Vector3i &position);
+	void destroy_chunk(const Vector3i &position);
 
-        // Chunk storage
-        HashMap<Vector3i, Chunk *> chunks;
-    };
+private:
+	// Components
+	VoxelGenerator *voxel_generator;
+
+	// Chunk storage
+	HashMap<Vector3i, Chunk *> chunks;
+};
 
 } // namespace voxel_engine
 

@@ -33,7 +33,7 @@
 
 // Godot includes
 #include <godot_cpp/godot.hpp>
-#include <godot_cpp/classes/ref_counted.hpp>
+#include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/noise.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
@@ -43,9 +43,9 @@ namespace voxel_engine
 {
 
     // NoiseGenerator class for generating terrain height and density values
-    class NoiseGenerator : public RefCounted
+    class NoiseGenerator : public Resource
     {
-        GDCLASS(NoiseGenerator, RefCounted);
+        GDCLASS(NoiseGenerator, Resource);
 
     protected:
         static void _bind_methods();

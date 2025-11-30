@@ -31,104 +31,103 @@
 #ifndef BIOME_GENERATOR_H
 #define BIOME_GENERATOR_H
 
-#include "core/voxel.h"
 #include "NoiseGenerator.h"
+#include "core/voxel.h"
 
 // Godot includes
-#include <godot_cpp/godot.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/variant/typed_array.hpp>
+#include <godot_cpp/godot.hpp>
 #include <godot_cpp/templates/vector.hpp>
+#include <godot_cpp/variant/typed_array.hpp>
 
 using namespace godot;
 
-namespace voxel_engine
-{
+namespace voxel_engine {
 
-    struct BiomeData
-    {
-        String name;
-        float min_height;
-        float max_height;
-        float min_temperature;
-        float max_temperature;
-        float min_humidity;
-        float max_humidity;
-        TypedArray<int32_t> surface_blocks;
-        TypedArray<int32_t> subsurface_blocks;
-        int depth;
+struct BiomeData {
+	String name;
+	float min_height;
+	float max_height;
+	float min_temperature;
+	float max_temperature;
+	float min_humidity;
+	float max_humidity;
+	TypedArray<int32_t> surface_blocks;
+	TypedArray<int32_t> subsurface_blocks;
+	int depth;
 
-        BiomeData() : min_height(-1.0f),
-                      max_height(1.0f),
-                      min_temperature(-1.0f),
-                      max_temperature(1.0f),
-                      min_humidity(-1.0f),
-                      max_humidity(1.0f),
-                      depth(4)
-        {
-        }
-    };
+	BiomeData() : min_height(-1.0f),
+				  max_height(1.0f),
+				  min_temperature(-1.0f),
+				  max_temperature(1.0f),
+				  min_humidity(-1.0f),
+				  max_humidity(1.0f),
+				  depth(4) {
+	}
+};
 
-    class BiomeGenerator : public Resource
-    {
-        GDCLASS(BiomeGenerator, Resource);
+class BiomeGenerator : public Resource {
+	GDCLASS(BiomeGenerator, Resource);
 
-    private:
-        Ref<NoiseGenerator> height_noise;
-        Ref<NoiseGenerator> temperature_noise;
-        Ref<NoiseGenerator> humidity_noise;
+private:
+	Ref<NoiseGenerator> height_noise;
+	Ref<NoiseGenerator> temperature_noise;
+	Ref<NoiseGenerator> humidity_noise;
 
-        Vector<BiomeData> biomes;
-        float sea_level;
-        int default_voxel;
+	Vector<BiomeData> biomes;
+	float sea_level;
+	int default_voxel;
 
-    protected:
-        static void _bind_methods();
+protected:
+	static void _bind_methods();
 
-    public:
-        BiomeGenerator();
-        ~BiomeGenerator();
+public:
+	BiomeGenerator();
+	~BiomeGenerator();
 
-        // Noise setters and getters
-        void set_height_noise(const Ref<NoiseGenerator> &p_noise);
-        Ref<NoiseGenerator> get_height_noise() const;
+	// Noise setters and getters
+	void set_height_noise(const Ref<NoiseGenerator> &p_noise);
+	Ref<NoiseGenerator> get_height_noise() const;
 
-        void set_temperature_noise(const Ref<NoiseGenerator> &p_noise);
-        Ref<NoiseGenerator> get_temperature_noise() const;
+	void set_temperature_noise(const Ref<NoiseGenerator> &p_noise);
+	Ref<NoiseGenerator> get_temperature_noise() const;
 
-        void set_humidity_noise(const Ref<NoiseGenerator> &p_noise);
-        Ref<NoiseGenerator> get_humidity_noise() const;
+	void set_humidity_noise(const Ref<NoiseGenerator> &p_noise);
+	Ref<NoiseGenerator> get_humidity_noise() const;
 
-        // Sea level control
-        void set_sea_level(float p_sea_level);
-        float get_sea_level() const;
+	// Sea level control
+	void set_sea_level(float p_sea_level);
+	float get_sea_level() const;
 
-        // Default voxel for empty spaces
-        void set_default_voxel(int p_voxel_id);
-        int get_default_voxel() const;
+	// Default voxel for empty spaces
+	void set_default_voxel(int p_voxel_id);
+	int get_default_voxel() const;
 
-        // Biome management
-        void add_biome(const String &name,
-                       float min_height, float max_height,
-                       float min_temperature, float max_temperature,
-                       float min_humidity, float max_humidity,
-                       const TypedArray<int32_t> &surface_blocks,
-                       const TypedArray<int32_t> &subsurface_blocks,
-                       int depth);
+	// Biome management
+	void add_biome(const String &name,
+			float min_height, float max_height,
+			float min_temperature, float max_temperature,
+			float min_humidity, float max_humidity,
+			const TypedArray<int32_t> &surface_blocks,
+			const TypedArray<int32_t> &subsurface_blocks,
+			int depth);
 
-        void clear_biomes();
-        int get_biome_count() const;
+	void clear_biomes();
+	int get_biome_count() const;
 
-        // Generation methods
-        float get_height_at(float x, float z) const;
-        Ref<Voxel> get_voxel_at(int x, int y, int z) const; // Changed return type to Ref<Voxel>
-        int get_biome_index_at(float x, float z) const;
+	// Generation methods
+	float get_height_at(float x, float z) const;
+	Ref<Voxel> get_voxel_at(int x, int y, int z) const; // Changed return type to Ref<Voxel>
+	int get_biome_index_at(float x, float z) const;
 
-        // Utility functions
-        float get_temperature_at(float x, float z) const;
-        float get_humidity_at(float x, float z) const;
-    };
+	// Utility functions
+	float get_temperature_at(float x, float z) const;
+	float get_humidity_at(float x, float z) const;
+
+	// Lazy initialization helper
+	void ensure_noise_generators();
+};
 
 } // namespace voxel_engine
 

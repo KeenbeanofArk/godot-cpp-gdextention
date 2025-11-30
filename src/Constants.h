@@ -9,11 +9,11 @@
 namespace Constants {
 
 // Define the maximum number of vertices for the mesh
-static constexpr int MAX_VERTICES = 65536; // 64K vertices, adjust as needed
+static constexpr int MAX_VERTICES = 16777216; // 16M vertices, adjust as needed
 // Define the maximum number of triangles for the mesh
-static constexpr int MAX_TRIANGLES = 65536; // 64K triangles, adjust as needed
+static constexpr int MAX_TRIANGLES = 16777216; // 16M triangles, adjust as needed
 // Define the maximum number of cubes to generate
-static constexpr int MAX_CUBES = 65536; // 64K cubes, adjust as needed
+static constexpr int MAX_CUBES = 16777216; // 16M cubes, adjust as needed
 // Define the maximum number of chunks to generate
 static constexpr int MAX_CHUNKS = 1024; // 1K chunks, adjust as needed
 static constexpr int DEFAULT_CHUNK_SIZE = 8; // Default chunk size

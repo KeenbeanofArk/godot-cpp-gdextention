@@ -29,16 +29,16 @@
 /**************************************************************************/
 
 #include "chunk.h"
+#include "Constants.h"
 #include "voxel.h"
 #include "voxel_constants.h"
-#include "Constants.h"
 
 // Godot includes
 #include <godot_cpp/core/class_db.hpp>
 
 namespace voxel_engine {
 
-int voxel_engine::Chunk::chunk_size = Constants::DEFAULT_CHUNK_SIZE;
+int voxel_engine::Chunk::default_chunk_size = Constants::DEFAULT_CHUNK_SIZE;
 
 void Chunk::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("generate"), &Chunk::generate);
@@ -47,8 +47,8 @@ void Chunk::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_biome_generator"), &Chunk::get_biome_generator);
 	ClassDB::bind_method(D_METHOD("set_voxel", "local_pos", "type"), &Chunk::set_voxel);
 	ClassDB::bind_method(D_METHOD("get_voxel", "local_pos"), &Chunk::get_voxel);
-	ClassDB::bind_method(D_METHOD("get_chunk_size_instance"), &Chunk::get_chunk_size_instance);
-	ClassDB::bind_method(D_METHOD("set_chunk_size_instance", "chunk_size"), &Chunk::set_chunk_size_instance);
+	ClassDB::bind_method(D_METHOD("get_chunk_size"), &Chunk::get_chunk_size);
+	ClassDB::bind_method(D_METHOD("set_chunk_size", "chunk_size"), &Chunk::set_chunk_size);
 	ClassDB::bind_method(D_METHOD("rebuild_mesh"), &Chunk::rebuild_mesh);
 	ClassDB::bind_method(D_METHOD("update_lod", "camera_position"), &Chunk::update_lod);
 	ClassDB::bind_method(D_METHOD("is_voxel_solid", "local_pos"), &Chunk::is_voxel_solid);
@@ -56,81 +56,114 @@ void Chunk::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_voxel_material_category_id", "local_pos"), &Chunk::get_voxel_material_category_id);
 
 	ADD_GROUP("Chunk Settings", "voxel_generator_");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_chunk_size", PROPERTY_HINT_RANGE, "8,64,8"), "set_chunk_size_instance", "get_chunk_size_instance");
-
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_chunk_size", PROPERTY_HINT_RANGE, "8,64,8"), "set_chunk_size", "get_chunk_size");
 }
 
 Chunk::Chunk() {
-	chunk_size = Constants::DEFAULT_CHUNK_SIZE; // Default chunk size from Constants.h
+	m_chunk_size = default_chunk_size; // Use static default
+	size_cubed = m_chunk_size * m_chunk_size * m_chunk_size;
+
+	// Allocate flattened 1D array on heap using smart pointer
+	voxels = std::make_unique<Ref<Voxel>[]>(size_cubed);
+
 	position = Vector3();
 	current_lod_level = 0;
+
 	// Initialize all voxels to air
-	for (int x = 0; x < chunk_size; ++x) {
-		for (int y = 0; y < chunk_size; ++y) {
-			for (int z = 0; z < chunk_size; ++z) {
-				voxels[x][y][z].instantiate();
-				voxels[x][y][z]->set_type(VoxelType::AIR);
-				voxels[x][y][z]->set_position(Vector3(x, y, z));
-				/*UtilityFunctions::print("Voxel initialized at position: " + String::num_int64(x) + ", " + String::num_int64(y) + ", " + String::num_int64(z) +
-							" with type: " + String::num_int64(voxels[x][y][z]->get_type()));*/
+	for (int x = 0; x < m_chunk_size; ++x) {
+		for (int y = 0; y < m_chunk_size; ++y) {
+			for (int z = 0; z < m_chunk_size; ++z) {
+				int idx = get_voxel_index(x, y, z);
+				voxels[idx].instantiate();
+				voxels[idx]->set_type(VoxelType::AIR);
+				voxels[idx]->set_position(Vector3(x, y, z));
 			}
 		}
 	}
 }
 
 Chunk::~Chunk() {
+	// Smart pointer automatically cleans up voxel array
+	// No manual delete needed
 }
 
 void Chunk::generate() {
 	// Basic chunk generation - fill with dirt
-	for (int x = 0; x < chunk_size; ++x) {
-		for (int y = 0; y < chunk_size; ++y) {
-			for (int z = 0; z < chunk_size; ++z) {
-				if (y < chunk_size / 2) {
-					voxels[x][y][z]->set_type(VoxelType::DIRT);
+	for (int x = 0; x < m_chunk_size; ++x) {
+		for (int y = 0; y < m_chunk_size; ++y) {
+			for (int z = 0; z < m_chunk_size; ++z) {
+				int idx = get_voxel_index(x, y, z);
+				if (y < m_chunk_size / 2) {
+					voxels[idx]->set_type(VoxelType::DIRT);
 				} else {
-					voxels[x][y][z]->set_type(VoxelType::AIR);
+					voxels[idx]->set_type(VoxelType::AIR);
 				}
-				/*UtilityFunctions::print("Voxel at position: " + String::num_int64(x) + ", " + String::num_int64(y) + ", " + String::num_int64(z) +
-	   " set to type: " + String::num_int64(voxels[x][y][z]->get_type()));*/
 			}
 		}
 	}
-	 // Rebuild the mesh after generation
+	// Rebuild the mesh after generation
 	rebuild_mesh();
 }
 
 void Chunk::set_biome_generator(const Ref<voxel_engine::BiomeGenerator> &generator) {
-    biome_generator = generator;
+	biome_generator = generator;
 }
 
 Ref<voxel_engine::BiomeGenerator> Chunk::get_biome_generator() const {
-    return biome_generator;
+	return biome_generator;
 }
 
 void Chunk::set_chunk_size(int p_chunk_size) {
-	if (p_chunk_size > 0 && p_chunk_size <= 64) {
-		chunk_size = p_chunk_size;
+	if (p_chunk_size > 0 && p_chunk_size <= 64 && p_chunk_size != m_chunk_size) {
+		m_chunk_size = p_chunk_size;
+		size_cubed = m_chunk_size * m_chunk_size * m_chunk_size;
+
+		// Reallocate voxel array with new size
+		voxels = std::make_unique<Ref<Voxel>[]>(size_cubed);
+
+		// Reinitialize all voxels to air
+		for (int x = 0; x < m_chunk_size; ++x) {
+			for (int y = 0; y < m_chunk_size; ++y) {
+				for (int z = 0; z < m_chunk_size; ++z) {
+					int idx = get_voxel_index(x, y, z);
+					voxels[idx].instantiate();
+					voxels[idx]->set_type(VoxelType::AIR);
+					voxels[idx]->set_position(Vector3(x, y, z));
+				}
+			}
+		}
 	}
 }
 
-int Chunk::get_chunk_size() {
-	return chunk_size;
+int Chunk::get_chunk_size() const {
+	return m_chunk_size;
+}
+
+int Chunk::get_default_chunk_size() {
+	return default_chunk_size;
+}
+
+void Chunk::set_default_chunk_size(int p_chunk_size) {
+	if (p_chunk_size > 0 && p_chunk_size <= 64) {
+		default_chunk_size = p_chunk_size;
+	}
 }
 
 void Chunk::set_voxel(Vector3i local_pos, int type) {
-	if (local_pos.x >= 0 && local_pos.x < chunk_size &&
-			local_pos.y >= 0 && local_pos.y < chunk_size &&
-			local_pos.z >= 0 && local_pos.z < chunk_size) {
-		voxels[local_pos.x][local_pos.y][local_pos.z]->set_type(type);
+	if (local_pos.x >= 0 && local_pos.x < m_chunk_size &&
+			local_pos.y >= 0 && local_pos.y < m_chunk_size &&
+			local_pos.z >= 0 && local_pos.z < m_chunk_size) {
+		int idx = get_voxel_index(local_pos.x, local_pos.y, local_pos.z);
+		voxels[idx]->set_type(type);
 	}
 }
 
 Ref<Voxel> Chunk::get_voxel(Vector3i local_pos) {
-	if (local_pos.x >= 0 && local_pos.x < chunk_size &&
-			local_pos.y >= 0 && local_pos.y < chunk_size &&
-			local_pos.z >= 0 && local_pos.z < chunk_size) {
-		return voxels[local_pos.x][local_pos.y][local_pos.z];
+	if (local_pos.x >= 0 && local_pos.x < m_chunk_size &&
+			local_pos.y >= 0 && local_pos.y < m_chunk_size &&
+			local_pos.z >= 0 && local_pos.z < m_chunk_size) {
+		int idx = get_voxel_index(local_pos.x, local_pos.y, local_pos.z);
+		return voxels[idx];
 	}
 
 	// Return empty voxel (air) if out of bounds
@@ -167,10 +200,11 @@ void Chunk::update_lod(Vector3 camera_position) {
 }
 
 bool Chunk::is_voxel_solid(Vector3i local_pos) {
-	if (local_pos.x >= 0 && local_pos.x < chunk_size &&
-			local_pos.y >= 0 && local_pos.y < chunk_size &&
-			local_pos.z >= 0 && local_pos.z < chunk_size) {
-		return voxels[local_pos.x][local_pos.y][local_pos.z]->is_solid();
+	if (local_pos.x >= 0 && local_pos.x < m_chunk_size &&
+			local_pos.y >= 0 && local_pos.y < m_chunk_size &&
+			local_pos.z >= 0 && local_pos.z < m_chunk_size) {
+		int idx = get_voxel_index(local_pos.x, local_pos.y, local_pos.z);
+		return voxels[idx]->is_solid();
 	}
 	return false;
 }
@@ -181,10 +215,11 @@ void Chunk::notify_neighbor_chunks_if_on_border(Vector3i local_pos) {
 }
 
 int Chunk::get_voxel_material_category_id(Vector3i local_pos) {
-	if (local_pos.x >= 0 && local_pos.x < chunk_size &&
-			local_pos.y >= 0 && local_pos.y < chunk_size &&
-			local_pos.z >= 0 && local_pos.z < chunk_size) {
-		return voxels[local_pos.x][local_pos.y][local_pos.z]->get_type();
+	if (local_pos.x >= 0 && local_pos.x < m_chunk_size &&
+			local_pos.y >= 0 && local_pos.y < m_chunk_size &&
+			local_pos.z >= 0 && local_pos.z < m_chunk_size) {
+		int idx = get_voxel_index(local_pos.x, local_pos.y, local_pos.z);
+		return voxels[idx]->get_type();
 	}
 	return VoxelType::AIR;
 }

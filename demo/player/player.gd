@@ -57,7 +57,7 @@ func _ready() -> void:
 	current_oxygen = max_oxygen
 	# Set position immediately - ensure we have closing parenthesis
 	# global_position = Vector3.ZERO
-	global_position = Vector3(0.0, 1.0, 0.0)
+	global_position = Vector3(0.0, 20.0, 0.0)
 
 	print("Player initial position set in _ready: ", global_position)
 
@@ -107,8 +107,8 @@ func _physics_process(delta):
 	_update_ui()
 	
 func _input(event):
-	# Camera rotation with mouse
-	if event is InputEventMouseMotion:
+	# Only process camera rotation when mouse is captured
+	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 		rotate_y(-event.relative.x * look_sensitivity)
 		player_camera.rotate_x(-event.relative.y * look_sensitivity)
 		player_camera.rotation.x = clamp(player_camera.rotation.x, -PI / 2, PI / 2)

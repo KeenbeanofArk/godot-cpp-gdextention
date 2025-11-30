@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://etd11wxpmror"]
+[gd_scene load_steps=11 format=3 uid="uid://etd11wxpmror"]
 
 [ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://main.gd" id="1_fj7yv"]
 [ext_resource type="PackedScene" uid="uid://cp6m8e8v6rkjm" path="res://player/player.tscn" id="2_tlwt5"]
@@ -19,6 +19,24 @@ sky = SubResource("Sky_tlwt5")
 tonemap_mode = 2
 glow_enabled = true
 
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_tlwt5"]
+noise_type = 3
+seed = 12345
+frequency = 0.02
+fractal_octaves = 4
+
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_aqk2v"]
+noise = SubResource("FastNoiseLite_tlwt5")
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_036b0"]
+noise_type = 3
+seed = 12345
+frequency = 0.02
+fractal_octaves = 4
+
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_dwbse"]
+noise = SubResource("FastNoiseLite_036b0")
+
 [node name="World" type="Node3D"]
 script = ExtResource("1_fj7yv")
 
@@ -38,11 +56,9 @@ directional_shadow_max_distance = 1.0
 [node name="Chunk" type="Chunk" parent="Terrain"]
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="Terrain"]
-voxel_generator_world_size = Vector3i(5, 2, 5)
-resolution = 8
-seeder = 1235
-debug_visualize_noise_values = false
-debug_debug_verbosity = 2
+terrain_noise = SubResource("NoiseGenerator_aqk2v")
+detail_noise = SubResource("NoiseGenerator_dwbse")
+debug_verbosity = 2
 
 [node name="Player" parent="." instance=ExtResource("2_tlwt5")]
 visible = false
