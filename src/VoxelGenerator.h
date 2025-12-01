@@ -79,6 +79,7 @@ private:
 	bool show_centers = false;
 	bool show_voxel_grid = false;
 	bool show_chunk_grid = false;
+	bool randomizer = false;
 	int seeder = 1240;
 	bool auto_generate = true;
 	bool vertex_limit = false; // Limit the number of vertices generated

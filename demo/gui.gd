@@ -8,6 +8,9 @@ class_name gui
 @onready var debug_mode: CheckButton = $DebugDisplay/DebugContainer/DebugMode
 @onready var visualize_noise: CheckButton = $DebugDisplay/DebugContainer/VisualizeNoise
 @onready var auto_generate: CheckButton = $DebugDisplay/DebugContainer/AutoGenerate
+@onready var show_voxel_grids: CheckButton = $DebugDisplay/DebugContainer/ShowVoxelGrids
+@onready var show_chunk_grids: CheckButton = $DebugDisplay/DebugContainer/ShowChunkGrids
+@onready var show_centers: CheckButton = $DebugDisplay/DebugContainer/ShowCenters
 @onready var slider_grid: GridContainer = $DebugDisplay/DebugContainer/SliderGrid
 @onready var verbosity_label: Label = $DebugDisplay/DebugContainer/SliderGrid/VerbosityLabel
 @onready var verbosity_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/VerbositySlider
@@ -21,12 +24,20 @@ class_name gui
 @onready var world_size_y_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeYSlider
 @onready var world_size_z_label: Label = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeZLabel
 @onready var world_size_z_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeZSlider
+@onready var terrain_height_label: Label = $DebugDisplay/DebugContainer/SliderGrid/TerrainHeightLabel
+@onready var terrain_height_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/TerrainHeightSpinner
+@onready var terrain_amplitude_label: Label = $DebugDisplay/DebugContainer/SliderGrid/TerrainAmplitudeLabel
+@onready var terrain_amplitude_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/TerrainAmplitudeSpinner
+@onready var rock_influence_label: Label = $DebugDisplay/DebugContainer/SliderGrid/RockInfluenceLabel
+@onready var rock_influence_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/RockInfluenceSpinner
 @onready var generate_button: Button = $DebugDisplay/DebugContainer/GenerateButton
-@onready var slice_button: Button = $DebugDisplay/DebugContainer/SliceButton
 @onready var print_state_button: Button = $DebugDisplay/DebugContainer/PrintStateButton
 
 var voxel_generator: VoxelGenerator
 var chunk: Chunk
+
+@export_category("Debug Settings")
+@export var debug_show: bool = false
 
 func _ready() -> void:
 	# Get references after node is in tree
@@ -38,19 +49,19 @@ func _ready() -> void:
 	if chunk == null:
 		push_error("GUI: Chunk not found at ../Terrain/Chunk")
 	
-	# Initialize debug UI
-	create_debug_ui()
+	debug_display.visible = debug_show
 	
 func _process(_delta: float) -> void:
 	# Update FPS counter
 	fps_counter.text = "FPS: %d" % [Engine.get_frames_per_second()]
 
-func update_label(label: Label, prefix: String, value: int) -> void:
+func update_label(label: Label, prefix: String, value) -> void:
 	label.text = prefix + str(value)
 
 func create_debug_ui():
 	# Debug Container
-	debug_container.position = Vector2(10, 10)
+	debug_container.anchor_left = 1.0
+	debug_container.anchor_right = 1.0
 	debug_container.size = Vector2(300, 400)
 	
 	# Debug Title
@@ -60,10 +71,6 @@ func create_debug_ui():
 	# Always connect Generate button to test interaction
 	generate_button.text = "Generate"
 	generate_button.pressed.connect(_on_generate_pressed)
-	
-	# Debug slice button
-	slice_button.text = "Draw Noise Slice at Y=0"
-	slice_button.pressed.connect(_on_slice_pressed)
 
 	# Print State button
 	print_state_button.text = "Print Debug State"
@@ -81,10 +88,25 @@ func create_debug_ui():
 		visualize_noise.toggled.connect(func(pressed): voxel_generator.visualize_noise_values = pressed)
 
 		# Auto Generate toggle
-		auto_generate.text = "Auto Regenerate"
+		auto_generate.text = "Auto-Generate"
 		auto_generate.button_pressed = voxel_generator.auto_generate
 		auto_generate.toggled.connect(func(pressed): voxel_generator.auto_generate = pressed)
 
+		# Show Voxel Grids toggle
+		show_voxel_grids.text = "Show Voxel Grids"
+		show_voxel_grids.button_pressed = voxel_generator.show_voxel_grid
+		show_voxel_grids.toggled.connect(func(pressed): voxel_generator.show_voxel_grid = pressed)
+		
+		# Show Chunk Grids toggle
+		show_chunk_grids.text = "Show Chunk Grids"
+		show_chunk_grids.button_pressed = voxel_generator.show_chunk_grid
+		show_chunk_grids.toggled.connect(func(pressed): voxel_generator.show_chunk_grid = pressed)
+		
+		# Show Centers toggle
+		show_centers.text = "Show Centers"
+		show_centers.button_pressed = voxel_generator.show_centers
+		show_centers.toggled.connect(func(pressed): voxel_generator.show_centers = pressed)
+		
 		# Verbosity slider and label
 		update_label(verbosity_label, "Verbosity: ", voxel_generator.debug_verbosity)
 		verbosity_slider.min_value = 0
@@ -159,6 +181,42 @@ func create_debug_ui():
 			voxel_generator.world_size = Vector3i(ws.x, ws.y, int(value))
 			update_label(world_size_z_label, "World Z: ", int(value))
 		)
+		
+		# Terrain Height spinbox
+		update_label(terrain_height_label, "Terrain Height: ", voxel_generator.terrain_height)
+		terrain_height_spinner.min_value = -100.0
+		terrain_height_spinner.max_value = 100.0
+		terrain_height_spinner.step = 0.5
+		terrain_height_spinner.value = voxel_generator.terrain_height
+		terrain_height_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		terrain_height_spinner.value_changed.connect(func(value):
+			voxel_generator.terrain_height = value
+			update_label(terrain_height_label, "Terrain Height: ", value)
+		)
+		
+		# Terrain Amplitude spinbox
+		update_label(terrain_amplitude_label, "Terrain Amplitude: ", voxel_generator.terrain_amplitude)
+		terrain_amplitude_spinner.min_value = 0.0
+		terrain_amplitude_spinner.max_value = 100.0
+		terrain_amplitude_spinner.step = 0.5
+		terrain_amplitude_spinner.value = voxel_generator.terrain_amplitude
+		terrain_amplitude_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		terrain_amplitude_spinner.value_changed.connect(func(value):
+			voxel_generator.terrain_amplitude = value
+			update_label(terrain_amplitude_label, "Terrain Amplitude: ", value)
+		)
+		
+		# Rock Influence spinbox
+		update_label(rock_influence_label, "Rock Influence: ", voxel_generator.rock_influence)
+		rock_influence_spinner.min_value = 0.0
+		rock_influence_spinner.max_value = 1.0
+		rock_influence_spinner.step = 0.01
+		rock_influence_spinner.value = voxel_generator.rock_influence
+		rock_influence_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rock_influence_spinner.value_changed.connect(func(value):
+			voxel_generator.rock_influence = value
+			update_label(rock_influence_label, "Rock Influence: ", value)
+		)
 	else:
 		push_warning("GUI: VoxelGenerator not available, sliders not connected")
 
@@ -177,11 +235,12 @@ func _on_print_state_pressed():
 	if voxel_generator:
 		voxel_generator.debug_print_state()
 
-		
 func _input(event: InputEvent) -> void:
 	# Toggle mouse capture with F5 for debug UI access
 	if event is InputEventKey and event.pressed and event.keycode == KEY_F5:
 		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+			debug_display.visible = true
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		else:
+			debug_display.visible = false
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

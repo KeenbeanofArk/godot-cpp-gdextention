@@ -1,4 +1,5 @@
 extends CharacterBody3D
+class_name Picele # Picture Element or Pixel 
 
 # Swimming properties
 @export_category("Swimming")
@@ -6,7 +7,7 @@ extends CharacterBody3D
 @export var swim_acceleration = 4.0
 @export var swim_deceleration = 8.0
 @export var look_sensitivity = 0.003
-@export var buoyancy_force = 1.0
+@export var buoyancy_force = 0.0 # Normally 1.0
 @export var gravity = 9.8
 
 # Walking properties
@@ -22,7 +23,7 @@ extends CharacterBody3D
 # Oxygen system
 @export_category("Breathing")
 @export var max_oxygen = 100.0
-@export var oxygen_depletion_rate = 0.0 # Oxygen lost per second
+@export var oxygen_depletion_rate = 0.01 # Oxygen lost per second
 @export var oxygen_damage_rate = 5.0 # Damage taken when out of oxygen
 var current_oxygen = 100.0
 
@@ -42,8 +43,8 @@ var inventory = {
 var max_inventory_size = 100
 
 # References
-@onready var player_camera: Camera3D = $PlayerCamera
-@onready var player_ray_cast: RayCast3D = $PlayerCamera/PlayerRayCast
+@onready var picele_camera: Camera3D = $PiceleCamera
+@onready var picele_ray_cast: RayCast3D = $PiceleCamera/PiceleRayCast
 @onready var oxygen_bar = get_node_or_null("../UI/OxygenBar")
 @onready var health_bar = get_node_or_null("../UI/HealthBar")
 @onready var depth_gauge = get_node_or_null("../UI/DepthGauge")
@@ -57,7 +58,7 @@ func _ready() -> void:
 	current_oxygen = max_oxygen
 	# Set position immediately - ensure we have closing parenthesis
 	# global_position = Vector3.ZERO
-	global_position = Vector3(0.0, 20.0, 0.0)
+	global_position = Vector3(0.0, 5.0, 0.0)
 
 	print("Player initial position set in _ready: ", global_position)
 
@@ -110,8 +111,8 @@ func _input(event):
 	# Only process camera rotation when mouse is captured
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 		rotate_y(-event.relative.x * look_sensitivity)
-		player_camera.rotate_x(-event.relative.y * look_sensitivity)
-		player_camera.rotation.x = clamp(player_camera.rotation.x, -PI / 2, PI / 2)
+		picele_camera.rotate_x(-event.relative.y * look_sensitivity)
+		picele_camera.rotation.x = clamp(picele_camera.rotation.x, -PI / 2, PI / 2)
 	
 	# Toggle mouse capture with escape
 	if event.is_action_pressed("ui_cancel"):
@@ -121,16 +122,16 @@ func _input(event):
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func collect_resource():
-	if player_ray_cast.is_colliding():
-		var collider = player_ray_cast.get_collider()
+	if picele_ray_cast.is_colliding():
+		var collider = picele_ray_cast.get_collider()
 		if collider != null and collider.is_in_group("resources") and collider.has_method("collect"):
 			var resource = collider.collect()
 			add_to_inventory(resource)
 
 func terraform():
-	if player_ray_cast.is_colliding():
-		var collision_point = player_ray_cast.get_collision_point()
-		var terrain = player_ray_cast.get_collider()
+	if picele_ray_cast.is_colliding():
+		var collision_point = picele_ray_cast.get_collision_point()
+		var terrain = picele_ray_cast.get_collider()
 		if terrain != null and terrain.get_parent() == get_parent().get_node("UnderwaterWorld"):
 			if terrain.get_parent().has_method("modify_terrain"):
 				terrain.get_parent().modify_terrain(collision_point, terraforming_strength)
@@ -155,8 +156,8 @@ func get_inventory_weight():
 
 func _highlight_resources():
 	# Check if raycast hits a resource
-	if player_ray_cast.is_colliding():
-		var collider = player_ray_cast.get_collider()
+	if picele_ray_cast.is_colliding():
+		var collider = picele_ray_cast.get_collider()
 		
 		# Unhighlight all resources first
 		var resources = get_tree().get_nodes_in_group("resources")
@@ -200,7 +201,7 @@ func heal(amount):
 
 func _die():
 	# Handle player death
-	print("Player died!")
+	print("Picele died!")
 	# Could show death screen, restart level, etc.
 	# For now just reset health and teleport to origin
 	current_health = max_health

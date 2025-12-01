@@ -3,16 +3,17 @@ extends Node3D
 @onready var voxel_generator: VoxelGenerator = $Terrain/VoxelGenerator
 @onready var chunk: Chunk = $Terrain/Chunk
 @onready var terrain: Node3D = $Terrain
+@onready var gui: gui = $GUI
 
 func _ready():
 	# Debug Settings
 	voxel_generator.set_debug_mode(true)
-	voxel_generator.set_debug_verbosity(1)
+	voxel_generator.set_debug_verbosity(2)
 	voxel_generator.set_visualize_noise_values(false)
 	voxel_generator.set_vertex_limit(false)
 	
 	# Generator Setttings
-	voxel_generator.set_world_size(Vector3i(8, 4, 8))
+	voxel_generator.set_world_size(Vector3i(1, 1, 1))
 	voxel_generator.set_auto_generate(false)
 	voxel_generator.set_chunk_size(8)
 	
@@ -41,9 +42,19 @@ func _ready():
 	#voxel_generator.set_terrain_noise(det_noise)
 	#voxel_generator.set_detail_noise(det_noise)
 	
-	# Start the generator
+	## Start the generator
 	voxel_generator.generate()
+	var bio_gen = BiomeGenerator.new()
+	bio_gen.default_voxel = Voxel.DIRT
+	chunk.set_biome_generator(bio_gen)
+	
 	chunk.generate()
+	
+	# Initialize debug UI
+	gui.create_debug_ui()
+
+func _init() -> void:
+	pass
 	
 func _process(_delta):
 	pass

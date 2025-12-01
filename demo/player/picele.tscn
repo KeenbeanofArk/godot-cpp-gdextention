@@ -1,12 +1,12 @@
 [gd_scene load_steps=4 format=3 uid="uid://cp6m8e8v6rkjm"]
 
-[ext_resource type="Script" uid="uid://lcsgmwhdrvcx" path="res://player/player.gd" id="1_quahh"]
+[ext_resource type="Script" uid="uid://lcsgmwhdrvcx" path="res://player/picele.gd" id="1_quahh"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_oul6g"]
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_gqy3g"]
 
-[node name="Player" type="CharacterBody3D" groups=["player"]]
+[node name="Picele" type="CharacterBody3D" groups=["player"]]
 collision_mask = 7
 script = ExtResource("1_quahh")
 
@@ -16,11 +16,11 @@ shape = SubResource("CapsuleShape3D_oul6g")
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 mesh = SubResource("CapsuleMesh_gqy3g")
 
-[node name="PlayerCamera" type="Camera3D" parent="."]
+[node name="PiceleCamera" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.999595, -0.0284625, 0, 0.0284625, 0.999595, 0, 0.484954, -0.0489391)
 current = true
 
-[node name="PlayerRayCast" type="RayCast3D" parent="PlayerCamera"]
+[node name="PiceleRayCast" type="RayCast3D" parent="PiceleCamera"]
 target_position = Vector3(0, 0, -5)
 collision_mask = 6
 

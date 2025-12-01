@@ -55,8 +55,8 @@ void Chunk::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("notify_neighbor_chunks_if_on_border", "local_pos"), &Chunk::notify_neighbor_chunks_if_on_border);
 	ClassDB::bind_method(D_METHOD("get_voxel_material_category_id", "local_pos"), &Chunk::get_voxel_material_category_id);
 
-	ADD_GROUP("Chunk Settings", "voxel_generator_");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_chunk_size", PROPERTY_HINT_RANGE, "8,64,8"), "set_chunk_size", "get_chunk_size");
+	//ADD_GROUP("Chunk Settings", "voxel_generator_");
+	//ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_chunk_size", PROPERTY_HINT_RANGE, "8,64,8"), "set_chunk_size", "get_chunk_size");
 }
 
 Chunk::Chunk() {

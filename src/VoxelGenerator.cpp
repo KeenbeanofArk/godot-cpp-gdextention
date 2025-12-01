@@ -153,6 +153,7 @@ VoxelGenerator::VoxelGenerator() :
 	show_centers = false;
 	show_voxel_grid = false;
 	show_chunk_grid = false;
+	randomizer = false;
 	seeder = 1240;
 	auto_generate = true;
 	vertex_limit = false;
@@ -161,22 +162,6 @@ VoxelGenerator::VoxelGenerator() :
 	rock_influence = 0.3f;
 	terrain_height = 4.0f;
 	terrain_amplitude = 8.0f;
-
-	// Create default terrain noise generator (smooth rolling hills)
-	/*terrain_noise.instantiate();
-	terrain_noise->set_period(50.0f);
-	terrain_noise->set_octaves(4);
-	terrain_noise->set_persistence(0.5f);
-	terrain_noise->set_lacunarity(2.0f);
-	terrain_noise->set_seed(seeder);
-
-	// Create default detail noise generator (rocky detail)
-	detail_noise.instantiate();
-	detail_noise->set_period(10.0f);
-	detail_noise->set_octaves(3);
-	detail_noise->set_persistence(0.6f);
-	detail_noise->set_lacunarity(2.5f);
-	detail_noise->set_seed(seeder + 1);*/
 
 	// Note: terrain_noise and detail_noise are created lazily in generate()
 	// to avoid Godot's "Instantiated X used as default value" warning
@@ -201,9 +186,11 @@ void VoxelGenerator::calculate_world_size() {
 }
 
 void VoxelGenerator::recalculate_voxel_scale() {
-	// Voxel size is always 1x1x1 - world dimensions equal voxel count
-	voxel_size = Vector3(1.0f, 1.0f, 1.0f);
-	log_message(String("Voxel size set to fixed: {0}").format(Array::make(voxel_size)), 2);
+	// Voxel size is divided by resolution to create finer marching cubes samples
+	// Higher resolution = smaller voxels = more triangles within same physical space
+	float scale = 1.0f / static_cast<float>(std::max(1, resolution));
+	voxel_size = Vector3(scale, scale, scale);
+	log_message(String("Voxel size set to: {0} (resolution={1})").format(Array::make(voxel_size, resolution)), 2);
 }
 
 bool VoxelGenerator::is_object_binding_set_by_parent_constructor() const {
@@ -391,10 +378,35 @@ float VoxelGenerator::get_terrain_amplitude() const {
 }
 
 void VoxelGenerator::set_resolution(int value) {
-	resolution = value;
+	resolution = std::max(1, value);
 	log_message(String("Resolution set to: {0}").format(Array::make(resolution)), 2);
-	// Resolution only affects noise sampling frequency, not voxel grid density
-	// So we don't need to recalculate voxel scale, just regenerate with new noise detail
+
+	// Calculate and log estimated sample count for performance awareness
+	int base_voxels = std::max(1, world_size.x) * std::max(1, world_size.y) * std::max(1, world_size.z) * chunk_size * chunk_size * chunk_size;
+	int64_t total_samples = static_cast<int64_t>(base_voxels) * resolution * resolution * resolution;
+	int multiplier = resolution * resolution * resolution;
+	log_message(String("Estimated marching cubes samples: {0} ({1}x base)").format(Array::make(total_samples, multiplier)), 1);
+
+	// Performance warning and auto vertex_limit for high resolutions
+	if (resolution >= 4) {
+		UtilityFunctions::push_warning(String("[VoxelGenerator] High resolution ({0}) may cause performance issues. "
+											  "Resolution^3 = {1}x more marching cubes samples. Vertex limit auto-enabled.")
+						.format(Array::make(resolution, multiplier)));
+		if (!vertex_limit) {
+			vertex_limit = true;
+			log_message("Vertex limit auto-enabled due to high resolution", 1);
+		}
+	} else {
+		// Auto-disable vertex limit when resolution drops below threshold
+		if (vertex_limit) {
+			vertex_limit = false;
+			log_message("Vertex limit auto-disabled (resolution < 4)", 1);
+		}
+	}
+
+	// Recalculate voxel scale since resolution affects marching cube size
+	recalculate_voxel_scale();
+
 	if (auto_generate)
 		generate();
 }
@@ -415,7 +427,8 @@ float VoxelGenerator::get_cutoff() const {
 }
 
 void VoxelGenerator::set_randomizer(bool value) {
-	if (value) {
+	randomizer = value;
+	if (randomizer == true) {
 		randomize_seed();
 		log_message(String("Randomizer enabled. New seed: {0}").format(Array::make(seeder)), 2);
 		if (auto_generate)
@@ -424,7 +437,7 @@ void VoxelGenerator::set_randomizer(bool value) {
 }
 
 bool VoxelGenerator::get_randomizer() const {
-	return true; // This is a placeholder, as the randomizer is always enabled in this implementation.
+	return randomizer;
 }
 
 void VoxelGenerator::set_show_centers(bool value) {
@@ -550,6 +563,9 @@ void VoxelGenerator::generate() {
 
 	log_message("Noise generators initialized", 2);
 
+	// Ensure voxel scale is current before generation
+	recalculate_voxel_scale();
+
 	// Initialize dirty flags if needed
 	{
 		std::lock_guard<std::mutex> lock(chunks_mutex);
@@ -582,13 +598,18 @@ void VoxelGenerator::generate() {
 
 	log_message("Meshes created", 2);
 
-	// Compute total voxels per axis - physical extent equals total voxels (voxel_size is 1x1x1)
-	int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size);
-	int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size);
-	int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size);
+	// Compute total marching cubes samples per axis
+	// Resolution subdivides within chunks: more samples = finer mesh detail
+	int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * resolution;
+	int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * resolution;
+	int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * resolution;
 
-	// Physical extent equals total voxels since voxel_size is 1x1x1
-	Vector3 physical_extent = Vector3((float)total_voxels_x, (float)total_voxels_y, (float)total_voxels_z);
+	// Physical extent stays the same regardless of resolution (covers same world space)
+	// Each voxel is now smaller (1/resolution) so total extent = base_voxels * chunk_size (unchanged)
+	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+	Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
 
 	int total_cubes = total_voxels_x * total_voxels_y * total_voxels_z;
 	int current_cube = 0;
@@ -1234,14 +1255,14 @@ void VoxelGenerator::fill_chunk_with_voxels(Chunk *chunk) {
 
 void VoxelGenerator::build_density_cache() {
 	// Calculate cache dimensions (all corner positions for marching cubes)
-	// For a volume of size (world_size * chunk_size), we need +1 corners in each dimension
-	int voxel_size_x = world_size.x * chunk_size;
-	int voxel_size_y = world_size.y * chunk_size;
-	int voxel_size_z = world_size.z * chunk_size;
+	// Resolution multiplies the sample count within each chunk
+	int voxel_count_x = world_size.x * chunk_size * resolution;
+	int voxel_count_y = world_size.y * chunk_size * resolution;
+	int voxel_count_z = world_size.z * chunk_size * resolution;
 
-	cache_size_x = voxel_size_x + 1;
-	cache_size_y = voxel_size_y + 1;
-	cache_size_z = voxel_size_z + 1;
+	cache_size_x = voxel_count_x + 1;
+	cache_size_y = voxel_count_y + 1;
+	cache_size_z = voxel_count_z + 1;
 
 	size_t total_size = static_cast<size_t>(cache_size_x) * cache_size_y * cache_size_z;
 
@@ -1252,11 +1273,11 @@ void VoxelGenerator::build_density_cache() {
 		density_cache.resize(total_size);
 
 		// Fill the cache with density values
-		// Convert voxel indices to world positions for density sampling
-		int total_voxels_x = world_size.x * chunk_size;
-		int total_voxels_y = world_size.y * chunk_size;
-		int total_voxels_z = world_size.z * chunk_size;
-		Vector3 physical_extent((float)total_voxels_x, (float)total_voxels_y, (float)total_voxels_z);
+		// Physical extent stays constant regardless of resolution
+		float physical_extent_x = static_cast<float>(world_size.x * chunk_size);
+		float physical_extent_y = static_cast<float>(world_size.y * chunk_size);
+		float physical_extent_z = static_cast<float>(world_size.z * chunk_size);
+		Vector3 physical_extent(physical_extent_x, physical_extent_y, physical_extent_z);
 
 		for (int iz = 0; iz < cache_size_z; ++iz) {
 			for (int iy = 0; iy < cache_size_y; ++iy) {
@@ -1291,14 +1312,15 @@ float VoxelGenerator::get_cached_density(int ix, int iy, int iz) const {
 	std::shared_lock<std::shared_mutex> lock(density_cache_mutex);
 
 	// Helper lambda to convert indices to world position
+	// Physical extent is constant, voxel_size accounts for resolution
 	auto index_to_pos = [this](int x, int y, int z) -> Vector3 {
-		int total_voxels_x = world_size.x * chunk_size;
-		int total_voxels_y = world_size.y * chunk_size;
-		int total_voxels_z = world_size.z * chunk_size;
+		float physical_extent_x = static_cast<float>(world_size.x * chunk_size);
+		float physical_extent_y = static_cast<float>(world_size.y * chunk_size);
+		float physical_extent_z = static_cast<float>(world_size.z * chunk_size);
 		return Vector3(
-				-total_voxels_x * 0.5f + x * voxel_size.x,
-				-total_voxels_y * 0.5f + y * voxel_size.y,
-				-total_voxels_z * 0.5f + z * voxel_size.z);
+				-physical_extent_x * 0.5f + x * voxel_size.x,
+				-physical_extent_y * 0.5f + y * voxel_size.y,
+				-physical_extent_z * 0.5f + z * voxel_size.z);
 	};
 
 	if (density_cache.empty()) {
