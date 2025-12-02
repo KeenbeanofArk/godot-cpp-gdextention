@@ -13,7 +13,8 @@ func _ready():
 	voxel_generator.set_vertex_limit(false)
 	
 	# Generator Setttings
-	voxel_generator.set_world_size(Vector3i(1, 1, 1))
+	voxel_generator.set_generation_mode(1)
+	voxel_generator.set_world_size(Vector3i(5, 5, 5))
 	voxel_generator.set_auto_generate(false)
 	voxel_generator.set_chunk_size(8)
 	
@@ -32,15 +33,15 @@ func _ready():
 	# Print initial state
 	voxel_generator.debug_print_state()
 	
-	#var det_noise = NoiseGenerator.new()
-	#det_noise.seed = 12345
-	#det_noise.octaves = 4
-	#det_noise.period = 50.0
-	#det_noise.persistence = 0.5
-	#det_noise.lacunarity = 2.0
-	#
-	#voxel_generator.set_terrain_noise(det_noise)
-	#voxel_generator.set_detail_noise(det_noise)
+	var det_noise = NoiseGenerator.new()
+	det_noise.seed = 12345
+	det_noise.octaves = 4
+	det_noise.period = 50.0
+	det_noise.persistence = 0.5
+	det_noise.lacunarity = 2.0
+	
+	voxel_generator.set_terrain_noise(det_noise)
+	voxel_generator.set_detail_noise(det_noise)
 	
 	## Start the generator
 	voxel_generator.generate()

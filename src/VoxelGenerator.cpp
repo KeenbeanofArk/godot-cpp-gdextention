@@ -30,6 +30,7 @@
 
 #include "VoxelGenerator.h"
 #include "Constants.h"
+#include "core/voxel_constants.h"
 #include "generators/NoiseGenerator.h"
 
 #include <algorithm>
@@ -55,6 +56,14 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_world_size"), &VoxelGenerator::get_world_size);
 	ClassDB::bind_method(D_METHOD("set_chunk_size", "value"), &VoxelGenerator::set_chunk_size);
 	ClassDB::bind_method(D_METHOD("get_chunk_size"), &VoxelGenerator::get_chunk_size);
+
+	// Generation mode and LOD bindings
+	ClassDB::bind_method(D_METHOD("set_generation_mode", "value"), &VoxelGenerator::set_generation_mode);
+	ClassDB::bind_method(D_METHOD("get_generation_mode"), &VoxelGenerator::get_generation_mode);
+	ClassDB::bind_method(D_METHOD("set_surface_band", "value"), &VoxelGenerator::set_surface_band);
+	ClassDB::bind_method(D_METHOD("get_surface_band"), &VoxelGenerator::get_surface_band);
+	ClassDB::bind_method(D_METHOD("set_lod_level", "value"), &VoxelGenerator::set_lod_level);
+	ClassDB::bind_method(D_METHOD("get_lod_level"), &VoxelGenerator::get_lod_level);
 
 	// Terrain noise bindings
 	ClassDB::bind_method(D_METHOD("set_terrain_noise", "noise"), &VoxelGenerator::set_terrain_noise);
@@ -120,6 +129,11 @@ void VoxelGenerator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "resolution", PROPERTY_HINT_RANGE, "1,10,1"), "set_resolution", "get_resolution");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cutoff", PROPERTY_HINT_RANGE, "-1,1,0.01"), "set_cutoff", "get_cutoff");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "seeder", PROPERTY_HINT_RANGE, "0,1000000,1"), "set_seeder", "get_seeder");
+
+	ADD_GROUP("Generation Mode", "generation_");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "generation_mode", PROPERTY_HINT_ENUM, "Voxels First,Heightmap First"), "set_generation_mode", "get_generation_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "surface_band", PROPERTY_HINT_RANGE, "1.0,20.0,0.5"), "set_surface_band", "get_surface_band");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "lod_level", PROPERTY_HINT_RANGE, "0,7,1"), "set_lod_level", "get_lod_level");
 
 	ADD_GROUP("Terrain Settings", "terrain_");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "terrain_noise", PROPERTY_HINT_RESOURCE_TYPE, "NoiseGenerator"), "set_terrain_noise", "get_terrain_noise");
@@ -281,6 +295,64 @@ void VoxelGenerator::set_chunk_size(int value) {
 
 int VoxelGenerator::get_chunk_size() const {
 	return chunk_size;
+}
+
+// ============================================================================
+// Generation Mode and LOD Getters/Setters
+// ============================================================================
+
+void VoxelGenerator::set_generation_mode(int value) {
+	GenerationMode new_mode = static_cast<GenerationMode>(CLAMP(value, 0, 1));
+	if (generation_mode != new_mode) {
+		generation_mode = new_mode;
+		log_message(String("Generation mode set to: {0}").format(Array::make(generation_mode == VOXELS_FIRST ? "Voxels First" : "Heightmap First")), 2);
+		// Clear heightmap cache when switching modes
+		if (generation_mode == VOXELS_FIRST) {
+			clear_heightmap_cache();
+		}
+		if (auto_generate)
+			generate();
+	}
+}
+
+int VoxelGenerator::get_generation_mode() const {
+	return static_cast<int>(generation_mode);
+}
+
+void VoxelGenerator::set_surface_band(float value) {
+	surface_band = CLAMP(value, 1.0f, 20.0f);
+	log_message(String("Surface band set to: {0}").format(Array::make(surface_band)), 2);
+	if (auto_generate && generation_mode == HEIGHTMAP_FIRST)
+		generate();
+}
+
+float VoxelGenerator::get_surface_band() const {
+	return surface_band;
+}
+
+void VoxelGenerator::set_lod_level(int value) {
+	int new_lod = CLAMP(value, 0, voxel_engine::MAX_LOD_LEVELS - 1);
+	if (lod_level != new_lod) {
+		lod_level = new_lod;
+		log_message(String("LOD level set to: {0} (effective resolution: {1})").format(Array::make(lod_level, get_effective_resolution())), 2);
+		if (auto_generate)
+			generate();
+	}
+}
+
+int VoxelGenerator::get_lod_level() const {
+	return lod_level;
+}
+
+int VoxelGenerator::get_effective_resolution() const {
+	// Reduce resolution by powers of 2 based on LOD level
+	// LOD 0 = full resolution, LOD 1 = half, LOD 2 = quarter, etc.
+	return std::max(1, resolution >> lod_level);
+}
+
+float VoxelGenerator::get_effective_surface_band() const {
+	// Widen surface band at higher LOD levels to prevent gaps
+	return surface_band * (1.0f + lod_level * 0.5f);
 }
 
 void VoxelGenerator::set_vertex_limit(bool value) {
@@ -534,6 +606,10 @@ void VoxelGenerator::generate() {
 	}
 
 	log_message("VoxelGenerator::generate() called", 2);
+	log_message(String("Generation mode: {0}, LOD level: {1}, Effective resolution: {2}")
+						.format(Array::make(generation_mode == VOXELS_FIRST ? "Voxels First" : "Heightmap First",
+								lod_level, get_effective_resolution())),
+			2);
 	log_message("Starting voxel generation with:", 3);
 	log_message(String("  Terrain Height: {0}, Amplitude: {1}, Rock Influence: {2}, Resolution: {3}, Cutoff: {4}, Seed: {5}")
 						.format(Array::make(terrain_height, terrain_amplitude, rock_influence, resolution, cutoff, seeder)),
@@ -575,9 +651,6 @@ void VoxelGenerator::generate() {
 		}
 	}
 
-	// Build the density cache for fast lookups during marching cubes
-	build_density_cache();
-
 	// # Create centers mesh
 	Ref<ImmediateMesh> mesh_centers;
 	mesh_centers.instantiate();
@@ -595,192 +668,22 @@ void VoxelGenerator::generate() {
 
 	int centers_vertex_count = 0;
 	int cubes_vertex_count = 0;
+	int vertex_count = 0;
 
 	log_message("Meshes created", 2);
 
-	// Compute total marching cubes samples per axis
-	// Resolution subdivides within chunks: more samples = finer mesh detail
-	int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * resolution;
-	int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * resolution;
-	int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * resolution;
-
-	// Physical extent stays the same regardless of resolution (covers same world space)
-	// Each voxel is now smaller (1/resolution) so total extent = base_voxels * chunk_size (unchanged)
-	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
-	float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
-	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
-	Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
-
-	int total_cubes = total_voxels_x * total_voxels_y * total_voxels_z;
-	int current_cube = 0;
-	int triangle_count = 0;
-
-	log_message(String("Total voxels: {0}x{1}x{2} = {3}").format(Array::make(total_voxels_x, total_voxels_y, total_voxels_z, total_cubes)), 2);
-
-	int non_empty_lookup_count = 0;
-	std::vector<int> sample_lookup_indices;
-	std::vector<std::vector<float>> sample_cube_values;
-
-	int vertex_count = 0;
-
-	for (int ix = 0; ix < total_voxels_x; ++ix) {
-		for (int iy = 0; iy < total_voxels_y; ++iy) {
-			for (int iz = 0; iz < total_voxels_z; ++iz) {
-				current_cube++;
-
-				// Check vertex limits before adding vertices
-				if (vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
-					log_message("Vertex limit reached, stopping generation", 1);
-					break; // Stop processing if vertex limit is reached
-				}
-
-#pragma region Debug
-				if (debug_mode && debug_verbosity >= 3) {
-					// Progress update for very verbose mode
-					if (current_cube % 1000 == 0 || current_cube == total_cubes) {
-						log_message(String("Processing cube {0}/{1} ({2}%)")
-											.format(Array::make(current_cube, total_cubes, int(100.0f * current_cube / total_cubes))),
-								3);
-					}
-				}
-#pragma endregion
-
-				// Calculate the center position of the voxel using voxel_size and physical extent
-				// Centers range from -physical_extent/2 .. +physical_extent/2
-				Vector3 center;
-				center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * voxel_size.x;
-				center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * voxel_size.y;
-				center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * voxel_size.z;
-
-				log_message(String("Processing cube at {0},{1},{2}").format(Array::make(center.x, center.y, center.z)), 3);
-
-				// Get the terrain density at the center position
-				float center_value = get_terrain_density(center);
-#pragma region Debug
-				if (debug_mode && debug_verbosity >= 3) {
-					log_message(String("  Cube at {0},{1},{2}: density={3}")
-										.format(Array::make(center.x, center.y, center.z, center_value)),
-							3);
-				}
-#pragma endregion
-
-				// Create marching cube vertices (geometry positions)
-				Vector<Vector3> cube_vertices = create_cube_vertices(center);
-
-				// Get the terrain density at each corner of the cube using cached values
-				std::vector<float> cube_values = get_cube_values_cached(ix, iy, iz);
-
-				if (center_value < cutoff) {
-					add_cubes_vertices(mesh_cubes, cube_vertices);
-					// add_cubes_vertices adds 24 line-vertices (12 lines * 2 ends)
-					cubes_vertex_count += 24;
-				} // Get the lookup index for the current cube
-
-				int lookup_index = get_lookup_index(cube_values, cutoff); // Bounds check to prevent crash with incomplete lookup table
-				const auto &marching_triangles = Constants::get_marching_triangles();
-
-#pragma region Debug
-				if (lookup_index >= marching_triangles.size()) {
-					if (debug_mode && debug_verbosity >= 2) {
-						log_message(String("Warning: lookup_index {0} exceeds table size {1}, skipping cube")
-											.format(Array::make(lookup_index, (int)marching_triangles.size())),
-								1);
-					}
-					continue; // Skip this cube to prevent crash
-				}
-#pragma endregion
-
-				// Get triangles
-				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
-
-				// Diagnostic: record non-empty lookup tables and a few sample cube values for inspection
-				if (!triangles.empty() && triangles[0] != -1) {
-					non_empty_lookup_count++;
-					if (sample_lookup_indices.size() < 5) {
-						sample_lookup_indices.push_back(lookup_index);
-						sample_cube_values.emplace_back(cube_values);
-					}
-				}
-
-				Color color(
-						(center.x + total_voxels_x * 0.5f) / (float)total_voxels_x,
-						(center.y + total_voxels_y * 0.5f) / (float)total_voxels_y,
-						(center.z + total_voxels_z * 0.5f) / (float)total_voxels_z);
-
-				if (!triangles.empty() && triangles[0] != -1) {
-					mesh_centers->surface_set_color(color);
-					mesh_centers->surface_add_vertex(center);
-					centers_vertex_count++;
-					log_message(String("Cube center at {0} with value {1}").format(Array::make(center, center_value)), 3);
-				};
-
-				for (size_t index = 0; index < triangles.size(); index += 3) {
-					int point_1 = triangles[index];
-					if (point_1 == -1)
-						continue;
-
-					int point_2 = triangles[index + 1];
-					if (point_2 == -1)
-						continue;
-
-					int point_3 = triangles[index + 2];
-					if (point_3 == -1)
-						continue;
-
-					triangle_count++;
-
-					int a0 = Constants::cornerIndexAFromEdge[point_1];
-					int b0 = Constants::cornerIndexBFromEdge[point_1];
-
-					int a1 = Constants::cornerIndexAFromEdge[point_2];
-					int b1 = Constants::cornerIndexBFromEdge[point_2];
-
-					int a2 = Constants::cornerIndexAFromEdge[point_3];
-					int b2 = Constants::cornerIndexBFromEdge[point_3];
-
-					Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
-					Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
-					Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
-
-					Vector3 vector_a = vertex3 - vertex1;
-					Vector3 vector_b = vertex2 - vertex1;
-
-					Vector3 normal = vector_a.cross(vector_b).normalized();
-
-					mesh_triangles->surface_set_color(color);
-					mesh_triangles->surface_set_normal(normal);
-
-					if (vertex_count < Constants::MAX_VERTICES && !vertex_limit) {
-						mesh_triangles->surface_add_vertex(vertex1);
-						mesh_triangles->surface_add_vertex(vertex2);
-						mesh_triangles->surface_add_vertex(vertex3);
-						vertex_count += 3;
-					} else {
-						log_message(String("Vertex limit reached, skipping additional vertices - Total vertices: {0}").format(Array::make(vertex_count)), 2);
-					}
-					log_message(String("Total vertices so far: {0}").format(Array::make(vertex_count)), 3);
-				}
-			}
-		}
-	}
-
-	log_message(String("Generation completed: {0} triangles created").format(Array::make(triangle_count)), 2);
-
-	// Diagnostic summary: print non-empty lookup counts and a few sample indices/values
-	if (debug_mode && debug_verbosity >= 2) {
-		std::ostringstream ss;
-		ss << "Non-empty marching-triangle entries encountered: " << non_empty_lookup_count << "\n";
-		ss << "Collected sample lookup indices (up to 5): ";
-		for (size_t i = 0; i < sample_lookup_indices.size(); ++i) {
-			ss << sample_lookup_indices[i] << (i + 1 < sample_lookup_indices.size() ? ", " : "\n");
-		}
-		for (size_t i = 0; i < sample_cube_values.size(); ++i) {
-			ss << "Sample[" << i << "] lookup=" << sample_lookup_indices[i] << " values=[";
-			for (size_t j = 0; j < sample_cube_values[i].size(); ++j) {
-				ss << sample_cube_values[i][j] << (j + 1 < sample_cube_values[i].size() ? ", " : "]\n");
-			}
-		}
-		log_message(String(ss.str().c_str()), 2);
+	// Dispatch to appropriate generation method based on mode
+	if (generation_mode == VOXELS_FIRST) {
+		// Build full density cache for voxels-first mode
+		build_density_cache();
+		generate_voxels_first(mesh_centers, mesh_cubes, mesh_triangles,
+				centers_vertex_count, cubes_vertex_count, vertex_count);
+	} else {
+		// Build heightmap cache for heightmap-first mode
+		build_heightmap_cache();
+		build_density_cache(); // Still need density cache for marching cubes within surface band
+		generate_heightmap_first(mesh_centers, mesh_cubes, mesh_triangles,
+				centers_vertex_count, cubes_vertex_count, vertex_count);
 	}
 
 	// # End surfaces - only end surfaces that actually have vertices to avoid ImmediateMesh errors
@@ -838,6 +741,12 @@ void VoxelGenerator::generate() {
 	MeshInstance3D *mi_triangles = memnew(MeshInstance3D);
 	mi_triangles->set_mesh(mesh_triangles);
 	add_child(mi_triangles);
+
+	// Physical extent for chunk grid visualization
+	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+	Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
 
 	// # Create chunk grid visualization (red, thicker lines)
 	Ref<ImmediateMesh> mesh_chunk_grid;
@@ -940,6 +849,299 @@ void VoxelGenerator::generate() {
 	generation_in_progress.store(false);
 
 	log_message("VoxelGenerator::generate() completed", 2);
+}
+
+// ============================================================================
+// Generation Mode: Voxels First (Full 3D Marching Cubes)
+// ============================================================================
+
+void VoxelGenerator::generate_voxels_first(Ref<ImmediateMesh> mesh_centers, Ref<ImmediateMesh> mesh_cubes,
+		Ref<ImmediateMesh> mesh_triangles, int &centers_vertex_count, int &cubes_vertex_count, int &vertex_count) {
+	log_message("Starting VOXELS_FIRST generation mode", 2);
+
+	// Use effective resolution (accounts for LOD)
+	int eff_resolution = get_effective_resolution();
+
+	// Compute total marching cubes samples per axis
+	int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
+	int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
+	int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
+
+	// Physical extent stays the same regardless of resolution
+	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+	Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
+
+	// Voxel size adjusted for effective resolution
+	Vector3 eff_voxel_size = Vector3(1.0f, 1.0f, 1.0f) / static_cast<float>(std::max(1, eff_resolution));
+
+	int total_cubes = total_voxels_x * total_voxels_y * total_voxels_z;
+	int current_cube = 0;
+	int triangle_count = 0;
+
+	log_message(String("Total voxels: {0}x{1}x{2} = {3}").format(Array::make(total_voxels_x, total_voxels_y, total_voxels_z, total_cubes)), 2);
+
+	int non_empty_lookup_count = 0;
+	std::vector<int> sample_lookup_indices;
+	std::vector<std::vector<float>> sample_cube_values;
+
+	for (int ix = 0; ix < total_voxels_x; ++ix) {
+		for (int iy = 0; iy < total_voxels_y; ++iy) {
+			for (int iz = 0; iz < total_voxels_z; ++iz) {
+				current_cube++;
+
+				// Check vertex limits before adding vertices
+				if (vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
+					log_message("Vertex limit reached, stopping generation", 1);
+					break;
+				}
+
+				if (debug_mode && debug_verbosity >= 3) {
+					if (current_cube % 1000 == 0 || current_cube == total_cubes) {
+						log_message(String("Processing cube {0}/{1} ({2}%)")
+											.format(Array::make(current_cube, total_cubes, int(100.0f * current_cube / total_cubes))),
+								3);
+					}
+				}
+
+				// Calculate the center position of the voxel
+				Vector3 center;
+				center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
+				center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
+				center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
+
+				float center_value = get_terrain_density(center);
+
+				// Create marching cube vertices
+				Vector<Vector3> cube_vertices = create_cube_vertices(center);
+				std::vector<float> cube_values = get_cube_values_cached(ix, iy, iz);
+
+				if (center_value < cutoff) {
+					add_cubes_vertices(mesh_cubes, cube_vertices);
+					cubes_vertex_count += 24;
+				}
+
+				int lookup_index = get_lookup_index(cube_values, cutoff);
+				const auto &marching_triangles = Constants::get_marching_triangles();
+
+				if (lookup_index >= marching_triangles.size()) {
+					continue;
+				}
+
+				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
+
+				if (!triangles.empty() && triangles[0] != -1) {
+					non_empty_lookup_count++;
+					if (sample_lookup_indices.size() < 5) {
+						sample_lookup_indices.push_back(lookup_index);
+						sample_cube_values.emplace_back(cube_values);
+					}
+				}
+
+				Color color(
+						(center.x + total_voxels_x * 0.5f) / (float)total_voxels_x,
+						(center.y + total_voxels_y * 0.5f) / (float)total_voxels_y,
+						(center.z + total_voxels_z * 0.5f) / (float)total_voxels_z);
+
+				if (!triangles.empty() && triangles[0] != -1) {
+					mesh_centers->surface_set_color(color);
+					mesh_centers->surface_add_vertex(center);
+					centers_vertex_count++;
+				}
+
+				for (size_t index = 0; index < triangles.size(); index += 3) {
+					int point_1 = triangles[index];
+					if (point_1 == -1)
+						continue;
+					int point_2 = triangles[index + 1];
+					if (point_2 == -1)
+						continue;
+					int point_3 = triangles[index + 2];
+					if (point_3 == -1)
+						continue;
+
+					triangle_count++;
+
+					int a0 = Constants::cornerIndexAFromEdge[point_1];
+					int b0 = Constants::cornerIndexBFromEdge[point_1];
+					int a1 = Constants::cornerIndexAFromEdge[point_2];
+					int b1 = Constants::cornerIndexBFromEdge[point_2];
+					int a2 = Constants::cornerIndexAFromEdge[point_3];
+					int b2 = Constants::cornerIndexBFromEdge[point_3];
+
+					Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
+					Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
+					Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
+
+					Vector3 vector_a = vertex3 - vertex1;
+					Vector3 vector_b = vertex2 - vertex1;
+					Vector3 normal = vector_a.cross(vector_b).normalized();
+
+					mesh_triangles->surface_set_color(color);
+					mesh_triangles->surface_set_normal(normal);
+
+					if (vertex_count < Constants::MAX_VERTICES && !vertex_limit) {
+						mesh_triangles->surface_add_vertex(vertex1);
+						mesh_triangles->surface_add_vertex(vertex2);
+						mesh_triangles->surface_add_vertex(vertex3);
+						vertex_count += 3;
+					}
+				}
+			}
+		}
+	}
+
+	log_message(String("VOXELS_FIRST completed: {0} triangles, {1} vertices").format(Array::make(triangle_count, vertex_count)), 2);
+}
+
+// ============================================================================
+// Generation Mode: Heightmap First (Surface Band Optimization)
+// ============================================================================
+
+void VoxelGenerator::generate_heightmap_first(Ref<ImmediateMesh> mesh_centers, Ref<ImmediateMesh> mesh_cubes,
+		Ref<ImmediateMesh> mesh_triangles, int &centers_vertex_count, int &cubes_vertex_count, int &vertex_count) {
+	log_message("Starting HEIGHTMAP_FIRST generation mode", 2);
+
+	// Use effective resolution and surface band (accounts for LOD)
+	int eff_resolution = get_effective_resolution();
+	float eff_surface_band = get_effective_surface_band();
+
+	// Compute total marching cubes samples per axis
+	int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
+	int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
+	int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
+
+	// Physical extent
+	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+	Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
+
+	// Voxel size adjusted for effective resolution
+	Vector3 eff_voxel_size = Vector3(1.0f, 1.0f, 1.0f) / static_cast<float>(std::max(1, eff_resolution));
+
+	int triangle_count = 0;
+	int skipped_voxels = 0;
+	int processed_voxels = 0;
+
+	log_message(String("Heightmap mode: surface_band={0}, effective_band={1}")
+						.format(Array::make(surface_band, eff_surface_band)),
+			2);
+
+	// Iterate over X-Z plane first (heightmap driven)
+	for (int ix = 0; ix < total_voxels_x; ++ix) {
+		for (int iz = 0; iz < total_voxels_z; ++iz) {
+			// Get the terrain height at this X-Z position from heightmap cache
+			float terrain_height_at_xz = get_height_at(ix, iz);
+
+			// Convert world height to voxel Y coordinate
+			// Height is in world units, need to convert to voxel index
+			float world_y_center = terrain_height_at_xz;
+
+			// Calculate Y range to process (surface band)
+			float y_min_world = world_y_center - eff_surface_band;
+			float y_max_world = world_y_center + eff_surface_band;
+
+			// Convert to voxel indices
+			int iy_min = std::max(0, static_cast<int>((y_min_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
+			int iy_max = std::min(total_voxels_y - 1, static_cast<int>((y_max_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
+
+			// Only process voxels within the surface band
+			for (int iy = iy_min; iy <= iy_max; ++iy) {
+				processed_voxels++;
+
+				if (vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
+					break;
+				}
+
+				// Calculate the center position of the voxel
+				Vector3 center;
+				center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
+				center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
+				center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
+
+				float center_value = get_terrain_density(center);
+
+				// Create marching cube vertices
+				Vector<Vector3> cube_vertices = create_cube_vertices(center);
+				std::vector<float> cube_values = get_cube_values_cached(ix, iy, iz);
+
+				if (center_value < cutoff) {
+					add_cubes_vertices(mesh_cubes, cube_vertices);
+					cubes_vertex_count += 24;
+				}
+
+				int lookup_index = get_lookup_index(cube_values, cutoff);
+				const auto &marching_triangles = Constants::get_marching_triangles();
+
+				if (lookup_index >= marching_triangles.size()) {
+					continue;
+				}
+
+				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
+
+				Color color(
+						(center.x + total_voxels_x * 0.5f) / (float)total_voxels_x,
+						(center.y + total_voxels_y * 0.5f) / (float)total_voxels_y,
+						(center.z + total_voxels_z * 0.5f) / (float)total_voxels_z);
+
+				if (!triangles.empty() && triangles[0] != -1) {
+					mesh_centers->surface_set_color(color);
+					mesh_centers->surface_add_vertex(center);
+					centers_vertex_count++;
+				}
+
+				for (size_t index = 0; index < triangles.size(); index += 3) {
+					int point_1 = triangles[index];
+					if (point_1 == -1)
+						continue;
+					int point_2 = triangles[index + 1];
+					if (point_2 == -1)
+						continue;
+					int point_3 = triangles[index + 2];
+					if (point_3 == -1)
+						continue;
+
+					triangle_count++;
+
+					int a0 = Constants::cornerIndexAFromEdge[point_1];
+					int b0 = Constants::cornerIndexBFromEdge[point_1];
+					int a1 = Constants::cornerIndexAFromEdge[point_2];
+					int b1 = Constants::cornerIndexBFromEdge[point_2];
+					int a2 = Constants::cornerIndexAFromEdge[point_3];
+					int b2 = Constants::cornerIndexBFromEdge[point_3];
+
+					Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
+					Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
+					Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
+
+					Vector3 vector_a = vertex3 - vertex1;
+					Vector3 vector_b = vertex2 - vertex1;
+					Vector3 normal = vector_a.cross(vector_b).normalized();
+
+					mesh_triangles->surface_set_color(color);
+					mesh_triangles->surface_set_normal(normal);
+
+					if (vertex_count < Constants::MAX_VERTICES && !vertex_limit) {
+						mesh_triangles->surface_add_vertex(vertex1);
+						mesh_triangles->surface_add_vertex(vertex2);
+						mesh_triangles->surface_add_vertex(vertex3);
+						vertex_count += 3;
+					}
+				}
+			}
+
+			// Count skipped voxels (outside surface band)
+			skipped_voxels += (total_voxels_y - (iy_max - iy_min + 1));
+		}
+	}
+
+	int total_possible = total_voxels_x * total_voxels_y * total_voxels_z;
+	float efficiency = (total_possible > 0) ? (100.0f * skipped_voxels / total_possible) : 0.0f;
+	log_message(String("HEIGHTMAP_FIRST completed: {0} triangles, {1} vertices, {2}% voxels skipped")
+						.format(Array::make(triangle_count, vertex_count, int(efficiency))),
+			2);
 }
 
 Vector<Vector3> VoxelGenerator::create_cube_vertices(const Vector3 &pos) {
@@ -1536,4 +1738,97 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 		}
 	}
 }
+
+// ============================================================================
+// Heightmap Cache Implementation
+// ============================================================================
+
+void VoxelGenerator::build_heightmap_cache() {
+	// Use effective resolution for heightmap
+	int eff_resolution = get_effective_resolution();
+
+	// Calculate heightmap dimensions (X-Z plane)
+	heightmap_size_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
+	heightmap_size_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
+
+	size_t total_size = static_cast<size_t>(heightmap_size_x) * heightmap_size_z;
+
+	log_message(String("Building heightmap cache: {0}x{1} = {2} entries")
+						.format(Array::make(heightmap_size_x, heightmap_size_z, static_cast<int64_t>(total_size))),
+			2);
+
+	heightmap_cache.resize(total_size);
+
+	// Physical extent
+	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+
+	// Voxel size adjusted for effective resolution
+	float eff_voxel_size = 1.0f / static_cast<float>(std::max(1, eff_resolution));
+
+	// Sample terrain noise to build heightmap
+	for (int iz = 0; iz < heightmap_size_z; ++iz) {
+		for (int ix = 0; ix < heightmap_size_x; ++ix) {
+			// Convert index to world X-Z position (center of voxel column)
+			float world_x = -physical_extent_x * 0.5f + (ix + 0.5f) * eff_voxel_size;
+			float world_z = -physical_extent_z * 0.5f + (iz + 0.5f) * eff_voxel_size;
+
+			// Calculate terrain height using 2D noise
+			float height = terrain_height;
+			if (terrain_noise.is_valid()) {
+				float noise_value = terrain_noise->get_noise_2d(world_x, world_z);
+				height += noise_value * terrain_amplitude;
+			}
+
+			int index = heightmap_cache_index(ix, iz);
+			heightmap_cache[index] = height;
+		}
+	}
+
+	log_message("Heightmap cache built successfully", 2);
+}
+
+void VoxelGenerator::clear_heightmap_cache() {
+	heightmap_cache.clear();
+	heightmap_cache.shrink_to_fit();
+	heightmap_size_x = 0;
+	heightmap_size_z = 0;
+	log_message("Heightmap cache cleared", 2);
+}
+
+float VoxelGenerator::get_height_at(int ix, int iz) const {
+	// Bounds check
+	if (heightmap_cache.empty() ||
+			ix < 0 || ix >= heightmap_size_x ||
+			iz < 0 || iz >= heightmap_size_z) {
+		// Fallback to direct calculation
+		int eff_resolution = get_effective_resolution();
+		float eff_voxel_size = 1.0f / static_cast<float>(std::max(1, eff_resolution));
+		float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+		float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+
+		float world_x = -physical_extent_x * 0.5f + (ix + 0.5f) * eff_voxel_size;
+		float world_z = -physical_extent_z * 0.5f + (iz + 0.5f) * eff_voxel_size;
+
+		float height = terrain_height;
+		if (terrain_noise.is_valid()) {
+			height += terrain_noise->get_noise_2d(world_x, world_z) * terrain_amplitude;
+		}
+		return height;
+	}
+
+	return heightmap_cache[heightmap_cache_index(ix, iz)];
+}
+
+bool VoxelGenerator::heightmap_needs_rebuild() const {
+	// Heightmap needs rebuild if cache is empty or dimensions changed
+	int eff_resolution = get_effective_resolution();
+	int expected_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
+	int expected_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
+
+	return heightmap_cache.empty() ||
+			heightmap_size_x != expected_x ||
+			heightmap_size_z != expected_z;
+}
+
 } // namespace voxel_engine

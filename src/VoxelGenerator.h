@@ -62,10 +62,26 @@ using namespace godot;
 
 namespace voxel_engine {
 
+// Generation mode enum - determines how terrain is generated
+enum GenerationMode {
+	VOXELS_FIRST = 0, // Full 3D density evaluation (current behavior)
+	HEIGHTMAP_FIRST = 1 // 2D heightmap then surface band only (optimized)
+};
+
 class VoxelGenerator : public Node3D {
 	GDCLASS(VoxelGenerator, Node3D)
 
 private:
+	// Generation mode and LOD settings
+	GenerationMode generation_mode = VOXELS_FIRST;
+	float surface_band = 4.0f; // Vertical band around surface for heightmap mode
+	int lod_level = 0; // Global LOD level (0 = highest detail, 7 = lowest)
+
+	// Heightmap cache for HEIGHTMAP_FIRST mode
+	std::vector<float> heightmap_cache;
+	int heightmap_size_x = 0;
+	int heightmap_size_z = 0;
+
 	// Terrain generation properties
 	Ref<NoiseGenerator> terrain_noise; // 2D noise for base terrain height
 	Ref<NoiseGenerator> detail_noise; // 3D noise for rocky detail
@@ -170,6 +186,16 @@ public:
 	void set_chunk_size(int value);
 	int get_chunk_size() const;
 
+	// Generation mode and LOD getters/setters
+	void set_generation_mode(int value);
+	int get_generation_mode() const;
+
+	void set_surface_band(float value);
+	float get_surface_band() const;
+
+	void set_lod_level(int value);
+	int get_lod_level() const;
+
 	void reset();
 
 	void generate();
@@ -256,6 +282,34 @@ private:
 	// Internal chunk mesh generation (called from worker thread)
 	void generate_chunk_mesh_internal(int chunk_index);
 	// ===========================================================
+
+	// ==================== Generation Mode Methods ====================
+	// Generate terrain using full 3D voxel evaluation (original method)
+	void generate_voxels_first(Ref<ImmediateMesh> mesh_centers, Ref<ImmediateMesh> mesh_cubes,
+			Ref<ImmediateMesh> mesh_triangles, int &centers_vertex_count, int &cubes_vertex_count, int &vertex_count);
+	// Generate terrain using 2D heightmap then surface band optimization
+	void generate_heightmap_first(Ref<ImmediateMesh> mesh_centers, Ref<ImmediateMesh> mesh_cubes,
+			Ref<ImmediateMesh> mesh_triangles, int &centers_vertex_count, int &cubes_vertex_count, int &vertex_count);
+	// Get effective resolution considering LOD level
+	int get_effective_resolution() const;
+	// Get effective surface band considering LOD level
+	float get_effective_surface_band() const;
+	// =================================================================
+
+	// ==================== Heightmap Cache Methods ====================
+	// Build the 2D heightmap cache (call at start of heightmap-first generation)
+	void build_heightmap_cache();
+	// Clear the heightmap cache
+	void clear_heightmap_cache();
+	// Get cached height value at grid position
+	float get_height_at(int ix, int iz) const;
+	// Convert 2D index to 1D cache index
+	inline int heightmap_cache_index(int ix, int iz) const {
+		return ix + iz * heightmap_size_x;
+	}
+	// Check if terrain noise has changed (requires heightmap rebuild)
+	bool heightmap_needs_rebuild() const;
+	// ==================================================================
 };
 } // namespace voxel_engine
 

@@ -71,6 +71,7 @@ text = "Verbosity: 0"
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+tick_count = 4
 
 [node name="ChunkSizeLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
@@ -82,6 +83,7 @@ text = "Chunk Size: 8"
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+tick_count = 2
 
 [node name="ResolutionLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
@@ -89,10 +91,34 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Resolution: 1"
 
-[node name="ResolutionSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="ResolutionSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="SurfaceBandLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Surface Band: 1"
+
+[node name="SurfaceBandSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+tick_count = 40
+
+[node name="LodLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "LOD: 1"
+
+[node name="LodSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+prefix = "Level"
 
 [node name="WorldSizeXLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
@@ -100,10 +126,11 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "World X: 1"
 
-[node name="WorldSizeXSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="WorldSizeXSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+prefix = "x="
 
 [node name="WorldSizeYLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
@@ -111,10 +138,11 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "World Y: 1"
 
-[node name="WorldSizeYSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="WorldSizeYSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+prefix = "y="
 
 [node name="WorldSizeZLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
@@ -122,10 +150,11 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "World Z: 1"
 
-[node name="WorldSizeZSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="WorldSizeZSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+prefix = "z="
 
 [node name="TerrainHeightLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)

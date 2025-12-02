@@ -64,8 +64,7 @@ directional_shadow_max_distance = 1.0
 [node name="Chunk" type="Chunk" parent="Terrain"]
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="Terrain"]
-world_size = Vector3i(2, 2, 2)
-resolution = 1
+generation_mode = 1
 terrain_noise = SubResource("NoiseGenerator_aqk2v")
 detail_noise = SubResource("NoiseGenerator_dwbse")
 

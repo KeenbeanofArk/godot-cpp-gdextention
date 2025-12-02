@@ -17,13 +17,17 @@ class_name gui
 @onready var chunk_size_label: Label = $DebugDisplay/DebugContainer/SliderGrid/ChunkSizeLabel
 @onready var chunk_size_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/ChunkSizeSlider
 @onready var resolution_label: Label = $DebugDisplay/DebugContainer/SliderGrid/ResolutionLabel
-@onready var resolution_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/ResolutionSlider
+@onready var resolution_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/ResolutionSpinner
+@onready var surface_band_label: Label = $DebugDisplay/DebugContainer/SliderGrid/SurfaceBandLabel
+@onready var surface_band_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/SurfaceBandSlider
+@onready var lod_label: Label = $DebugDisplay/DebugContainer/SliderGrid/LodLabel
+@onready var lod_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/LodSpinner
 @onready var world_size_x_label: Label = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeXLabel
-@onready var world_size_x_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeXSlider
+@onready var world_size_x_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeXSpinner
 @onready var world_size_y_label: Label = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeYLabel
-@onready var world_size_y_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeYSlider
+@onready var world_size_y_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeYSpinner
 @onready var world_size_z_label: Label = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeZLabel
-@onready var world_size_z_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeZSlider
+@onready var world_size_z_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeZSpinner
 @onready var terrain_height_label: Label = $DebugDisplay/DebugContainer/SliderGrid/TerrainHeightLabel
 @onready var terrain_height_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/TerrainHeightSpinner
 @onready var terrain_amplitude_label: Label = $DebugDisplay/DebugContainer/SliderGrid/TerrainAmplitudeLabel
@@ -122,7 +126,7 @@ func create_debug_ui():
 		# Chunk size slider
 		update_label(chunk_size_label, "Chunk Size: ", voxel_generator.chunk_size)
 		chunk_size_slider.min_value = 8
-		chunk_size_slider.max_value = 64
+		chunk_size_slider.max_value = 16
 		chunk_size_slider.step = 8
 		chunk_size_slider.value = voxel_generator.chunk_size
 		chunk_size_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -133,50 +137,74 @@ func create_debug_ui():
 
 		# Resolution slider
 		update_label(resolution_label, "Resolution: ", voxel_generator.resolution)
-		resolution_slider.min_value = 1
-		resolution_slider.max_value = 10
-		resolution_slider.step = 1
-		resolution_slider.value = voxel_generator.resolution
-		resolution_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		resolution_slider.value_changed.connect(func(value):
+		resolution_spinner.min_value = 1
+		resolution_spinner.max_value = 10
+		resolution_spinner.step = 1
+		resolution_spinner.value = voxel_generator.resolution
+		resolution_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		resolution_spinner.value_changed.connect(func(value):
 			voxel_generator.resolution = int(value)
 			update_label(resolution_label, "Resolution: ", int(value))
 		)
 
-		# World Size X slider
+		# Surface Band slider
+		update_label(surface_band_label, "Surface Band: ", voxel_generator.surface_band)
+		surface_band_slider.min_value = 1.0
+		surface_band_slider.max_value = 20.0
+		surface_band_slider.step = 0.5
+		surface_band_slider.value = voxel_generator.surface_band
+		surface_band_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		surface_band_slider.value_changed.connect(func(value):
+			voxel_generator.surface_band = value
+			update_label(surface_band_label, "Surface Band: ", value)
+		)
+		
+		# LOD Spinner
+		update_label(lod_label, "LOD: ", voxel_generator.lod_level)
+		lod_spinner.min_value = 1
+		lod_spinner.max_value = 7
+		lod_spinner.step = 1
+		lod_spinner.value = voxel_generator.lod_level
+		lod_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lod_spinner.value_changed.connect(func(value):
+			voxel_generator.lod_level = int(value)
+			update_label(lod_label, "LOD: ", int(value))
+		)
+		
+		# World Size X spinner
 		update_label(world_size_x_label, "World X: ", voxel_generator.world_size.x)
-		world_size_x_slider.min_value = 1
-		world_size_x_slider.max_value = 100
-		world_size_x_slider.step = 1
-		world_size_x_slider.value = voxel_generator.world_size.x
-		world_size_x_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		world_size_x_slider.value_changed.connect(func(value):
+		world_size_x_spinner.min_value = 1
+		world_size_x_spinner.max_value = 100
+		world_size_x_spinner.step = 1
+		world_size_x_spinner.value = voxel_generator.world_size.x
+		world_size_x_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		world_size_x_spinner.value_changed.connect(func(value):
 			var ws = voxel_generator.world_size
 			voxel_generator.world_size = Vector3i(int(value), ws.y, ws.z)
 			update_label(world_size_x_label, "World X: ", int(value))
 		)
 
-		# World Size Y slider
+		# World Size Y spinner
 		update_label(world_size_y_label, "World Y: ", voxel_generator.world_size.y)
-		world_size_y_slider.min_value = 1
-		world_size_y_slider.max_value = 100
-		world_size_y_slider.step = 1
-		world_size_y_slider.value = voxel_generator.world_size.y
-		world_size_y_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		world_size_y_slider.value_changed.connect(func(value):
+		world_size_y_spinner.min_value = 1
+		world_size_y_spinner.max_value = 100
+		world_size_y_spinner.step = 1
+		world_size_y_spinner.value = voxel_generator.world_size.y
+		world_size_y_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		world_size_y_spinner.value_changed.connect(func(value):
 			var ws = voxel_generator.world_size
 			voxel_generator.world_size = Vector3i(ws.x, int(value), ws.z)
 			update_label(world_size_y_label, "World Y: ", int(value))
 		)
 
-		# World Size Z slider
+		# World Size Z spinner
 		update_label(world_size_z_label, "World Z: ", voxel_generator.world_size.z)
-		world_size_z_slider.min_value = 1
-		world_size_z_slider.max_value = 100
-		world_size_z_slider.step = 1
-		world_size_z_slider.value = voxel_generator.world_size.z
-		world_size_z_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		world_size_z_slider.value_changed.connect(func(value):
+		world_size_z_spinner.min_value = 1
+		world_size_z_spinner.max_value = 100
+		world_size_z_spinner.step = 1
+		world_size_z_spinner.value = voxel_generator.world_size.z
+		world_size_z_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		world_size_z_spinner.value_changed.connect(func(value):
 			var ws = voxel_generator.world_size
 			voxel_generator.world_size = Vector3i(ws.x, ws.y, int(value))
 			update_label(world_size_z_label, "World Z: ", int(value))
