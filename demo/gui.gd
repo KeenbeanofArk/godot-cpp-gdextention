@@ -1,7 +1,7 @@
 extends CanvasLayer
 class_name gui
 
-@onready var fps_counter: Label = $UI/FPS/FpsCounter
+@onready var fps_counter: Label = $FPSControl/FPS/FpsCounter
 @onready var debug_display: Control = $DebugDisplay
 @onready var debug_container: VBoxContainer = $DebugDisplay/DebugContainer
 @onready var title: Label = $DebugDisplay/DebugContainer/Title
@@ -57,6 +57,7 @@ func _ready() -> void:
 	
 func _process(_delta: float) -> void:
 	# Update FPS counter
+	fps_counter.add_theme_font_size_override("font_size", 30)
 	fps_counter.text = "FPS: %d" % [Engine.get_frames_per_second()]
 
 func update_label(label: Label, prefix: String, value) -> void:
@@ -64,9 +65,9 @@ func update_label(label: Label, prefix: String, value) -> void:
 
 func create_debug_ui():
 	# Debug Container
-	debug_container.anchor_left = 1.0
-	debug_container.anchor_right = 1.0
-	debug_container.size = Vector2(300, 400)
+	#debug_container.anchor_left = 1.0
+	#debug_container.anchor_right = 1.0
+	#debug_container.size = Vector2(300, 400)
 	
 	# Debug Title
 	title.text = "VoxelGenerator Debug"

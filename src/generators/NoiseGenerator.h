@@ -32,59 +32,60 @@
 #define NOISE_GENERATOR_H
 
 // Godot includes
-#include <godot_cpp/godot.hpp>
-#include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/noise.hpp>
+#include <godot_cpp/classes/resource.hpp>
+#include <godot_cpp/godot.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
 using namespace godot;
 
-namespace voxel_engine
-{
+namespace voxel_engine {
 
-    // NoiseGenerator class for generating terrain height and density values
-    class NoiseGenerator : public Resource
-    {
-        GDCLASS(NoiseGenerator, Resource);
+// NoiseGenerator class for generating terrain height and density values
+class NoiseGenerator : public Resource {
+	GDCLASS(NoiseGenerator, Resource);
 
-    protected:
-        static void _bind_methods();
+protected:
+	static void _bind_methods();
 
-    public:
-        NoiseGenerator();
-        ~NoiseGenerator();
+public:
+	NoiseGenerator();
+	~NoiseGenerator();
 
-        // Noise generation methods
-        float get_noise_3d(float x, float y, float z) const;
-        float get_noise_2d(float x, float z) const;
+	// Noise generation methods
+	float get_noise_3d(float x, float y, float z) const;
+	float get_noise_2d(float x, float z) const;
 
-        // Configuration methods
-        void set_seed(int p_seed);
-        int get_seed() const;
+	// Configuration methods
+	void set_seed(int p_seed);
+	int get_seed() const;
 
-        void set_noise(Ref<Noise> p_noise);
-        Ref<Noise> get_noise() const;
+	void set_noise(Ref<Noise> p_noise);
+	Ref<Noise> get_noise() const;
 
-        void set_octaves(int p_octaves);
-        int get_octaves() const;
+	void set_octaves(int p_octaves);
+	int get_octaves() const;
 
-        void set_period(float p_period);
-        float get_period() const;
+	void set_period(float p_period);
+	float get_period() const;
 
-        void set_persistence(float p_persistence);
-        float get_persistence() const;
+	void set_persistence(float p_persistence);
+	float get_persistence() const;
 
-        void set_lacunarity(float p_lacunarity);
-        float get_lacunarity() const;
+	void set_lacunarity(float p_lacunarity);
+	float get_lacunarity() const;
 
-    private:
-        int seed;
-        Ref<Noise> noise;
-        int octaves;
-        float period;
-        float persistence;
-        float lacunarity;
-    };
+private:
+	int seed;
+	Ref<Noise> noise;
+	int octaves;
+	float period;
+	float persistence;
+	float lacunarity;
+
+	// Helper to lazily initialize noise
+	void ensure_noise_initialized();
+};
 
 } // namespace voxel_engine
 

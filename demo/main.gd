@@ -3,7 +3,7 @@ extends Node3D
 @onready var voxel_generator: VoxelGenerator = $Terrain/VoxelGenerator
 @onready var chunk: Chunk = $Terrain/Chunk
 @onready var terrain: Node3D = $Terrain
-@onready var gui: gui = $GUI
+@onready var debug_gui: gui = $DebugGUI
 
 func _ready():
 	# Debug Settings
@@ -33,15 +33,13 @@ func _ready():
 	# Print initial state
 	voxel_generator.debug_print_state()
 	
-	var det_noise = NoiseGenerator.new()
-	det_noise.seed = 12345
-	det_noise.octaves = 4
-	det_noise.period = 50.0
-	det_noise.persistence = 0.5
-	det_noise.lacunarity = 2.0
-	
-	voxel_generator.set_terrain_noise(det_noise)
-	voxel_generator.set_detail_noise(det_noise)
+	# Set Detail Noise
+	#voxel_generator.detail_noise.noise = FastNoiseLite.new()
+	voxel_generator.detail_noise.seed = 1241
+	voxel_generator.detail_noise.octaves = 3
+	voxel_generator.detail_noise.period = 10.0
+	voxel_generator.detail_noise.persistence = 0.6
+	voxel_generator.detail_noise.lacunarity = 2.5
 	
 	## Start the generator
 	voxel_generator.generate()
@@ -52,7 +50,7 @@ func _ready():
 	chunk.generate()
 	
 	# Initialize debug UI
-	gui.create_debug_ui()
+	debug_gui.create_debug_ui()
 
 func _init() -> void:
 	pass

@@ -64,6 +64,8 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_surface_band"), &VoxelGenerator::get_surface_band);
 	ClassDB::bind_method(D_METHOD("set_lod_level", "value"), &VoxelGenerator::set_lod_level);
 	ClassDB::bind_method(D_METHOD("get_lod_level"), &VoxelGenerator::get_lod_level);
+	ClassDB::bind_method(D_METHOD("set_heightmap_vertex_limit", "value"), &VoxelGenerator::set_heightmap_vertex_limit);
+	ClassDB::bind_method(D_METHOD("get_heightmap_vertex_limit"), &VoxelGenerator::get_heightmap_vertex_limit);
 
 	// Terrain noise bindings
 	ClassDB::bind_method(D_METHOD("set_terrain_noise", "noise"), &VoxelGenerator::set_terrain_noise);
@@ -134,6 +136,7 @@ void VoxelGenerator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "generation_mode", PROPERTY_HINT_ENUM, "Voxels First,Heightmap First"), "set_generation_mode", "get_generation_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "surface_band", PROPERTY_HINT_RANGE, "1.0,20.0,0.5"), "set_surface_band", "get_surface_band");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "lod_level", PROPERTY_HINT_RANGE, "0,7,1"), "set_lod_level", "get_lod_level");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "heightmap_vertex_limit", PROPERTY_HINT_RANGE, "1000000,268435456,1000000"), "set_heightmap_vertex_limit", "get_heightmap_vertex_limit");
 
 	ADD_GROUP("Terrain Settings", "terrain_");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "terrain_noise", PROPERTY_HINT_RESOURCE_TYPE, "NoiseGenerator"), "set_terrain_noise", "get_terrain_noise");
@@ -344,6 +347,15 @@ int VoxelGenerator::get_lod_level() const {
 	return lod_level;
 }
 
+void VoxelGenerator::set_heightmap_vertex_limit(int value) {
+	heightmap_vertex_limit = CLAMP(value, 1000000, 268435456); // 1M to 256M
+	log_message(String("Heightmap vertex limit set to: {0}").format(Array::make(heightmap_vertex_limit)), 2);
+}
+
+int VoxelGenerator::get_heightmap_vertex_limit() const {
+	return heightmap_vertex_limit;
+}
+
 int VoxelGenerator::get_effective_resolution() const {
 	// Reduce resolution by powers of 2 based on LOD level
 	// LOD 0 = full resolution, LOD 1 = half, LOD 2 = quarter, etc.
@@ -460,19 +472,21 @@ void VoxelGenerator::set_resolution(int value) {
 	log_message(String("Estimated marching cubes samples: {0} ({1}x base)").format(Array::make(total_samples, multiplier)), 1);
 
 	// Performance warning and auto vertex_limit for high resolutions
-	if (resolution >= 4) {
+	// Higher threshold for heightmap mode (processes fewer voxels)
+	int auto_enable_threshold = (generation_mode == HEIGHTMAP_FIRST) ? 200 : 100;
+	if (resolution >= auto_enable_threshold) {
 		UtilityFunctions::push_warning(String("[VoxelGenerator] High resolution ({0}) may cause performance issues. "
 											  "Resolution^3 = {1}x more marching cubes samples. Vertex limit auto-enabled.")
 						.format(Array::make(resolution, multiplier)));
 		if (!vertex_limit) {
 			vertex_limit = true;
-			log_message("Vertex limit auto-enabled due to high resolution", 1);
+			log_message(String("Vertex limit auto-enabled due to high resolution (threshold: {0})").format(Array::make(auto_enable_threshold)), 1);
 		}
 	} else {
 		// Auto-disable vertex limit when resolution drops below threshold
 		if (vertex_limit) {
 			vertex_limit = false;
-			log_message("Vertex limit auto-disabled (resolution < 4)", 1);
+			log_message(String("Vertex limit auto-disabled (resolution < {0})").format(Array::make(auto_enable_threshold)), 1);
 		}
 	}
 
@@ -1051,7 +1065,7 @@ void VoxelGenerator::generate_heightmap_first(Ref<ImmediateMesh> mesh_centers, R
 			for (int iy = iy_min; iy <= iy_max; ++iy) {
 				processed_voxels++;
 
-				if (vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
+				if (vertex_count >= heightmap_vertex_limit || vertex_limit) {
 					break;
 				}
 
@@ -1123,7 +1137,7 @@ void VoxelGenerator::generate_heightmap_first(Ref<ImmediateMesh> mesh_centers, R
 					mesh_triangles->surface_set_color(color);
 					mesh_triangles->surface_set_normal(normal);
 
-					if (vertex_count < Constants::MAX_VERTICES && !vertex_limit) {
+					if (vertex_count < heightmap_vertex_limit && !vertex_limit) {
 						mesh_triangles->surface_add_vertex(vertex1);
 						mesh_triangles->surface_add_vertex(vertex2);
 						mesh_triangles->surface_add_vertex(vertex3);

@@ -76,6 +76,7 @@ private:
 	GenerationMode generation_mode = VOXELS_FIRST;
 	float surface_band = 4.0f; // Vertical band around surface for heightmap mode
 	int lod_level = 0; // Global LOD level (0 = highest detail, 7 = lowest)
+	int heightmap_vertex_limit = voxel_engine::MAX_VERTICES_HEIGHTMAP; // Vertex limit for heightmap mode (8x standard)
 
 	// Heightmap cache for HEIGHTMAP_FIRST mode
 	std::vector<float> heightmap_cache;
@@ -195,6 +196,9 @@ public:
 
 	void set_lod_level(int value);
 	int get_lod_level() const;
+
+	void set_heightmap_vertex_limit(int value);
+	int get_heightmap_vertex_limit() const;
 
 	void reset();
 

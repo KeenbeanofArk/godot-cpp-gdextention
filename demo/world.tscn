@@ -32,18 +32,12 @@ noise = SubResource("FastNoiseLite_tlwt5")
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_036b0"]
 noise_type = 3
 seed = 1241
-frequency = 0.1
-fractal_octaves = 3
-fractal_lacunarity = 2.5
-fractal_gain = 0.6
+frequency = 0.02
+fractal_octaves = 4
 
 [sub_resource type="NoiseGenerator" id="NoiseGenerator_dwbse"]
 seed = 1241
 noise = SubResource("FastNoiseLite_036b0")
-octaves = 3
-period = 10.0
-persistence = 0.6
-lacunarity = 2.5
 
 [node name="World" type="Node3D"]
 script = ExtResource("1_fj7yv")
@@ -75,4 +69,4 @@ visible = false
 transform = Transform3D(-0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, -0.70710677, -40, 0, -40)
 fov = 26.8
 
-[node name="GUI" parent="." instance=ExtResource("3_tlwt5")]
+[node name="DebugGUI" parent="." instance=ExtResource("3_tlwt5")]
