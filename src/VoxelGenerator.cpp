@@ -31,9 +31,13 @@
 #include "VoxelGenerator.h"
 #include "Constants.h"
 #include "core/voxel_constants.h"
+#include "generators/BiomeGenerator.h"
+#include "generators/FeatureGenerator.h"
 #include "generators/NoiseGenerator.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <sstream>
 #include <vector>
 
@@ -51,6 +55,15 @@ namespace voxel_engine {
 
 void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("generate"), &VoxelGenerator::generate);
+	ClassDB::bind_method(D_METHOD("generate_async"), &VoxelGenerator::generate_async);
+	ClassDB::bind_method(D_METHOD("cancel_generation"), &VoxelGenerator::cancel_generation);
+	ClassDB::bind_method(D_METHOD("is_generating"), &VoxelGenerator::is_generating);
+
+	// Async generation property bindings
+	ClassDB::bind_method(D_METHOD("set_max_chunks_per_frame", "value"), &VoxelGenerator::set_max_chunks_per_frame);
+	ClassDB::bind_method(D_METHOD("get_max_chunks_per_frame"), &VoxelGenerator::get_max_chunks_per_frame);
+	ClassDB::bind_method(D_METHOD("set_signal_every_n_chunks", "value"), &VoxelGenerator::set_signal_every_n_chunks);
+	ClassDB::bind_method(D_METHOD("get_signal_every_n_chunks"), &VoxelGenerator::get_signal_every_n_chunks);
 
 	ClassDB::bind_method(D_METHOD("set_world_size", "value"), &VoxelGenerator::set_world_size);
 	ClassDB::bind_method(D_METHOD("get_world_size"), &VoxelGenerator::get_world_size);
@@ -67,6 +80,22 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_heightmap_vertex_limit", "value"), &VoxelGenerator::set_heightmap_vertex_limit);
 	ClassDB::bind_method(D_METHOD("get_heightmap_vertex_limit"), &VoxelGenerator::get_heightmap_vertex_limit);
 
+	// Distance-based LOD bindings
+	ClassDB::bind_method(D_METHOD("set_enable_distance_lod", "value"), &VoxelGenerator::set_enable_distance_lod);
+	ClassDB::bind_method(D_METHOD("get_enable_distance_lod"), &VoxelGenerator::get_enable_distance_lod);
+	ClassDB::bind_method(D_METHOD("set_lod_reference_position", "value"), &VoxelGenerator::set_lod_reference_position);
+	ClassDB::bind_method(D_METHOD("get_lod_reference_position"), &VoxelGenerator::get_lod_reference_position);
+	ClassDB::bind_method(D_METHOD("set_lod_distances", "value"), &VoxelGenerator::set_lod_distances);
+	ClassDB::bind_method(D_METHOD("get_lod_distances"), &VoxelGenerator::get_lod_distances);
+	ClassDB::bind_method(D_METHOD("reset_lod_distances_to_default"), &VoxelGenerator::reset_lod_distances_to_default);
+	ClassDB::bind_method(D_METHOD("calculate_chunk_lod", "chunk_index"), &VoxelGenerator::calculate_chunk_lod);
+	ClassDB::bind_method(D_METHOD("get_chunk_center_world_position", "chunk_index"), &VoxelGenerator::get_chunk_center_world_position);
+	ClassDB::bind_method(D_METHOD("update_chunks_lod"), &VoxelGenerator::update_chunks_lod);
+	ClassDB::bind_method(D_METHOD("set_show_lod_colors", "value"), &VoxelGenerator::set_show_lod_colors);
+	ClassDB::bind_method(D_METHOD("get_show_lod_colors"), &VoxelGenerator::get_show_lod_colors);
+	ClassDB::bind_method(D_METHOD("set_lod_distance_multiplier", "value"), &VoxelGenerator::set_lod_distance_multiplier);
+	ClassDB::bind_method(D_METHOD("get_lod_distance_multiplier"), &VoxelGenerator::get_lod_distance_multiplier);
+
 	// Terrain noise bindings
 	ClassDB::bind_method(D_METHOD("set_terrain_noise", "noise"), &VoxelGenerator::set_terrain_noise);
 	ClassDB::bind_method(D_METHOD("get_terrain_noise"), &VoxelGenerator::get_terrain_noise);
@@ -78,6 +107,12 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_terrain_height"), &VoxelGenerator::get_terrain_height);
 	ClassDB::bind_method(D_METHOD("set_terrain_amplitude", "value"), &VoxelGenerator::set_terrain_amplitude);
 	ClassDB::bind_method(D_METHOD("get_terrain_amplitude"), &VoxelGenerator::get_terrain_amplitude);
+
+	// Biome and Feature generator bindings
+	ClassDB::bind_method(D_METHOD("set_biome_generator", "generator"), &VoxelGenerator::set_biome_generator);
+	ClassDB::bind_method(D_METHOD("get_biome_generator"), &VoxelGenerator::get_biome_generator);
+	ClassDB::bind_method(D_METHOD("set_feature_generator", "generator"), &VoxelGenerator::set_feature_generator);
+	ClassDB::bind_method(D_METHOD("get_feature_generator"), &VoxelGenerator::get_feature_generator);
 
 	ClassDB::bind_method(D_METHOD("set_resolution", "value"), &VoxelGenerator::set_resolution);
 	ClassDB::bind_method(D_METHOD("get_resolution"), &VoxelGenerator::get_resolution);
@@ -121,7 +156,21 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("regenerate_dirty_chunks"), &VoxelGenerator::regenerate_dirty_chunks);
 	ClassDB::bind_method(D_METHOD("invalidate_density_region", "min_voxel", "max_voxel"), &VoxelGenerator::invalidate_density_region);
 
+	// Bind terraforming methods
+	ClassDB::bind_method(D_METHOD("modify_terrain", "center", "radius", "delta"), &VoxelGenerator::modify_terrain);
+	ClassDB::bind_method(D_METHOD("dig_sphere", "center", "radius", "strength"), &VoxelGenerator::dig_sphere, DEFVAL(1.0f));
+	ClassDB::bind_method(D_METHOD("build_sphere", "center", "radius", "strength"), &VoxelGenerator::build_sphere, DEFVAL(1.0f));
+	ClassDB::bind_method(D_METHOD("clear_terrain_edits"), &VoxelGenerator::clear_terrain_edits);
+	ClassDB::bind_method(D_METHOD("get_terrain_edit_count"), &VoxelGenerator::get_terrain_edit_count);
+	ClassDB::bind_method(D_METHOD("get_terrain_edits_data"), &VoxelGenerator::get_terrain_edits_data);
+	ClassDB::bind_method(D_METHOD("set_terrain_edits_data", "data"), &VoxelGenerator::set_terrain_edits_data);
+
 	ClassDB::bind_method(D_METHOD("is_object_binding_set_by_parent_constructor"), &VoxelGenerator::is_object_binding_set_by_parent_constructor);
+
+	// Async generation signals
+	ADD_SIGNAL(MethodInfo("chunk_ready", PropertyInfo(Variant::INT, "chunk_index"), PropertyInfo(Variant::VECTOR3I, "chunk_coord")));
+	ADD_SIGNAL(MethodInfo("generation_progress", PropertyInfo(Variant::INT, "completed"), PropertyInfo(Variant::INT, "total")));
+	ADD_SIGNAL(MethodInfo("generation_complete"));
 
 	ADD_GROUP("voxel_generator", "voxel_generator_");
 	ADD_SUBGROUP("voxel_generator_", "World Settings");
@@ -138,12 +187,23 @@ void VoxelGenerator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "lod_level", PROPERTY_HINT_RANGE, "0,7,1"), "set_lod_level", "get_lod_level");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "heightmap_vertex_limit", PROPERTY_HINT_RANGE, "1000000,268435456,1000000"), "set_heightmap_vertex_limit", "get_heightmap_vertex_limit");
 
+	ADD_GROUP("Distance LOD", "lod_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "enable_distance_lod"), "set_enable_distance_lod", "get_enable_distance_lod");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "lod_reference_position"), "set_lod_reference_position", "get_lod_reference_position");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT64_ARRAY, "lod_distances"), "set_lod_distances", "get_lod_distances");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lod_distance_multiplier", PROPERTY_HINT_RANGE, "1.0,10.0,0.1"), "set_lod_distance_multiplier", "get_lod_distance_multiplier");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "show_lod_colors"), "set_show_lod_colors", "get_show_lod_colors");
+
 	ADD_GROUP("Terrain Settings", "terrain_");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "terrain_noise", PROPERTY_HINT_RESOURCE_TYPE, "NoiseGenerator"), "set_terrain_noise", "get_terrain_noise");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "detail_noise", PROPERTY_HINT_RESOURCE_TYPE, "NoiseGenerator"), "set_detail_noise", "get_detail_noise");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "terrain_height", PROPERTY_HINT_RANGE, "-100,100,0.5"), "set_terrain_height", "get_terrain_height");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "terrain_amplitude", PROPERTY_HINT_RANGE, "0,100,0.5"), "set_terrain_amplitude", "get_terrain_amplitude");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rock_influence", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_rock_influence", "get_rock_influence");
+
+	ADD_GROUP("Generators", "");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "biome_generator", PROPERTY_HINT_RESOURCE_TYPE, "BiomeGenerator"), "set_biome_generator", "get_biome_generator");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "feature_generator", PROPERTY_HINT_RESOURCE_TYPE, "FeatureGenerator"), "set_feature_generator", "get_feature_generator");
 
 	ADD_GROUP("Display Settings", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "randomizer"), "set_randomizer", "get_randomizer");
@@ -156,6 +216,10 @@ void VoxelGenerator::_bind_methods() {
 	ADD_GROUP("Debug Settings", "debug_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_mode"), "set_debug_mode", "get_debug_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "debug_verbosity", PROPERTY_HINT_RANGE, "0,3,1"), "set_debug_verbosity", "get_debug_verbosity");
+
+	ADD_GROUP("Async Generation", "async_");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_chunks_per_frame", PROPERTY_HINT_RANGE, "1,32,1"), "set_max_chunks_per_frame", "get_max_chunks_per_frame");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "signal_every_n_chunks", PROPERTY_HINT_RANGE, "1,64,1"), "set_signal_every_n_chunks", "get_signal_every_n_chunks");
 }
 
 bool VoxelGenerator::has_object_instance_binding() const {
@@ -180,11 +244,31 @@ VoxelGenerator::VoxelGenerator() :
 	terrain_height = 4.0f;
 	terrain_amplitude = 8.0f;
 
+	// Distance-based LOD defaults
+	enable_distance_lod = false;
+	lod_reference_position = Vector3(0, 0, 0);
+	lod_distances_custom = false;
+	// Initialize default LOD distances based on chunk_size
+	lod_distances.resize(8);
+	for (int i = 0; i < 8; i++) {
+		lod_distances[i] = static_cast<double>(chunk_size) * static_cast<double>(1 << (i + 1));
+	}
+
 	// Note: terrain_noise and detail_noise are created lazily in generate()
 	// to avoid Godot's "Instantiated X used as default value" warning
 }
 
 VoxelGenerator::~VoxelGenerator() {
+	// Cancel any running async generation and wait for completion
+	if (async_task_group != 0) {
+		cancel_requested.store(true);
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(async_task_group);
+		async_task_group = 0;
+	}
+
+	// Clear pending mesh queue
+	clear_pending_meshes();
+
 	// Clean up chunks if they exist
 	for (Chunk *chunk : chunks) {
 		if (chunk && is_instance_valid(chunk)) {
@@ -205,9 +289,19 @@ void VoxelGenerator::calculate_world_size() {
 void VoxelGenerator::recalculate_voxel_scale() {
 	// Voxel size is divided by resolution to create finer marching cubes samples
 	// Higher resolution = smaller voxels = more triangles within same physical space
-	float scale = 1.0f / static_cast<float>(std::max(1, resolution));
-	voxel_size = Vector3(scale, scale, scale);
-	log_message(String("Voxel size set to: {0} (resolution={1})").format(Array::make(voxel_size, resolution)), 2);
+
+	// Base voxel size from raw resolution setting
+	float base_scale = 1.0f / static_cast<float>(std::max(1, resolution));
+	base_voxel_size = Vector3(base_scale, base_scale, base_scale);
+
+	// Effective voxel size accounts for LOD level
+	int eff_resolution = get_effective_resolution();
+	float eff_scale = 1.0f / static_cast<float>(std::max(1, eff_resolution));
+	effective_voxel_size = Vector3(eff_scale, eff_scale, eff_scale);
+
+	log_message(String("Voxel sizes set - base: {0} (resolution={1}), effective: {2} (eff_resolution={3})")
+						.format(Array::make(base_voxel_size, resolution, effective_voxel_size, eff_resolution)),
+			2);
 }
 
 bool VoxelGenerator::is_object_binding_set_by_parent_constructor() const {
@@ -224,7 +318,7 @@ void VoxelGenerator::_notification(int p_what) {
 		case NOTIFICATION_READY: {
 			// Initialize Godot-specific settings now that object is fully ready
 			set_name("VoxelGenerator");
-			set_process(false);
+			set_process(false); // Will be enabled during async generation
 			set_physics_process(false);
 
 			remove_children();
@@ -239,7 +333,20 @@ void VoxelGenerator::_notification(int p_what) {
 			}
 			break;
 		}
+		case NOTIFICATION_PROCESS: {
+			// Handle async mesh streaming in _process
+			_process(get_process_delta_time());
+			break;
+		}
 		case NOTIFICATION_PREDELETE:
+			// Cancel any running async generation
+			if (async_task_group != 0) {
+				cancel_requested.store(true);
+				WorkerThreadPool::get_singleton()->wait_for_group_task_completion(async_task_group);
+				async_task_group = 0;
+			}
+			clear_pending_meshes();
+
 			// Make sure to clean up chunks when the generator is deleted
 			for (Chunk *chunk : chunks) {
 				if (chunk && is_instance_valid(chunk)) {
@@ -287,6 +394,12 @@ void VoxelGenerator::set_chunk_size(int value) {
 		if (chunk_size != value) {
 			chunk_size = value;
 			log_message(String("Chunk size set to: {0}").format(Array::make(chunk_size)), 2);
+
+			// Update default LOD distances if not using custom values
+			if (!lod_distances_custom) {
+				initialize_default_lod_distances();
+			}
+
 			// If auto_generate is enabled, destroy and recreate chunks with new size
 			if (auto_generate) {
 				create_chunks();
@@ -338,6 +451,14 @@ void VoxelGenerator::set_lod_level(int value) {
 	if (lod_level != new_lod) {
 		lod_level = new_lod;
 		log_message(String("LOD level set to: {0} (effective resolution: {1})").format(Array::make(lod_level, get_effective_resolution())), 2);
+
+		// Recalculate voxel scale since LOD affects effective resolution
+		recalculate_voxel_scale();
+
+		// Invalidate caches since effective resolution changed
+		clear_density_cache();
+		clear_heightmap_cache();
+
 		if (auto_generate)
 			generate();
 	}
@@ -365,6 +486,225 @@ int VoxelGenerator::get_effective_resolution() const {
 float VoxelGenerator::get_effective_surface_band() const {
 	// Widen surface band at higher LOD levels to prevent gaps
 	return surface_band * (1.0f + lod_level * 0.5f);
+}
+
+// ============================================================================
+// Distance-Based LOD Implementation
+// ============================================================================
+
+void VoxelGenerator::initialize_default_lod_distances() {
+	// Set default LOD distances based on chunk_size and multiplier
+	// Formula: chunk_size * multiplier^(lod+1) for each LOD level 0-7
+	lod_distances.resize(8);
+	for (int i = 0; i < 8; i++) {
+		lod_distances[i] = static_cast<double>(chunk_size) * std::pow(static_cast<double>(lod_distance_multiplier), i + 1);
+	}
+	log_message(String("Initialized LOD distances (chunk_size={0}, multiplier={1}): [{2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}]")
+						.format(Array::make(chunk_size, lod_distance_multiplier,
+								lod_distances[0], lod_distances[1], lod_distances[2], lod_distances[3],
+								lod_distances[4], lod_distances[5], lod_distances[6], lod_distances[7])),
+			2);
+}
+
+int VoxelGenerator::get_effective_resolution_for_lod(int lod) const {
+	// Reduce resolution by powers of 2 based on LOD level
+	// LOD 0 = full resolution, LOD 1 = half, LOD 2 = quarter, etc.
+	return std::max(1, resolution >> lod);
+}
+
+void VoxelGenerator::set_enable_distance_lod(bool value) {
+	if (enable_distance_lod != value) {
+		enable_distance_lod = value;
+		log_message(String("Distance-based LOD {0}").format(Array::make(enable_distance_lod ? "enabled" : "disabled")), 2);
+		if (enable_distance_lod && lod_distances.size() == 0) {
+			initialize_default_lod_distances();
+		}
+	}
+}
+
+bool VoxelGenerator::get_enable_distance_lod() const {
+	return enable_distance_lod;
+}
+
+void VoxelGenerator::set_lod_reference_position(const Vector3 &value) {
+	lod_reference_position = value;
+	log_message(String("LOD reference position set to: ({0}, {1}, {2})")
+						.format(Array::make(value.x, value.y, value.z)),
+			3);
+}
+
+Vector3 VoxelGenerator::get_lod_reference_position() const {
+	return lod_reference_position;
+}
+
+void VoxelGenerator::set_lod_distances(const PackedFloat64Array &value) {
+	if (value.size() >= 8) {
+		lod_distances = value;
+		lod_distances_custom = true;
+		log_message(String("Custom LOD distances set: [{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}]")
+							.format(Array::make(
+									lod_distances[0], lod_distances[1], lod_distances[2], lod_distances[3],
+									lod_distances[4], lod_distances[5], lod_distances[6], lod_distances[7])),
+				2);
+	} else {
+		log_message("LOD distances array must have at least 8 values", 1);
+	}
+}
+
+PackedFloat64Array VoxelGenerator::get_lod_distances() const {
+	return lod_distances;
+}
+
+void VoxelGenerator::reset_lod_distances_to_default() {
+	lod_distances_custom = false;
+	initialize_default_lod_distances();
+}
+
+Vector3 VoxelGenerator::get_chunk_center_world_position(int chunk_index) const {
+	Vector3i chunk_coord = index_to_chunk_coord(chunk_index);
+	if (chunk_coord.x < 0) {
+		return Vector3(0, 0, 0); // Invalid index
+	}
+
+	// Calculate world extent
+	float world_extent_x = static_cast<float>(world_size.x * chunk_size);
+	float world_extent_y = static_cast<float>(world_size.y * chunk_size);
+	float world_extent_z = static_cast<float>(world_size.z * chunk_size);
+
+	// Calculate chunk center in world space
+	// Chunks are centered around origin, so we need to offset
+	Vector3 center;
+	center.x = (chunk_coord.x + 0.5f) * chunk_size - world_extent_x * 0.5f;
+	center.y = (chunk_coord.y + 0.5f) * chunk_size - world_extent_y * 0.5f;
+	center.z = (chunk_coord.z + 0.5f) * chunk_size - world_extent_z * 0.5f;
+
+	return center;
+}
+
+int VoxelGenerator::calculate_chunk_lod(int chunk_index) const {
+	if (!enable_distance_lod || lod_distances.size() < 8) {
+		return lod_level; // Fall back to global LOD
+	}
+
+	Vector3 chunk_center = get_chunk_center_world_position(chunk_index);
+	float distance = chunk_center.distance_to(lod_reference_position);
+
+	// Find appropriate LOD level based on distance thresholds
+	for (int lod = 0; lod < 7; lod++) {
+		if (distance < lod_distances[lod]) {
+			return lod;
+		}
+	}
+	return 7; // Maximum LOD for very distant chunks
+}
+
+int VoxelGenerator::update_chunks_lod() {
+	if (!enable_distance_lod) {
+		log_message("Distance-based LOD is disabled. Enable it first with enable_distance_lod = true", 1);
+		return 0;
+	}
+
+	int chunks_needing_regen = 0;
+	std::lock_guard<std::mutex> lock(chunks_mutex);
+
+	for (int i = 0; i < static_cast<int>(chunks.size()); i++) {
+		Chunk *chunk = chunks[i];
+		if (!chunk || !is_instance_valid(chunk)) {
+			continue;
+		}
+
+		int new_lod = calculate_chunk_lod(i);
+		int current_lod = chunk->get_current_lod_level();
+
+		if (new_lod != current_lod) {
+			chunk->set_current_lod_level(new_lod);
+			// Mark as dirty so regenerate_dirty_chunks() will update it
+			if (i < static_cast<int>(chunk_dirty_flags.size())) {
+				chunk_dirty_flags[i] = true;
+			}
+			chunks_needing_regen++;
+			log_message(String("Chunk {0} LOD changed: {1} -> {2}")
+								.format(Array::make(i, current_lod, new_lod)),
+					3);
+		}
+	}
+
+	log_message(String("update_chunks_lod(): {0} chunks need regeneration").format(Array::make(chunks_needing_regen)), 2);
+	return chunks_needing_regen;
+}
+
+void VoxelGenerator::set_lod_distance_multiplier(float value) {
+	float new_multiplier = CLAMP(value, 1.0f, 10.0f);
+	if (lod_distance_multiplier != new_multiplier) {
+		lod_distance_multiplier = new_multiplier;
+		log_message(String("LOD distance multiplier set to: {0}").format(Array::make(lod_distance_multiplier)), 2);
+		// Recalculate default distances if not using custom values
+		if (!lod_distances_custom) {
+			initialize_default_lod_distances();
+		}
+	}
+}
+
+float VoxelGenerator::get_lod_distance_multiplier() const {
+	return lod_distance_multiplier;
+}
+
+void VoxelGenerator::set_show_lod_colors(bool value) {
+	if (show_lod_colors != value) {
+		show_lod_colors = value;
+		log_message(String("LOD color visualization {0}").format(Array::make(show_lod_colors ? "enabled" : "disabled")), 2);
+		// Regenerate to apply color changes
+		if (auto_generate && enable_distance_lod) {
+			mark_all_chunks_dirty();
+			regenerate_dirty_chunks();
+		}
+	}
+}
+
+bool VoxelGenerator::get_show_lod_colors() const {
+	return show_lod_colors;
+}
+
+Color VoxelGenerator::get_lod_color(int lod) const {
+	// Map LOD 0-7 to hue: green (0.33) -> yellow (0.16) -> red (0.0)
+	// LOD 0 = green (high detail), LOD 7 = red (low detail)
+	float hue = 0.33f * (1.0f - static_cast<float>(CLAMP(lod, 0, 7)) / 7.0f);
+	float saturation = 0.8f;
+	float value = 0.9f;
+
+	// HSV to RGB conversion
+	float c = value * saturation;
+	float x = c * (1.0f - std::abs(std::fmod(hue * 6.0f, 2.0f) - 1.0f));
+	float m = value - c;
+
+	float r, g, b;
+	if (hue < 1.0f / 6.0f) {
+		r = c;
+		g = x;
+		b = 0;
+	} else if (hue < 2.0f / 6.0f) {
+		r = x;
+		g = c;
+		b = 0;
+	} else if (hue < 3.0f / 6.0f) {
+		r = 0;
+		g = c;
+		b = x;
+	} else if (hue < 4.0f / 6.0f) {
+		r = 0;
+		g = x;
+		b = c;
+	} else if (hue < 5.0f / 6.0f) {
+		r = x;
+		g = 0;
+		b = c;
+	} else {
+		r = c;
+		g = 0;
+		b = x;
+	}
+
+	return Color(r + m, g + m, b + m);
 }
 
 void VoxelGenerator::set_vertex_limit(bool value) {
@@ -428,6 +768,28 @@ Ref<NoiseGenerator> VoxelGenerator::get_detail_noise() const {
 	return detail_noise;
 }
 
+void VoxelGenerator::set_biome_generator(const Ref<BiomeGenerator> &p_generator) {
+	biome_generator = p_generator;
+	log_message("Biome generator set", 2);
+	if (auto_generate)
+		generate();
+}
+
+Ref<BiomeGenerator> VoxelGenerator::get_biome_generator() const {
+	return biome_generator;
+}
+
+void VoxelGenerator::set_feature_generator(const Ref<FeatureGenerator> &p_generator) {
+	feature_generator = p_generator;
+	log_message("Feature generator set", 2);
+	if (auto_generate)
+		generate();
+}
+
+Ref<FeatureGenerator> VoxelGenerator::get_feature_generator() const {
+	return feature_generator;
+}
+
 void VoxelGenerator::set_rock_influence(float value) {
 	rock_influence = CLAMP(value, 0.0f, 1.0f);
 	log_message(String("Rock influence set to: {0}").format(Array::make(rock_influence)), 2);
@@ -464,6 +826,10 @@ float VoxelGenerator::get_terrain_amplitude() const {
 void VoxelGenerator::set_resolution(int value) {
 	resolution = std::max(1, value);
 	log_message(String("Resolution set to: {0}").format(Array::make(resolution)), 2);
+
+	// Invalidate caches since resolution affects density sampling grid
+	clear_density_cache();
+	clear_heightmap_cache();
 
 	// Calculate and log estimated sample count for performance awareness
 	int base_voxels = std::max(1, world_size.x) * std::max(1, world_size.y) * std::max(1, world_size.z) * chunk_size * chunk_size * chunk_size;
@@ -592,6 +958,9 @@ bool VoxelGenerator::get_show_chunk_grid() const {
 }
 
 void VoxelGenerator::remove_children() {
+	// Clear chunks vector first to prevent stale pointers
+	chunks.clear();
+
 	while (get_child_count() > 0) {
 		Node *child = get_child(0);
 		remove_child(child);
@@ -654,113 +1023,235 @@ void VoxelGenerator::generate() {
 	log_message("Noise generators initialized", 2);
 
 	// Ensure voxel scale is current before generation
+	ensure_vertical_extent_for_biomes();
 	recalculate_voxel_scale();
 
 	// Initialize dirty flags if needed
 	{
 		std::lock_guard<std::mutex> lock(chunks_mutex);
-		int total_chunks = world_size.x * world_size.y * world_size.z;
-		if (chunk_dirty_flags.size() != static_cast<size_t>(total_chunks)) {
-			chunk_dirty_flags.resize(total_chunks, false);
+		int num_chunks = world_size.x * world_size.y * world_size.z;
+		if (chunk_dirty_flags.size() != static_cast<size_t>(num_chunks)) {
+			chunk_dirty_flags.resize(num_chunks, false);
 		}
 	}
 
-	// # Create centers mesh
+	// Create chunk nodes for this generation pass
+	create_chunks();
+
+	// Compute procedural biomes/features before density cache sampling
+	prepare_procedural_features();
+
+	log_message("Starting per-chunk mesh generation", 2);
+
+	// Build density cache before chunk generation
+	if (generation_mode == VOXELS_FIRST) {
+		build_density_cache();
+	} else {
+		build_heightmap_cache();
+		build_density_cache();
+	}
+
+	// Generate mesh for each chunk synchronously
+	int num_chunks = world_size.x * world_size.y * world_size.z;
+	for (int chunk_index = 0; chunk_index < num_chunks; ++chunk_index) {
+		generate_chunk_mesh_sync(chunk_index);
+	}
+
+	log_message(String("Generated {0} chunk meshes").format(Array::make(num_chunks)), 2);
+
+	// Log LOD distribution summary when distance LOD is enabled
+	if (enable_distance_lod && debug_mode) {
+		int lod_counts[8] = { 0 };
+		for (int i = 0; i < num_chunks; ++i) {
+			if (i < static_cast<int>(chunks.size()) && chunks[i] && is_instance_valid(chunks[i])) {
+				int lod = chunks[i]->get_current_lod_level();
+				if (lod >= 0 && lod <= 7) {
+					lod_counts[lod]++;
+				}
+			}
+		}
+		String summary = "LOD Distribution: ";
+		for (int i = 0; i < 8; ++i) {
+			if (lod_counts[i] > 0) {
+				summary += String("L{0}={1} ").format(Array::make(i, lod_counts[i]));
+			}
+		}
+		log_message(summary, 1);
+	}
+
+	// Physical extent for visualizations
+	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+	Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
+
+	// Use effective resolution for voxel grid
+	int eff_resolution = get_effective_resolution();
+	Vector3 eff_voxel_size = Vector3(1.0f, 1.0f, 1.0f) / static_cast<float>(std::max(1, eff_resolution));
+
+	// Centers visualization (debug points) - empty for now
 	Ref<ImmediateMesh> mesh_centers;
 	mesh_centers.instantiate();
-	mesh_centers->surface_begin(Mesh::PRIMITIVE_POINTS);
-
-	// # Create cubes mesh
-	Ref<ImmediateMesh> mesh_cubes;
-	mesh_cubes.instantiate();
-	mesh_cubes->surface_begin(Mesh::PRIMITIVE_LINES);
-
-	// # Create triangles mesh
-	Ref<ImmediateMesh> mesh_triangles;
-	mesh_triangles.instantiate();
-	mesh_triangles->surface_begin(Mesh::PRIMITIVE_TRIANGLES);
-
-	int centers_vertex_count = 0;
-	int cubes_vertex_count = 0;
-	int vertex_count = 0;
-
-	log_message("Meshes created", 2);
-
-	// Dispatch to appropriate generation method based on mode
-	if (generation_mode == VOXELS_FIRST) {
-		// Build full density cache for voxels-first mode
-		build_density_cache();
-		generate_voxels_first(mesh_centers, mesh_cubes, mesh_triangles,
-				centers_vertex_count, cubes_vertex_count, vertex_count);
-	} else {
-		// Build heightmap cache for heightmap-first mode
-		build_heightmap_cache();
-		build_density_cache(); // Still need density cache for marching cubes within surface band
-		generate_heightmap_first(mesh_centers, mesh_cubes, mesh_triangles,
-				centers_vertex_count, cubes_vertex_count, vertex_count);
-	}
-
-	// # End surfaces - only end surfaces that actually have vertices to avoid ImmediateMesh errors
-	if (centers_vertex_count > 0) {
-		mesh_centers->surface_end();
-	}
-	if (cubes_vertex_count > 0) {
-		mesh_cubes->surface_end();
-	}
-	if (vertex_count > 0) {
-		mesh_triangles->surface_end();
-	}
-
-	// # Create centers material
-	Ref<StandardMaterial3D> material_centers;
-	material_centers.instantiate();
-	material_centers->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
-	material_centers->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
-	material_centers->set_point_size(20.0);
-
-	// # Create cubes material
-	Ref<StandardMaterial3D> material_cubes;
-	material_cubes.instantiate();
-	material_cubes->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
-	material_cubes->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
-
-	// # Create triangles material
-	Ref<StandardMaterial3D> material_triangles;
-	material_triangles.instantiate();
-	material_triangles->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
-
-	// Only set materials for surfaces that actually exist to avoid out-of-bounds errors
-	if (centers_vertex_count > 0)
-		mesh_centers->surface_set_material(0, material_centers);
-	if (cubes_vertex_count > 0)
-		mesh_cubes->surface_set_material(0, material_cubes);
-	if (vertex_count > 0)
-		mesh_triangles->surface_set_material(0, material_triangles);
-
-	// # Create mesh instance nodes and add them to the scene
 	MeshInstance3D *mi_centers = memnew(MeshInstance3D);
 	mi_centers->set_name("MeshInstanceCenters");
 	mi_centers->set_visible(show_centers);
 	mi_centers->set_mesh(mesh_centers);
 	add_child(mi_centers);
 
-	// # Create cubes mesh instance and add it to the scene (voxel grid)
+	// Voxel grid visualization (debug lines) - draws cube wireframes for solid voxels
+	// Uses same logic as terrain generation (respects heightmap mode and surface band)
+	Ref<ImmediateMesh> mesh_cubes;
+	mesh_cubes.instantiate();
+
+	if (show_voxel_grid) {
+		mesh_cubes->surface_begin(Mesh::PRIMITIVE_LINES);
+
+		int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
+		int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
+		int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
+
+		Color grid_color(0.5f, 0.5f, 0.5f, 1.0f); // Gray color for voxel grid
+
+		int cubes_vertex_count = 0;
+		int skipped_voxels = 0;
+		int processed_voxels = 0;
+
+		// Get effective surface band for heightmap mode
+		float eff_surface_band = get_effective_surface_band();
+
+		if (generation_mode == HEIGHTMAP_FIRST) {
+			// Heightmap-first mode: only process voxels within surface band
+			for (int ix = 0; ix < total_voxels_x; ++ix) {
+				for (int iz = 0; iz < total_voxels_z; ++iz) {
+					// Get terrain height at this X-Z position
+					float terrain_height_at_xz = get_height_at(ix, iz);
+					float world_y_center = terrain_height_at_xz;
+
+					// Calculate Y range to process (surface band)
+					float y_min_world = world_y_center - eff_surface_band;
+					float y_max_world = world_y_center + eff_surface_band;
+
+					// Convert to voxel indices
+					int iy_min = std::max(0, static_cast<int>((y_min_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
+					int iy_max = std::min(total_voxels_y - 1, static_cast<int>((y_max_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
+
+					// Only process voxels within the surface band
+					for (int iy = iy_min; iy <= iy_max; ++iy) {
+						processed_voxels++;
+
+						if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
+							break;
+						}
+
+						// Calculate center position
+						Vector3 center;
+						center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
+						center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
+						center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
+
+						// Check center density - only draw for solid voxels
+						float center_value = get_terrain_density(center);
+						if (center_value >= cutoff) {
+							continue; // Skip air voxels
+						}
+
+						// Draw cube wireframe
+						Vector<Vector3> cube_vertices = create_cube_vertices(center);
+						const int edges[12][2] = {
+							{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+							{ 0, 4 }, { 2, 6 }, { 5, 6 }, { 5, 4 },
+							{ 5, 1 }, { 6, 7 }, { 4, 7 }, { 3, 7 }
+						};
+						for (int e = 0; e < 12; ++e) {
+							mesh_cubes->surface_set_color(grid_color);
+							mesh_cubes->surface_add_vertex(cube_vertices[edges[e][0]]);
+							mesh_cubes->surface_add_vertex(cube_vertices[edges[e][1]]);
+						}
+						cubes_vertex_count += 24;
+					}
+
+					// Count skipped voxels (outside surface band)
+					skipped_voxels += (total_voxels_y - (iy_max - iy_min + 1));
+
+					if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
+						break;
+				}
+				if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
+					break;
+			}
+
+			// Log efficiency stats
+			int total_possible = total_voxels_x * total_voxels_y * total_voxels_z;
+			float efficiency = (total_possible > 0) ? (100.0f * skipped_voxels / total_possible) : 0.0f;
+			log_message(String("Voxel grid (HEIGHTMAP): {0} vertices, {1}% voxels skipped due to surface band")
+								.format(Array::make(cubes_vertex_count, int(efficiency))),
+					2);
+		} else {
+			// Voxels-first mode: process all voxels
+			for (int ix = 0; ix < total_voxels_x; ++ix) {
+				for (int iy = 0; iy < total_voxels_y; ++iy) {
+					for (int iz = 0; iz < total_voxels_z; ++iz) {
+						processed_voxels++;
+
+						if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
+							break;
+						}
+
+						// Calculate center position
+						Vector3 center;
+						center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
+						center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
+						center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
+
+						// Check center density - only draw for solid voxels
+						float center_value = get_terrain_density(center);
+						if (center_value >= cutoff) {
+							continue; // Skip air voxels
+						}
+
+						// Draw cube wireframe
+						Vector<Vector3> cube_vertices = create_cube_vertices(center);
+						const int edges[12][2] = {
+							{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+							{ 0, 4 }, { 2, 6 }, { 5, 6 }, { 5, 4 },
+							{ 5, 1 }, { 6, 7 }, { 4, 7 }, { 3, 7 }
+						};
+						for (int e = 0; e < 12; ++e) {
+							mesh_cubes->surface_set_color(grid_color);
+							mesh_cubes->surface_add_vertex(cube_vertices[edges[e][0]]);
+							mesh_cubes->surface_add_vertex(cube_vertices[edges[e][1]]);
+						}
+						cubes_vertex_count += 24;
+					}
+					if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
+						break;
+				}
+				if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
+					break;
+			}
+
+			log_message(String("Voxel grid (VOXELS_FIRST): {0} vertices").format(Array::make(cubes_vertex_count)), 2);
+		}
+
+		if (cubes_vertex_count > 0) {
+			mesh_cubes->surface_end();
+
+			Ref<StandardMaterial3D> material_cubes;
+			material_cubes.instantiate();
+			material_cubes->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
+			material_cubes->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
+			mesh_cubes->surface_set_material(0, material_cubes);
+		}
+	}
+
 	MeshInstance3D *mi_cubes = memnew(MeshInstance3D);
 	mi_cubes->set_name("MeshInstanceVoxelGrid");
 	mi_cubes->set_visible(show_voxel_grid);
 	mi_cubes->set_mesh(mesh_cubes);
 	add_child(mi_cubes);
 
-	// # Create triangles mesh instance and add it to the scene
-	MeshInstance3D *mi_triangles = memnew(MeshInstance3D);
-	mi_triangles->set_mesh(mesh_triangles);
-	add_child(mi_triangles);
-
-	// Physical extent for chunk grid visualization
-	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
-	float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
-	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
-	Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
+	// Note: Terrain mesh is now rendered per-chunk via Chunk::apply_mesh_data()
+	// Each chunk has its own MeshInstance3D child node
 
 	// # Create chunk grid visualization (red, thicker lines)
 	Ref<ImmediateMesh> mesh_chunk_grid;
@@ -1159,8 +1650,9 @@ void VoxelGenerator::generate_heightmap_first(Ref<ImmediateMesh> mesh_centers, R
 }
 
 Vector<Vector3> VoxelGenerator::create_cube_vertices(const Vector3 &pos) {
-	// Use computed voxel_size so cube dimensions follow world/chunk/resolution settings
-	Vector3 half = voxel_size * 0.5f;
+	// Use effective_voxel_size so cube dimensions match LOD-adjusted resolution
+	// This ensures cubes align properly with the density cache sampling grid
+	Vector3 half = effective_voxel_size * 0.5f;
 	log_message(String("Creating cube vertices at position: {0} (half={1})").format(Array::make(pos, half)), 3);
 	return Vector<Vector3>{
 		Vector3(pos.x - half.x, pos.y - half.y, pos.z - half.z),
@@ -1210,13 +1702,8 @@ int VoxelGenerator::get_lookup_index(const std::vector<float> &cube_values, floa
 }
 
 float VoxelGenerator::get_terrain_density(const Vector3 &pos) const {
-	// Calculate terrain height using 2D noise for smooth rolling hills
-	float height = terrain_height;
-	if (terrain_noise.is_valid()) {
-		// Use 2D noise for base terrain - noise returns -1 to 1, scale by amplitude
-		float noise_value = terrain_noise->get_noise_2d(pos.x, pos.z);
-		height += noise_value * terrain_amplitude;
-	}
+	// Determine base terrain height from biome generator if available
+	float height = sample_base_height(pos.x, pos.z);
 
 	// Add rocky 3D detail using detail noise
 	float rocky_detail = 0.0f;
@@ -1224,9 +1711,64 @@ float VoxelGenerator::get_terrain_density(const Vector3 &pos) const {
 		rocky_detail = detail_noise->get_noise_3d(pos.x, pos.y, pos.z) * rock_influence * terrain_amplitude * 0.5f;
 	}
 
-	// Density function: negative = solid (below terrain), positive = air (above terrain)
-	// pos.y - height gives us: negative when below terrain surface, positive when above
-	return pos.y - height + rocky_detail;
+	// Base density: negative = solid (below terrain), positive = air (above terrain)
+	float base_density = pos.y - height + rocky_detail;
+
+	// Apply terrain + feature edits
+	// Convert world position to voxel index for lookup
+	int vx = static_cast<int>(std::floor(pos.x));
+	int vy = static_cast<int>(std::floor(pos.y));
+	int vz = static_cast<int>(std::floor(pos.z));
+	uint64_t key = pack_edit_key(vx, vy, vz);
+	float edit_delta = 0.0f;
+
+	{
+		std::lock_guard<std::mutex> lock(terrain_edits_mutex);
+		auto it = terrain_edits.find(key);
+		if (it != terrain_edits.end()) {
+			edit_delta += it->second;
+		}
+	}
+
+	{
+		std::lock_guard<std::mutex> lock(feature_edits_mutex);
+		auto feature_it = feature_density_edits.find(key);
+		if (feature_it != feature_density_edits.end()) {
+			edit_delta += feature_it->second;
+		}
+	}
+
+	base_density -= edit_delta;
+
+	return base_density;
+}
+
+float VoxelGenerator::sample_raw_base_height(float world_x, float world_z) const {
+	float height = terrain_height;
+	if (biome_generator.is_valid()) {
+		height = biome_generator->get_blended_height_at(world_x, world_z);
+	}
+	if (terrain_noise.is_valid()) {
+		float noise_value = terrain_noise->get_noise_2d(world_x, world_z);
+		height += noise_value * terrain_amplitude;
+	}
+
+	if (!std::isfinite(height)) {
+		height = 0.0f;
+	}
+
+	return height;
+}
+
+float VoxelGenerator::sample_base_height(float world_x, float world_z) const {
+	float height = sample_raw_base_height(world_x, world_z);
+	const float world_height_extent = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	if (world_height_extent <= 0.0f) {
+		return height;
+	}
+	const float min_height = -0.5f * world_height_extent;
+	const float max_height = 0.5f * world_height_extent;
+	return std::clamp(height, min_height, max_height);
 }
 
 std::vector<float> VoxelGenerator::get_cube_values(const Vector<Vector3> &cube_vertices) {
@@ -1309,15 +1851,30 @@ int VoxelGenerator::get_debug_verbosity() const {
 }
 
 void VoxelGenerator::debug_print_state() {
-	String debug_info = "VoxelGenerator Debug Information:\n";
+	String debug_info = "=====VoxelGenerator Debug Information:=====\n";
+	debug_info += String("====Debug Settings====\n");
 	debug_info += String("- Debug Mode: {0}\n").format(Array::make(debug_mode));
 	debug_info += String("- Debug Verbosity: {0}\n").format(Array::make(debug_verbosity));
+	debug_info += String("====Generator Settings====\n");
+	debug_info += String("- Chunk Size: {0}\n").format(Array::make(chunk_size));
+	debug_info += String("- Max Chunks Per Frame: {0}\n").format(Array::make(max_chunks_per_frame));
 	debug_info += String("- World Size: {0}\n").format(Array::make(world_size));
-	debug_info += String("- Voxel Size: {0}\n").format(Array::make(voxel_size));
+	debug_info += String("- Base Voxel Size: {0}\n").format(Array::make(base_voxel_size));
+	debug_info += String("- Effective Voxel Size: {0}\n").format(Array::make(effective_voxel_size));
 	debug_info += String("- Terrain Height: {0}\n").format(Array::make(terrain_height));
 	debug_info += String("- Terrain Amplitude: {0}\n").format(Array::make(terrain_amplitude));
 	debug_info += String("- Rock Influence: {0}\n").format(Array::make(rock_influence));
 	debug_info += String("- Resolution: {0}\n").format(Array::make(resolution));
+	debug_info += String("- Generation Mode: {0}\n").format(Array::make(generation_mode));
+	debug_info += String("- Surface Band: {0}\n").format(Array::make(surface_band));
+	debug_info += String("- Heightmap Vertex Limit: {0}\n").format(Array::make(heightmap_vertex_limit));
+	debug_info += String("====LOD Settings====\n");
+	debug_info += String("- LOD Level: {0}\n").format(Array::make(lod_level));
+	debug_info += String("- LOD Reference Position: {0}\n").format(Array::make(lod_reference_position));
+	debug_info += String("- LOD Distance Multiplier: {0}\n").format(Array::make(lod_distance_multiplier));
+	debug_info += String("- LOD Distances: {0}\n").format(Array::make(lod_distances));
+	debug_info += String("====Other Settings====\n");
+	debug_info += String("- Signal Every N Chunks: {0}\n").format(Array::make(signal_every_n_chunks));
 	debug_info += String("- Cutoff: {0}\n").format(Array::make(cutoff));
 	debug_info += String("- Seed: {0}\n").format(Array::make(seeder));
 	debug_info += String("- Show Centers: {0}\n").format(Array::make(show_centers));
@@ -1444,9 +2001,18 @@ void VoxelGenerator::create_chunks() {
 		for (int y = 0; y < world_size.y; y++) {
 			for (int z = 0; z < world_size.z; z++) {
 				Chunk *chunk = memnew(Chunk);
+
+				// Set chunk coordinate and name
+				Vector3i coord(x, y, z);
+				chunk->set_chunk_coord(coord);
 				chunk->set_name(String("Chunk_{0}_{1}_{2}").format(Array::make(x, y, z)));
-				chunk->set_chunk_size(chunk_size); // Set the chunk size
-				add_child(chunk); // Add to scene tree first
+				chunk->set_chunk_size(chunk_size);
+
+				// Chunk position is (0,0,0) because mesh vertices are in world-space
+				// The mesh data already contains world-space coordinates
+				chunk->set_position(Vector3(0, 0, 0));
+
+				add_child(chunk); // Add to scene tree
 
 				chunks.push_back(chunk);
 				fill_chunk_with_voxels(chunk);
@@ -1466,15 +2032,330 @@ void VoxelGenerator::fill_chunk_with_voxels(Chunk *chunk) {
 }
 
 // ============================================================================
+// Biome & Feature Helpers
+// ============================================================================
+
+Vector3 VoxelGenerator::get_chunk_world_origin(const Vector3i &chunk_coord) const {
+	Vector3 world_extent(
+			static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size)),
+			static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size)),
+			static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size)));
+	return Vector3(-world_extent.x * 0.5f + static_cast<float>(chunk_coord.x * chunk_size),
+			-world_extent.y * 0.5f + static_cast<float>(chunk_coord.y * chunk_size),
+			-world_extent.z * 0.5f + static_cast<float>(chunk_coord.z * chunk_size));
+}
+
+void VoxelGenerator::ensure_vertical_extent_for_biomes() {
+	if (!biome_generator.is_valid()) {
+		return;
+	}
+
+	const int samples_per_axis = 8;
+	const float extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	const float extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+	if (extent_x <= 0.0f || extent_z <= 0.0f) {
+		return;
+	}
+
+	float min_height = std::numeric_limits<float>::infinity();
+	float max_height = -std::numeric_limits<float>::infinity();
+
+	for (int sx = 0; sx < samples_per_axis; ++sx) {
+		float tx = samples_per_axis > 1 ? static_cast<float>(sx) / static_cast<float>(samples_per_axis - 1) : 0.5f;
+		float world_x = -extent_x * 0.5f + tx * extent_x;
+		for (int sz = 0; sz < samples_per_axis; ++sz) {
+			float tz = samples_per_axis > 1 ? static_cast<float>(sz) / static_cast<float>(samples_per_axis - 1) : 0.5f;
+			float world_z = -extent_z * 0.5f + tz * extent_z;
+			float height = sample_raw_base_height(world_x, world_z);
+			if (!std::isfinite(height)) {
+				continue;
+			}
+			min_height = std::min(min_height, height);
+			max_height = std::max(max_height, height);
+		}
+	}
+
+	if (!std::isfinite(min_height) || !std::isfinite(max_height)) {
+		return;
+	}
+
+	float half_extent_required = std::max(std::abs(min_height), std::abs(max_height));
+	const float margin = std::max(terrain_amplitude * 2.0f, static_cast<float>(chunk_size));
+	half_extent_required += margin;
+
+	const float required_extent = std::max(half_extent_required * 2.0f, static_cast<float>(chunk_size));
+	const float current_extent = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+
+	if (required_extent <= current_extent + 0.5f) {
+		return;
+	}
+
+	int required_world_y = static_cast<int>(std::ceil(required_extent / static_cast<float>(std::max(1, chunk_size))));
+	required_world_y = std::max(required_world_y, 1);
+
+	if (required_world_y != world_size.y) {
+		const int previous_world_y = world_size.y;
+		world_size.y = required_world_y;
+		clear_density_cache();
+		clear_heightmap_cache();
+		log_message(String("Auto-expanded world Y from {0} to {1} chunks to fit biome heights (min={2}, max={3})")
+							.format(Array::make(previous_world_y, world_size.y, min_height, max_height)),
+				1);
+	}
+}
+
+TypedArray<int> VoxelGenerator::get_chunk_surface_heights(const Vector3i &chunk_coord) const {
+	TypedArray<int> heights;
+	if (chunk_size <= 0) {
+		return heights;
+	}
+
+	heights.resize(chunk_size * chunk_size);
+	Vector3 origin = get_chunk_world_origin(chunk_coord);
+	const float world_height_extent = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	const float min_height = -0.5f * world_height_extent;
+	const float max_height = 0.5f * world_height_extent;
+
+	for (int lx = 0; lx < chunk_size; ++lx) {
+		for (int lz = 0; lz < chunk_size; ++lz) {
+			float world_x = origin.x + static_cast<float>(lx) + 0.5f;
+			float world_z = origin.z + static_cast<float>(lz) + 0.5f;
+			float height = sample_base_height(world_x, world_z);
+			if (!std::isfinite(height)) {
+				height = 0.0f;
+			} else {
+				height = std::clamp(height, min_height, max_height);
+			}
+			int column_index = lx * chunk_size + lz;
+			heights[column_index] = static_cast<int>(std::floor(height));
+		}
+	}
+
+	return heights;
+}
+
+TypedArray<int> VoxelGenerator::get_chunk_biome_indices(const Vector3i &chunk_coord) const {
+	TypedArray<int> indices;
+	if (chunk_size <= 0) {
+		return indices;
+	}
+
+	indices.resize(chunk_size * chunk_size);
+	Vector3 origin = get_chunk_world_origin(chunk_coord);
+	bool has_biomes = biome_generator.is_valid();
+
+	for (int lx = 0; lx < chunk_size; ++lx) {
+		for (int lz = 0; lz < chunk_size; ++lz) {
+			float world_x = origin.x + static_cast<float>(lx) + 0.5f;
+			float world_z = origin.z + static_cast<float>(lz) + 0.5f;
+			int biome_index = has_biomes ? biome_generator->get_biome_index_at(world_x, world_z) : 0;
+			int column_index = lx * chunk_size + lz;
+			indices[column_index] = biome_index < 0 ? 0 : biome_index;
+		}
+	}
+
+	return indices;
+}
+
+void VoxelGenerator::apply_feature_density_sphere(const Vector3 &center, float radius, float delta) {
+	if (radius <= 0.0f || delta == 0.0f) {
+		return;
+	}
+
+	int min_x = static_cast<int>(std::floor(center.x - radius));
+	int min_y = static_cast<int>(std::floor(center.y - radius));
+	int min_z = static_cast<int>(std::floor(center.z - radius));
+	int max_x = static_cast<int>(std::ceil(center.x + radius));
+	int max_y = static_cast<int>(std::ceil(center.y + radius));
+	int max_z = static_cast<int>(std::ceil(center.z + radius));
+	float radius_sq = radius * radius;
+
+	std::lock_guard<std::mutex> lock(feature_edits_mutex);
+	for (int vz = min_z; vz <= max_z; ++vz) {
+		for (int vy = min_y; vy <= max_y; ++vy) {
+			for (int vx = min_x; vx <= max_x; ++vx) {
+				float dx = (static_cast<float>(vx) + 0.5f) - center.x;
+				float dy = (static_cast<float>(vy) + 0.5f) - center.y;
+				float dz = (static_cast<float>(vz) + 0.5f) - center.z;
+				float dist_sq = dx * dx + dy * dy + dz * dz;
+				if (dist_sq > radius_sq) {
+					continue;
+				}
+				float dist = Math::sqrt(dist_sq);
+				float t = radius == 0.0f ? 0.0f : dist / radius;
+				float falloff = 1.0f - (t * t * (3.0f - 2.0f * t));
+				float edit_delta = delta * falloff;
+				uint64_t key = pack_edit_key(vx, vy, vz);
+				auto found = feature_density_edits.find(key);
+				if (found != feature_density_edits.end()) {
+					found->second += edit_delta;
+					if (std::abs(found->second) < 0.001f) {
+						feature_density_edits.erase(found);
+					}
+				} else {
+					feature_density_edits[key] = edit_delta;
+				}
+			}
+		}
+	}
+}
+
+void VoxelGenerator::bake_feature_descriptor(const Dictionary &feature) {
+	if (!feature.has("position") || !feature.has("feature_type")) {
+		return;
+	}
+
+	Vector3i position = feature["position"];
+	int feature_type_int = static_cast<int>(feature["feature_type"]);
+	int feature_size = feature.has("size") ? static_cast<int>(feature["size"]) : 1;
+	Vector3 center(static_cast<float>(position.x), static_cast<float>(position.y), static_cast<float>(position.z));
+	FeatureType feature_type = static_cast<FeatureType>(feature_type_int);
+
+	switch (feature_type) {
+		case FeatureType::TREE: {
+			int trunk_height = CLAMP(feature_size, 2, 8);
+			for (int i = 0; i < trunk_height; ++i) {
+				apply_feature_density_sphere(center + Vector3(0.0f, static_cast<float>(i), 0.0f), 0.6f, 3.0f);
+			}
+			float canopy_radius = 1.5f + static_cast<float>(feature_size) * 0.3f;
+			apply_feature_density_sphere(center + Vector3(0.0f, static_cast<float>(trunk_height), 0.0f), canopy_radius, 2.0f);
+			break;
+		}
+		case FeatureType::ROCK: {
+			float radius = 0.8f + static_cast<float>(feature_size) * 0.25f;
+			apply_feature_density_sphere(center, radius, 2.5f);
+			break;
+		}
+		case FeatureType::FOLIAGE: {
+			float radius = 0.5f + static_cast<float>(feature_size) * 0.1f;
+			apply_feature_density_sphere(center, radius, 1.5f);
+			break;
+		}
+		case FeatureType::STRUCTURE: {
+			float radius = 2.0f + static_cast<float>(feature_size);
+			apply_feature_density_sphere(center, radius, 4.0f);
+			break;
+		}
+		case FeatureType::ORE_VEIN:
+		default: {
+			if (feature_generator.is_valid()) {
+				Array cluster = feature_generator->generate_ore_cluster(position.x, position.y, position.z, Math::max(1, feature_size));
+				for (int i = 0; i < cluster.size(); ++i) {
+					Vector3i ore_pos = cluster[i];
+					apply_feature_density_sphere(
+							Vector3(static_cast<float>(ore_pos.x), static_cast<float>(ore_pos.y), static_cast<float>(ore_pos.z)),
+							0.6f + static_cast<float>(feature_size) * 0.05f,
+							2.0f);
+				}
+			} else {
+				apply_feature_density_sphere(center, 1.0f, 2.0f);
+			}
+			break;
+		}
+	}
+}
+
+int VoxelGenerator::generate_chunk_features(const Vector3i &chunk_coord) {
+	if (!feature_generator.is_valid() || chunk_size <= 0) {
+		return 0;
+	}
+
+	TypedArray<int> surface_heights = get_chunk_surface_heights(chunk_coord);
+	TypedArray<int> biome_indices = get_chunk_biome_indices(chunk_coord);
+	Vector3 origin = get_chunk_world_origin(chunk_coord);
+	int start_x = static_cast<int>(std::floor(origin.x));
+	int start_y = static_cast<int>(std::floor(origin.y));
+	int start_z = static_cast<int>(std::floor(origin.z));
+
+	Array features = feature_generator->get_features_in_region(
+			start_x,
+			start_y,
+			start_z,
+			chunk_size,
+			chunk_size,
+			chunk_size,
+			surface_heights,
+			biome_indices);
+
+	for (int i = 0; i < features.size(); ++i) {
+		Dictionary feature = features[i];
+		bake_feature_descriptor(feature);
+	}
+
+	return features.size();
+}
+
+void VoxelGenerator::prepare_procedural_features() {
+	{
+		std::lock_guard<std::mutex> lock(feature_edits_mutex);
+		feature_density_edits.clear();
+	}
+
+	if (!feature_generator.is_valid()) {
+		log_message("Feature generator not assigned, skipping procedural feature pass", 3);
+		return;
+	}
+
+	if (!biome_generator.is_valid()) {
+		log_message("Feature generator requires a biome generator; skipping procedural features", 1);
+		return;
+	}
+
+	if (chunks.empty()) {
+		create_chunks();
+	}
+
+	int total_features = 0;
+	for (Chunk *chunk : chunks) {
+		if (!chunk || !is_instance_valid(chunk)) {
+			continue;
+		}
+		total_features += apply_features_to_chunk(chunk);
+	}
+
+	log_message(String("Baked {0} procedural features into terrain").format(Array::make(total_features)), 2);
+}
+
+Color VoxelGenerator::get_biome_debug_color(int biome_index) const {
+	static const Color palette[] = {
+		Color(0.42f, 0.76f, 0.46f), // plains
+		Color(0.85f, 0.74f, 0.45f), // desert
+		Color(0.55f, 0.66f, 0.82f), // snow/mountain
+		Color(0.54f, 0.78f, 0.93f), // ocean
+		Color(0.78f, 0.56f, 0.42f), // mesa
+		Color(0.64f, 0.86f, 0.52f) // forest
+	};
+	constexpr int palette_size = static_cast<int>(sizeof(palette) / sizeof(Color));
+	if (biome_index < 0) {
+		return Color(0.6f, 0.6f, 0.6f);
+	}
+	return palette[biome_index % palette_size];
+}
+
+int VoxelGenerator::apply_features_to_chunk(Chunk *chunk) {
+	if (!chunk) {
+		return 0;
+	}
+	return generate_chunk_features(chunk->get_chunk_coord());
+}
+
+// ============================================================================
 // Density Cache Implementation
 // ============================================================================
 
 void VoxelGenerator::build_density_cache() {
 	// Calculate cache dimensions (all corner positions for marching cubes)
-	// Resolution multiplies the sample count within each chunk
-	int voxel_count_x = world_size.x * chunk_size * resolution;
-	int voxel_count_y = world_size.y * chunk_size * resolution;
-	int voxel_count_z = world_size.z * chunk_size * resolution;
+	// Use effective resolution (accounts for LOD) to match generation loop spacing
+	int eff_resolution = get_effective_resolution();
+
+	// Store the resolution and voxel size used for this cache
+	// This is critical for LOD-independent sampling via trilinear interpolation
+	cache_resolution = eff_resolution;
+	cache_voxel_size = effective_voxel_size;
+
+	int voxel_count_x = world_size.x * chunk_size * eff_resolution;
+	int voxel_count_y = world_size.y * chunk_size * eff_resolution;
+	int voxel_count_z = world_size.z * chunk_size * eff_resolution;
 
 	cache_size_x = voxel_count_x + 1;
 	cache_size_y = voxel_count_y + 1;
@@ -1499,10 +2380,11 @@ void VoxelGenerator::build_density_cache() {
 			for (int iy = 0; iy < cache_size_y; ++iy) {
 				for (int ix = 0; ix < cache_size_x; ++ix) {
 					// Convert index to world position (corner position, not center)
+					// Use effective_voxel_size to match the generation loop spacing
 					Vector3 pos;
-					pos.x = -physical_extent.x * 0.5f + ix * voxel_size.x;
-					pos.y = -physical_extent.y * 0.5f + iy * voxel_size.y;
-					pos.z = -physical_extent.z * 0.5f + iz * voxel_size.z;
+					pos.x = -physical_extent.x * 0.5f + ix * effective_voxel_size.x;
+					pos.y = -physical_extent.y * 0.5f + iy * effective_voxel_size.y;
+					pos.z = -physical_extent.z * 0.5f + iz * effective_voxel_size.z;
 
 					int index = density_cache_index(ix, iy, iz);
 					density_cache[index] = get_terrain_density(pos);
@@ -1528,15 +2410,15 @@ float VoxelGenerator::get_cached_density(int ix, int iy, int iz) const {
 	std::shared_lock<std::shared_mutex> lock(density_cache_mutex);
 
 	// Helper lambda to convert indices to world position
-	// Physical extent is constant, voxel_size accounts for resolution
+	// Physical extent is constant, effective_voxel_size accounts for LOD-adjusted resolution
 	auto index_to_pos = [this](int x, int y, int z) -> Vector3 {
 		float physical_extent_x = static_cast<float>(world_size.x * chunk_size);
 		float physical_extent_y = static_cast<float>(world_size.y * chunk_size);
 		float physical_extent_z = static_cast<float>(world_size.z * chunk_size);
 		return Vector3(
-				-physical_extent_x * 0.5f + x * voxel_size.x,
-				-physical_extent_y * 0.5f + y * voxel_size.y,
-				-physical_extent_z * 0.5f + z * voxel_size.z);
+				-physical_extent_x * 0.5f + x * effective_voxel_size.x,
+				-physical_extent_y * 0.5f + y * effective_voxel_size.y,
+				-physical_extent_z * 0.5f + z * effective_voxel_size.z);
 	};
 
 	if (density_cache.empty()) {
@@ -1576,6 +2458,78 @@ std::vector<float> VoxelGenerator::get_cube_values_cached(int ix, int iy, int iz
 	values[5] = get_cached_density(ix + 1, iy, iz + 1);
 	values[6] = get_cached_density(ix + 1, iy + 1, iz + 1);
 	values[7] = get_cached_density(ix, iy + 1, iz + 1);
+
+	return values;
+}
+
+float VoxelGenerator::get_density_at_world_position(const Vector3 &world_pos) const {
+	// Convert world position to cache index using the cache's voxel size
+	// This allows sampling at any resolution while using cache built at different resolution
+	float physical_extent_x = static_cast<float>(world_size.x * chunk_size);
+	float physical_extent_y = static_cast<float>(world_size.y * chunk_size);
+	float physical_extent_z = static_cast<float>(world_size.z * chunk_size);
+
+	// Convert world pos to floating-point cache indices
+	float fx = (world_pos.x + physical_extent_x * 0.5f) / cache_voxel_size.x;
+	float fy = (world_pos.y + physical_extent_y * 0.5f) / cache_voxel_size.y;
+	float fz = (world_pos.z + physical_extent_z * 0.5f) / cache_voxel_size.z;
+
+	// Get integer indices for the 8 surrounding cache cells
+	int ix0 = static_cast<int>(std::floor(fx));
+	int iy0 = static_cast<int>(std::floor(fy));
+	int iz0 = static_cast<int>(std::floor(fz));
+	int ix1 = ix0 + 1;
+	int iy1 = iy0 + 1;
+	int iz1 = iz0 + 1;
+
+	// Fractional parts for interpolation
+	float tx = fx - static_cast<float>(ix0);
+	float ty = fy - static_cast<float>(iy0);
+	float tz = fz - static_cast<float>(iz0);
+
+	// Sample 8 corners from the cache
+	float c000 = get_cached_density(ix0, iy0, iz0);
+	float c100 = get_cached_density(ix1, iy0, iz0);
+	float c010 = get_cached_density(ix0, iy1, iz0);
+	float c110 = get_cached_density(ix1, iy1, iz0);
+	float c001 = get_cached_density(ix0, iy0, iz1);
+	float c101 = get_cached_density(ix1, iy0, iz1);
+	float c011 = get_cached_density(ix0, iy1, iz1);
+	float c111 = get_cached_density(ix1, iy1, iz1);
+
+	// Trilinear interpolation
+	float c00 = c000 * (1.0f - tx) + c100 * tx;
+	float c10 = c010 * (1.0f - tx) + c110 * tx;
+	float c01 = c001 * (1.0f - tx) + c101 * tx;
+	float c11 = c011 * (1.0f - tx) + c111 * tx;
+
+	float c0 = c00 * (1.0f - ty) + c10 * ty;
+	float c1 = c01 * (1.0f - ty) + c11 * ty;
+
+	return c0 * (1.0f - tz) + c1 * tz;
+}
+
+std::vector<float> VoxelGenerator::get_cube_values_at_world_position(const Vector3 &center, const Vector3 &half_size) const {
+	std::vector<float> values(8);
+
+	// Sample density at 8 corners of the cube in world space
+	// Corner ordering must match create_cube_vertices():
+	// 0: (-half, -half, -half)
+	// 1: (+half, -half, -half)
+	// 2: (+half, +half, -half)
+	// 3: (-half, +half, -half)
+	// 4: (-half, -half, +half)
+	// 5: (+half, -half, +half)
+	// 6: (+half, +half, +half)
+	// 7: (-half, +half, +half)
+	values[0] = get_density_at_world_position(Vector3(center.x - half_size.x, center.y - half_size.y, center.z - half_size.z));
+	values[1] = get_density_at_world_position(Vector3(center.x + half_size.x, center.y - half_size.y, center.z - half_size.z));
+	values[2] = get_density_at_world_position(Vector3(center.x + half_size.x, center.y + half_size.y, center.z - half_size.z));
+	values[3] = get_density_at_world_position(Vector3(center.x - half_size.x, center.y + half_size.y, center.z - half_size.z));
+	values[4] = get_density_at_world_position(Vector3(center.x - half_size.x, center.y - half_size.y, center.z + half_size.z));
+	values[5] = get_density_at_world_position(Vector3(center.x + half_size.x, center.y - half_size.y, center.z + half_size.z));
+	values[6] = get_density_at_world_position(Vector3(center.x + half_size.x, center.y + half_size.y, center.z + half_size.z));
+	values[7] = get_density_at_world_position(Vector3(center.x - half_size.x, center.y + half_size.y, center.z + half_size.z));
 
 	return values;
 }
@@ -1647,8 +2601,10 @@ void VoxelGenerator::regenerate_dirty_chunks() {
 
 	log_message("Regenerating dirty chunks...", 2);
 
-	// For now, we do synchronous regeneration of dirty chunks
-	// This can be extended to use WorkerThreadPool for async operation
+	// Rebuild density cache for affected region (for now, full rebuild)
+	build_density_cache();
+
+	// Synchronously regenerate dirty chunks using per-chunk mesh generation
 	int regenerated_count = 0;
 
 	for (int idx = 0; idx < static_cast<int>(chunk_dirty_flags.size()); ++idx) {
@@ -1660,18 +2616,22 @@ void VoxelGenerator::regenerate_dirty_chunks() {
 		if (is_dirty) {
 			Vector3i chunk_coord = index_to_chunk_coord(idx);
 
-			// Regenerate this chunk's mesh
-			// For now, just mark it clean - full per-chunk regeneration
-			// would require refactoring generate() into per-chunk operations
-			{
-				std::lock_guard<std::mutex> lock(chunks_mutex);
-				chunk_dirty_flags[idx] = false;
+			// Clear the existing mesh for this chunk
+			if (idx < static_cast<int>(chunks.size()) && chunks[idx]) {
+				chunks[idx]->clear_mesh();
 			}
+
+			// Regenerate this chunk's mesh using the sync method
+			generate_chunk_mesh_sync(idx);
+
 			regenerated_count++;
 
 			log_message(String("Regenerated chunk ({0},{1},{2})").format(Array::make(chunk_coord.x, chunk_coord.y, chunk_coord.z)), 3);
 		}
 	}
+
+	// Clear density cache after regeneration
+	clear_density_cache();
 
 	log_message(String("Regenerated {0} dirty chunks").format(Array::make(regenerated_count)), 2);
 
@@ -1681,23 +2641,48 @@ void VoxelGenerator::regenerate_dirty_chunks() {
 void VoxelGenerator::invalidate_density_region(const Vector3i &min_voxel, const Vector3i &max_voxel) {
 	log_message(String("Invalidating density region from ({0},{1},{2}) to ({3},{4},{5})").format(Array::make(min_voxel.x, min_voxel.y, min_voxel.z, max_voxel.x, max_voxel.y, max_voxel.z)), 2);
 
-	// Calculate which chunks are affected by this region
-	Vector3i min_chunk(
-			min_voxel.x / chunk_size,
-			min_voxel.y / chunk_size,
-			min_voxel.z / chunk_size);
-	Vector3i max_chunk(
-			max_voxel.x / chunk_size,
-			max_voxel.y / chunk_size,
-			max_voxel.z / chunk_size);
+	if (chunk_size <= 0) {
+		log_message("Cannot invalidate density region: chunk_size <= 0", 0);
+		return;
+	}
 
-	// Clamp to valid range
-	min_chunk.x = std::max(0, min_chunk.x);
-	min_chunk.y = std::max(0, min_chunk.y);
-	min_chunk.z = std::max(0, min_chunk.z);
-	max_chunk.x = std::min(world_size.x - 1, max_chunk.x);
-	max_chunk.y = std::min(world_size.y - 1, max_chunk.y);
-	max_chunk.z = std::min(world_size.z - 1, max_chunk.z);
+	Vector3 world_extent(
+			static_cast<float>(std::max(1, world_size.x) * chunk_size),
+			static_cast<float>(std::max(1, world_size.y) * chunk_size),
+			static_cast<float>(std::max(1, world_size.z) * chunk_size));
+	Vector3 half_extent = world_extent * 0.5f;
+
+	auto voxel_to_chunk = [&](int voxel_coord, float half_axis_extent, int axis_chunks) {
+		if (axis_chunks <= 0) {
+			return 0;
+		}
+		float shifted = static_cast<float>(voxel_coord) + half_axis_extent;
+		int chunk = static_cast<int>(std::floor(shifted / static_cast<float>(chunk_size)));
+		if (chunk < 0) {
+			chunk = 0;
+		} else if (chunk >= axis_chunks) {
+			chunk = axis_chunks - 1;
+		}
+		return chunk;
+	};
+
+	// Calculate which chunks are affected by this region using world-centered coordinates
+	Vector3i min_chunk(
+			voxel_to_chunk(min_voxel.x, half_extent.x, world_size.x),
+			voxel_to_chunk(min_voxel.y, half_extent.y, world_size.y),
+			voxel_to_chunk(min_voxel.z, half_extent.z, world_size.z));
+	Vector3i max_chunk(
+			voxel_to_chunk(max_voxel.x, half_extent.x, world_size.x),
+			voxel_to_chunk(max_voxel.y, half_extent.y, world_size.y),
+			voxel_to_chunk(max_voxel.z, half_extent.z, world_size.z));
+
+	// Ensure ordering after clamping
+	min_chunk.x = std::min(min_chunk.x, max_chunk.x);
+	min_chunk.y = std::min(min_chunk.y, max_chunk.y);
+	min_chunk.z = std::min(min_chunk.z, max_chunk.z);
+	max_chunk.x = std::max(min_chunk.x, max_chunk.x);
+	max_chunk.y = std::max(min_chunk.y, max_chunk.y);
+	max_chunk.z = std::max(min_chunk.z, max_chunk.z);
 
 	// Mark all affected chunks as dirty
 	for (int cz = min_chunk.z; cz <= max_chunk.z; ++cz) {
@@ -1714,6 +2699,162 @@ void VoxelGenerator::invalidate_density_region(const Vector3i &min_voxel, const 
 	clear_density_cache();
 }
 
+// ==================== Terraforming Implementation ====================
+
+void VoxelGenerator::modify_terrain(const Vector3 &center, float radius, float delta) {
+	if (radius <= 0.0f || delta == 0.0f) {
+		return;
+	}
+
+	log_message(String("Modifying terrain at ({0},{1},{2}) radius={3} delta={4}").format(Array::make(center.x, center.y, center.z, radius, delta)), 2);
+
+	// Calculate bounding box in voxel coordinates
+	int min_x = static_cast<int>(std::floor(center.x - radius));
+	int min_y = static_cast<int>(std::floor(center.y - radius));
+	int min_z = static_cast<int>(std::floor(center.z - radius));
+	int max_x = static_cast<int>(std::ceil(center.x + radius));
+	int max_y = static_cast<int>(std::ceil(center.y + radius));
+	int max_z = static_cast<int>(std::ceil(center.z + radius));
+
+	float radius_sq = radius * radius;
+
+	// Apply edits within the spherical region
+	{
+		std::lock_guard<std::mutex> lock(terrain_edits_mutex);
+		for (int vz = min_z; vz <= max_z; ++vz) {
+			for (int vy = min_y; vy <= max_y; ++vy) {
+				for (int vx = min_x; vx <= max_x; ++vx) {
+					// Calculate distance from center (use voxel center)
+					float dx = (vx + 0.5f) - center.x;
+					float dy = (vy + 0.5f) - center.y;
+					float dz = (vz + 0.5f) - center.z;
+					float dist_sq = dx * dx + dy * dy + dz * dz;
+
+					if (dist_sq <= radius_sq) {
+						// Calculate smooth falloff using smoothstep
+						// 1.0 at center, 0.0 at edge
+						float dist = std::sqrt(dist_sq);
+						float t = dist / radius; // 0 at center, 1 at edge
+						// Smoothstep: 3t^2 - 2t^3 (inverted for falloff)
+						float falloff = 1.0f - (t * t * (3.0f - 2.0f * t));
+
+						float edit_delta = delta * falloff;
+
+						uint64_t key = pack_edit_key(vx, vy, vz);
+						auto it = terrain_edits.find(key);
+						if (it != terrain_edits.end()) {
+							// Accumulate with existing edit
+							it->second += edit_delta;
+							// Remove entry if delta is negligible
+							if (std::abs(it->second) < 0.001f) {
+								terrain_edits.erase(it);
+							}
+						} else {
+							// Add new edit
+							terrain_edits[key] = edit_delta;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Mark affected chunks as dirty and invalidate density cache
+	invalidate_density_region(Vector3i(min_x, min_y, min_z), Vector3i(max_x, max_y, max_z));
+
+	log_message(String("Terrain edits count: {0}").format(Array::make(static_cast<int>(terrain_edits.size()))), 2);
+}
+
+void VoxelGenerator::dig_sphere(const Vector3 &center, float radius, float strength) {
+	// Digging removes terrain: positive delta decreases density (makes air)
+	// Since density -= edit_delta in get_terrain_density, negative delta increases final density
+	// So we use negative strength to increase density (remove solid)
+	modify_terrain(center, radius, -strength);
+}
+
+void VoxelGenerator::build_sphere(const Vector3 &center, float radius, float strength) {
+	// Building adds terrain: negative delta increases density (makes solid)
+	// Since density -= edit_delta in get_terrain_density, positive delta decreases final density
+	// So we use positive strength to decrease density (add solid)
+	modify_terrain(center, radius, strength);
+}
+
+void VoxelGenerator::clear_terrain_edits() {
+	{
+		std::lock_guard<std::mutex> lock(terrain_edits_mutex);
+		terrain_edits.clear();
+	}
+	log_message("Cleared all terrain edits", 1);
+	// Mark all chunks dirty to regenerate original terrain
+	mark_all_chunks_dirty();
+	clear_density_cache();
+}
+
+int VoxelGenerator::get_terrain_edit_count() const {
+	std::lock_guard<std::mutex> lock(terrain_edits_mutex);
+	return static_cast<int>(terrain_edits.size());
+}
+
+PackedFloat32Array VoxelGenerator::get_terrain_edits_data() const {
+	std::lock_guard<std::mutex> lock(terrain_edits_mutex);
+	// Format: [count, x1, y1, z1, delta1, x2, y2, z2, delta2, ...]
+	PackedFloat32Array data;
+	data.resize(1 + terrain_edits.size() * 4);
+
+	int idx = 0;
+	data[idx++] = static_cast<float>(terrain_edits.size());
+
+	for (const auto &pair : terrain_edits) {
+		uint64_t key = pair.first;
+		// Unpack key back to coordinates
+		int x = static_cast<int>((key >> 40) & 0xFFFFF) - 524288;
+		int y = static_cast<int>((key >> 20) & 0xFFFFF) - 524288;
+		int z = static_cast<int>(key & 0xFFFFF) - 524288;
+
+		data[idx++] = static_cast<float>(x);
+		data[idx++] = static_cast<float>(y);
+		data[idx++] = static_cast<float>(z);
+		data[idx++] = pair.second;
+	}
+
+	return data;
+}
+
+void VoxelGenerator::set_terrain_edits_data(const PackedFloat32Array &data) {
+	if (data.size() < 1) {
+		return;
+	}
+
+	int count = static_cast<int>(data[0]);
+	if (data.size() < 1 + count * 4) {
+		log_message("Invalid terrain edits data size", 1);
+		return;
+	}
+
+	{
+		std::lock_guard<std::mutex> lock(terrain_edits_mutex);
+		terrain_edits.clear();
+
+		int idx = 1;
+		for (int i = 0; i < count; ++i) {
+			int x = static_cast<int>(data[idx++]);
+			int y = static_cast<int>(data[idx++]);
+			int z = static_cast<int>(data[idx++]);
+			float delta = data[idx++];
+
+			uint64_t key = pack_edit_key(x, y, z);
+			terrain_edits[key] = delta;
+		}
+	}
+
+	log_message(String("Loaded {0} terrain edits").format(Array::make(count)), 1);
+	// Mark all chunks dirty to apply loaded edits
+	mark_all_chunks_dirty();
+	clear_density_cache();
+}
+
+// =====================================================================
+
 // ============================================================================
 // Async Generation Stubs (for WorkerThreadPool integration)
 // ============================================================================
@@ -1726,10 +2867,12 @@ void VoxelGenerator::_chunk_generation_task(void *userdata, uint32_t chunk_index
 }
 
 void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
-	// Per-chunk mesh generation for async operation
-	// This is a stub - full implementation would extract the per-chunk
-	// portion of generate() into this method
+	// Check for cancellation
+	if (cancel_requested.load()) {
+		return;
+	}
 
+	// Per-chunk mesh generation for async operation
 	Vector3i chunk_coord = index_to_chunk_coord(chunk_index);
 	if (chunk_coord.x < 0) {
 		return; // Invalid index
@@ -1737,12 +2880,309 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 
 	log_message(String("Async generating chunk ({0},{1},{2})").format(Array::make(chunk_coord.x, chunk_coord.y, chunk_coord.z)), 3);
 
-	// TODO: Implement per-chunk mesh generation
-	// This would involve:
-	// 1. Reading density values from cache (thread-safe via shared_lock)
-	// 2. Running marching cubes for this chunk's voxels
-	// 3. Building the mesh data (PackedVector3Array, etc.)
-	// 4. Thread-safe storage of the result for later application
+	// Use effective resolution (accounts for LOD)
+	int eff_resolution = get_effective_resolution();
+
+	// Calculate chunk bounds in voxel space
+	int chunk_voxels_x = chunk_size * eff_resolution;
+	int chunk_voxels_y = chunk_size * eff_resolution;
+	int chunk_voxels_z = chunk_size * eff_resolution;
+
+	// Start voxel indices for this chunk
+	int start_ix = chunk_coord.x * chunk_voxels_x;
+	int start_iy = chunk_coord.y * chunk_voxels_y;
+	int start_iz = chunk_coord.z * chunk_voxels_z;
+
+	// Physical extent of the entire world
+	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+	Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
+
+	// Voxel size adjusted for effective resolution
+	Vector3 eff_voxel_size = Vector3(1.0f, 1.0f, 1.0f) / static_cast<float>(std::max(1, eff_resolution));
+
+	// Prepare mesh data arrays
+	ChunkMeshData mesh_data;
+	mesh_data.chunk_index = chunk_index;
+	mesh_data.chunk_coord = chunk_coord;
+
+	// Generate mesh using marching cubes for this chunk
+	for (int local_ix = 0; local_ix < chunk_voxels_x && !cancel_requested.load(); ++local_ix) {
+		for (int local_iy = 0; local_iy < chunk_voxels_y; ++local_iy) {
+			for (int local_iz = 0; local_iz < chunk_voxels_z; ++local_iz) {
+				int ix = start_ix + local_ix;
+				int iy = start_iy + local_iy;
+				int iz = start_iz + local_iz;
+
+				// Calculate the center position of the voxel
+				Vector3 center;
+				center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
+				center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
+				center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
+
+				// Create marching cube vertices
+				Vector<Vector3> cube_vertices = create_cube_vertices(center);
+				std::vector<float> cube_values = get_cube_values_cached(ix, iy, iz);
+
+				int lookup_index = get_lookup_index(cube_values, cutoff);
+				const auto &marching_triangles = Constants::get_marching_triangles();
+
+				if (lookup_index >= marching_triangles.size()) {
+					continue;
+				}
+
+				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
+
+				// Calculate color based on position or LOD visualization
+				int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
+				int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
+				int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
+				Color color;
+				if (show_lod_colors) {
+					color = get_lod_color(lod_level);
+				} else if (biome_generator.is_valid()) {
+					int biome_index = biome_generator->get_biome_index_at(center.x, center.z);
+					color = get_biome_debug_color(biome_index);
+				} else {
+					color = Color(
+							(center.x + total_voxels_x * 0.5f) / (float)total_voxels_x,
+							(center.y + total_voxels_y * 0.5f) / (float)total_voxels_y,
+							(center.z + total_voxels_z * 0.5f) / (float)total_voxels_z);
+				}
+
+				// Process triangles
+				for (size_t index = 0; index < triangles.size(); index += 3) {
+					int point_1 = triangles[index];
+					if (point_1 == -1)
+						continue;
+					int point_2 = triangles[index + 1];
+					if (point_2 == -1)
+						continue;
+					int point_3 = triangles[index + 2];
+					if (point_3 == -1)
+						continue;
+
+					int a0 = Constants::cornerIndexAFromEdge[point_1];
+					int b0 = Constants::cornerIndexBFromEdge[point_1];
+					int a1 = Constants::cornerIndexAFromEdge[point_2];
+					int b1 = Constants::cornerIndexBFromEdge[point_2];
+					int a2 = Constants::cornerIndexAFromEdge[point_3];
+					int b2 = Constants::cornerIndexBFromEdge[point_3];
+
+					Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
+					Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
+					Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
+
+					Vector3 vector_a = vertex3 - vertex1;
+					Vector3 vector_b = vertex2 - vertex1;
+					Vector3 normal = vector_a.cross(vector_b).normalized();
+
+					// Add vertices to mesh data
+					mesh_data.vertices.push_back(vertex1);
+					mesh_data.vertices.push_back(vertex2);
+					mesh_data.vertices.push_back(vertex3);
+
+					mesh_data.normals.push_back(normal);
+					mesh_data.normals.push_back(normal);
+					mesh_data.normals.push_back(normal);
+
+					mesh_data.colors.push_back(color);
+					mesh_data.colors.push_back(color);
+					mesh_data.colors.push_back(color);
+				}
+			}
+		}
+	}
+
+	// Queue the mesh data for main thread application
+	if (!cancel_requested.load()) {
+		queue_mesh_data(mesh_data);
+	}
+
+	// Mark chunk as clean after generation
+	{
+		std::lock_guard<std::mutex> lock(chunks_mutex);
+		if (chunk_index >= 0 && chunk_index < static_cast<int>(chunk_dirty_flags.size())) {
+			chunk_dirty_flags[chunk_index] = false;
+		}
+	}
+}
+
+// ============================================================================
+// Synchronous Per-Chunk Mesh Generation (for main thread use)
+// ============================================================================
+
+void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod) {
+	// Synchronous per-chunk mesh generation for use on main thread
+	// Similar to generate_chunk_mesh_internal but applies mesh directly instead of queuing
+	Vector3i chunk_coord = index_to_chunk_coord(chunk_index);
+	if (chunk_coord.x < 0) {
+		return; // Invalid index
+	}
+
+	// Determine LOD level for this chunk
+	int chunk_lod;
+	if (override_lod >= 0) {
+		// Use explicitly provided LOD
+		chunk_lod = std::min(override_lod, 7);
+	} else if (enable_distance_lod) {
+		// Calculate LOD based on distance from reference position
+		chunk_lod = calculate_chunk_lod(chunk_index);
+	} else {
+		// Use global LOD level
+		chunk_lod = lod_level;
+	}
+
+	// Update chunk's current LOD level
+	{
+		std::lock_guard<std::mutex> lock(chunks_mutex);
+		if (chunk_index >= 0 && chunk_index < static_cast<int>(chunks.size())) {
+			Chunk *chunk = chunks[chunk_index];
+			if (chunk && is_instance_valid(chunk)) {
+				chunk->set_current_lod_level(chunk_lod);
+			}
+		}
+	}
+
+	log_message(String("Sync generating chunk ({0},{1},{2}) with LOD {3}").format(Array::make(chunk_coord.x, chunk_coord.y, chunk_coord.z, chunk_lod)), 3);
+
+	// Use effective resolution for this chunk's LOD level
+	int eff_resolution = get_effective_resolution_for_lod(chunk_lod);
+
+	// Calculate chunk bounds in voxel space (for this chunk's LOD)
+	int chunk_voxels_x = chunk_size * eff_resolution;
+	int chunk_voxels_y = chunk_size * eff_resolution;
+	int chunk_voxels_z = chunk_size * eff_resolution;
+
+	// Physical extent of the entire world
+	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+	Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
+
+	// Voxel size adjusted for this chunk's effective resolution
+	Vector3 eff_voxel_size = Vector3(1.0f, 1.0f, 1.0f) / static_cast<float>(std::max(1, eff_resolution));
+
+	// Check if we can use fast direct cache lookup (when chunk resolution matches cache resolution)
+	bool use_fast_path = (eff_resolution == cache_resolution);
+
+	// Prepare mesh data arrays
+	PackedVector3Array vertices;
+	PackedVector3Array normals;
+	PackedColorArray colors;
+
+	// Generate mesh using marching cubes for this chunk
+	for (int local_ix = 0; local_ix < chunk_voxels_x; ++local_ix) {
+		for (int local_iy = 0; local_iy < chunk_voxels_y; ++local_iy) {
+			for (int local_iz = 0; local_iz < chunk_voxels_z; ++local_iz) {
+				// Calculate the center position of the voxel (world-space coordinates)
+				Vector3 center;
+				center.x = -physical_extent.x * 0.5f + (chunk_coord.x * chunk_size + (local_ix + 0.5f) / static_cast<float>(eff_resolution));
+				center.y = -physical_extent.y * 0.5f + (chunk_coord.y * chunk_size + (local_iy + 0.5f) / static_cast<float>(eff_resolution));
+				center.z = -physical_extent.z * 0.5f + (chunk_coord.z * chunk_size + (local_iz + 0.5f) / static_cast<float>(eff_resolution));
+
+				// Create marching cube vertices using chunk's voxel size
+				Vector3 half_size = eff_voxel_size * 0.5f;
+				Vector<Vector3> cube_vertices = Vector<Vector3>{
+					Vector3(center.x - half_size.x, center.y - half_size.y, center.z - half_size.z),
+					Vector3(center.x + half_size.x, center.y - half_size.y, center.z - half_size.z),
+					Vector3(center.x + half_size.x, center.y + half_size.y, center.z - half_size.z),
+					Vector3(center.x - half_size.x, center.y + half_size.y, center.z - half_size.z),
+					Vector3(center.x - half_size.x, center.y - half_size.y, center.z + half_size.z),
+					Vector3(center.x + half_size.x, center.y - half_size.y, center.z + half_size.z),
+					Vector3(center.x + half_size.x, center.y + half_size.y, center.z + half_size.z),
+					Vector3(center.x - half_size.x, center.y + half_size.y, center.z + half_size.z),
+				};
+
+				// Sample density values - use fast path when resolution matches cache
+				std::vector<float> cube_values;
+				if (use_fast_path) {
+					// Fast path: direct cache lookup (no interpolation needed)
+					int ix = chunk_coord.x * chunk_size * eff_resolution + local_ix;
+					int iy = chunk_coord.y * chunk_size * eff_resolution + local_iy;
+					int iz = chunk_coord.z * chunk_size * eff_resolution + local_iz;
+					cube_values = get_cube_values_cached(ix, iy, iz);
+				} else {
+					// Slow path: trilinear interpolation for mismatched resolutions
+					cube_values = get_cube_values_at_world_position(center, half_size);
+				}
+
+				int lookup_index = get_lookup_index(cube_values, cutoff);
+				const auto &marching_triangles = Constants::get_marching_triangles();
+
+				if (lookup_index >= marching_triangles.size()) {
+					continue;
+				}
+
+				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
+
+				// Calculate color based on biome or world position for visualization
+				Color color;
+				if (show_lod_colors) {
+					color = get_lod_color(chunk_lod);
+				} else if (biome_generator.is_valid()) {
+					int biome_index = biome_generator->get_biome_index_at(center.x, center.z);
+					color = get_biome_debug_color(biome_index);
+				} else {
+					// Normalize world position to 0-1 range for color fallback
+					color = Color(
+							(center.x + physical_extent.x * 0.5f) / physical_extent.x,
+							(center.y + physical_extent.y * 0.5f) / physical_extent.y,
+							(center.z + physical_extent.z * 0.5f) / physical_extent.z);
+				}
+
+				// Process triangles
+				for (size_t index = 0; index < triangles.size(); index += 3) {
+					int point_1 = triangles[index];
+					if (point_1 == -1)
+						continue;
+					int point_2 = triangles[index + 1];
+					if (point_2 == -1)
+						continue;
+					int point_3 = triangles[index + 2];
+					if (point_3 == -1)
+						continue;
+
+					int a0 = Constants::cornerIndexAFromEdge[point_1];
+					int b0 = Constants::cornerIndexBFromEdge[point_1];
+					int a1 = Constants::cornerIndexAFromEdge[point_2];
+					int b1 = Constants::cornerIndexBFromEdge[point_2];
+					int a2 = Constants::cornerIndexAFromEdge[point_3];
+					int b2 = Constants::cornerIndexBFromEdge[point_3];
+
+					Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
+					Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
+					Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
+
+					Vector3 vector_a = vertex3 - vertex1;
+					Vector3 vector_b = vertex2 - vertex1;
+					Vector3 normal = vector_a.cross(vector_b).normalized();
+
+					// Add vertices to mesh data
+					vertices.push_back(vertex1);
+					vertices.push_back(vertex2);
+					vertices.push_back(vertex3);
+
+					normals.push_back(normal);
+					normals.push_back(normal);
+					normals.push_back(normal);
+
+					colors.push_back(color);
+					colors.push_back(color);
+					colors.push_back(color);
+				}
+			}
+		}
+	}
+
+	// Apply mesh directly to chunk (main thread only)
+	if (chunk_index >= 0 && chunk_index < static_cast<int>(chunks.size())) {
+		Chunk *chunk = chunks[chunk_index];
+		if (chunk && is_instance_valid(chunk)) {
+			chunk->apply_mesh_data(vertices, normals, colors);
+		}
+	}
 
 	// Mark chunk as clean after generation
 	{
@@ -1843,6 +3283,236 @@ bool VoxelGenerator::heightmap_needs_rebuild() const {
 	return heightmap_cache.empty() ||
 			heightmap_size_x != expected_x ||
 			heightmap_size_z != expected_z;
+}
+
+// ============================================================================
+// Async Generation Property Getters/Setters
+// ============================================================================
+
+void VoxelGenerator::set_max_chunks_per_frame(int value) {
+	max_chunks_per_frame = CLAMP(value, 1, 32);
+	log_message(String("Max chunks per frame set to: {0}").format(Array::make(max_chunks_per_frame)), 2);
+}
+
+int VoxelGenerator::get_max_chunks_per_frame() const {
+	return max_chunks_per_frame;
+}
+
+void VoxelGenerator::set_signal_every_n_chunks(int value) {
+	signal_every_n_chunks = CLAMP(value, 1, 64);
+	log_message(String("Signal every N chunks set to: {0}").format(Array::make(signal_every_n_chunks)), 2);
+}
+
+int VoxelGenerator::get_signal_every_n_chunks() const {
+	return signal_every_n_chunks;
+}
+
+bool VoxelGenerator::is_generating() const {
+	return generation_in_progress.load();
+}
+
+// ============================================================================
+// Async Generation Implementation
+// ============================================================================
+
+void VoxelGenerator::generate_async() {
+	log_message("generate_async() called", 2);
+
+	// If already generating, cancel and restart
+	if (generation_in_progress.load()) {
+		log_message("Async generation already in progress, canceling and restarting", 1);
+		cancel_generation();
+	}
+
+	// Mark generation as in progress
+	generation_in_progress.store(true);
+	cancel_requested.store(false);
+	chunks_completed.store(0);
+	last_signal_count = 0;
+
+	// Calculate total chunks
+	total_chunks = world_size.x * world_size.y * world_size.z;
+	if (total_chunks == 0) {
+		log_message("No chunks to generate (world_size is zero)", 1);
+		generation_in_progress.store(false);
+		emit_signal("generation_complete");
+		return;
+	}
+
+	log_message(String("Starting async generation of {0} chunks").format(Array::make(total_chunks)), 2);
+
+	// Ensure density cache is built before starting worker tasks
+	if (!terrain_noise.is_valid()) {
+		terrain_noise.instantiate();
+		terrain_noise->set_period(50.0f);
+		terrain_noise->set_octaves(4);
+		terrain_noise->set_persistence(0.5f);
+		terrain_noise->set_lacunarity(2.0f);
+		terrain_noise->set_seed(seeder);
+	}
+	if (!detail_noise.is_valid()) {
+		detail_noise.instantiate();
+		detail_noise->set_period(10.0f);
+		detail_noise->set_octaves(3);
+		detail_noise->set_persistence(0.6f);
+		detail_noise->set_lacunarity(2.5f);
+		detail_noise->set_seed(seeder + 1);
+	}
+	
+	// Ensure vertical extent matches biome heights before building caches
+	ensure_vertical_extent_for_biomes();
+	recalculate_voxel_scale();
+
+	// Ensure we have chunks to attach meshes/features to
+	if (chunks.empty()) {
+		create_chunks();
+	}
+
+	// Bake procedural features ahead of density sampling
+	prepare_procedural_features();
+
+	if (generation_mode == VOXELS_FIRST) {
+		build_density_cache();
+	} else {
+		build_heightmap_cache();
+		build_density_cache();
+	}
+
+	// Clear any old mesh data
+	clear_pending_meshes();
+	for (Chunk *chunk : chunks) {
+		if (chunk) {
+			chunk->clear_mesh();
+		}
+	}
+
+	// Start worker thread pool tasks
+	async_task_group = WorkerThreadPool::get_singleton()->add_native_group_task(
+			&VoxelGenerator::_chunk_generation_task,
+			this,
+			total_chunks,
+			-1, // Use default thread distribution
+			true, // High priority
+			String("VoxelChunkGeneration"));
+
+	// Enable _process to poll for completed meshes
+	set_process(true);
+
+	log_message(String("Async generation started with task group {0}").format(Array::make(static_cast<int64_t>(async_task_group))), 2);
+}
+
+void VoxelGenerator::cancel_generation() {
+	if (!generation_in_progress.load()) {
+		return;
+	}
+
+	log_message("Canceling async generation", 1);
+	cancel_requested.store(true);
+
+	// Wait for task group to complete
+	if (async_task_group != 0) {
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(async_task_group);
+		async_task_group = 0;
+	}
+
+	// Clear pending mesh queue
+	clear_pending_meshes();
+
+	// Reset state
+	generation_in_progress.store(false);
+	cancel_requested.store(false);
+	chunks_completed.store(0);
+	total_chunks = 0;
+
+	// Disable _process
+	set_process(false);
+
+	log_message("Async generation canceled", 1);
+}
+
+void VoxelGenerator::_process(double delta) {
+	// Only process if we're doing async generation
+	if (!generation_in_progress.load()) {
+		set_process(false);
+		return;
+	}
+
+	// Apply pending meshes (up to max_chunks_per_frame)
+	apply_pending_meshes();
+
+	// Check if all tasks completed
+	if (async_task_group != 0) {
+		bool tasks_done = WorkerThreadPool::get_singleton()->is_group_task_completed(async_task_group);
+		if (tasks_done) {
+			// Wait for final completion to clean up
+			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(async_task_group);
+			async_task_group = 0;
+
+			// Apply any remaining meshes
+			while (!pending_mesh_queue.empty()) {
+				apply_pending_meshes();
+			}
+
+			// Clear density cache
+			clear_density_cache();
+
+			// Mark complete
+			generation_in_progress.store(false);
+			set_process(false);
+
+			emit_signal("generation_complete");
+			log_message(String("Async generation complete: {0} chunks").format(Array::make(chunks_completed.load())), 1);
+		}
+	}
+}
+
+void VoxelGenerator::queue_mesh_data(const ChunkMeshData &mesh_data) {
+	std::lock_guard<std::mutex> lock(mesh_queue_mutex);
+	pending_mesh_queue.push(mesh_data);
+}
+
+void VoxelGenerator::apply_pending_meshes() {
+	int applied = 0;
+
+	while (applied < max_chunks_per_frame) {
+		ChunkMeshData mesh_data;
+		{
+			std::lock_guard<std::mutex> lock(mesh_queue_mutex);
+			if (pending_mesh_queue.empty()) {
+				break;
+			}
+			mesh_data = std::move(pending_mesh_queue.front());
+			pending_mesh_queue.pop();
+		}
+
+		// Apply mesh to chunk (main thread only)
+		if (mesh_data.chunk_index >= 0 && mesh_data.chunk_index < static_cast<int>(chunks.size())) {
+			Chunk *chunk = chunks[mesh_data.chunk_index];
+			if (chunk && is_instance_valid(chunk)) {
+				chunk->apply_mesh_data(mesh_data.vertices, mesh_data.normals, mesh_data.colors);
+
+				// Emit chunk_ready signal
+				emit_signal("chunk_ready", mesh_data.chunk_index, mesh_data.chunk_coord);
+
+				int completed = chunks_completed.fetch_add(1) + 1;
+
+				// Emit progress signal every N chunks
+				if (completed - last_signal_count >= signal_every_n_chunks) {
+					emit_signal("generation_progress", completed, total_chunks);
+					last_signal_count = completed;
+				}
+			}
+		}
+
+		applied++;
+	}
+}
+
+void VoxelGenerator::clear_pending_meshes() {
+	std::lock_guard<std::mutex> lock(mesh_queue_mutex);
+	while (!pending_mesh_queue.empty()) {
+		pending_mesh_queue.pop();
+	}
 }
 
 } // namespace voxel_engine

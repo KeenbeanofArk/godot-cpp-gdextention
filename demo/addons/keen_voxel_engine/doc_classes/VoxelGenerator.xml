@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="VoxelGenerator" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Main voxel terrain generator using marching cubes algorithm.
+	</brief_description>
+	<description>
+		VoxelGenerator is the primary class for procedural voxel terrain generation. It uses the marching cubes algorithm to create smooth terrain meshes from density fields.
+		
+		Features include:
+		- Per-chunk mesh generation for efficient rendering
+		- Distance-based LOD system
+		- Heightmap-first optimization mode
+		- Async generation with progress signals
+		- Dirty chunk system for incremental updates
+	</description>
+	<tutorials>
+		<link title="Voxel Engine Documentation">https://keenvoxelengine.org/docs</link>
+	</tutorials>
+	<methods>
+		<method name="generate">
+			<return type="void" />
+			<description>
+				Generates the entire voxel terrain synchronously. This will block the main thread until complete.
+				For large worlds, consider using [method generate_async] instead.
+			</description>
+		</method>
+		<method name="generate_async">
+			<return type="void" />
+			<description>
+				Generates the voxel terrain asynchronously using worker threads. Emits [signal generation_progress] periodically and [signal generation_complete] when finished.
+			</description>
+		</method>
+		<method name="cancel_generation">
+			<return type="void" />
+			<description>
+				Cancels any in-progress async generation. Safe to call even if no generation is running.
+			</description>
+		</method>
+		<method name="is_generating">
+			<return type="bool" />
+			<description>
+				Returns [code]true[/code] if async generation is currently in progress.
+			</description>
+		</method>
+		<method name="calculate_chunk_lod">
+			<return type="int" />
+			<param index="0" name="chunk_index" type="int" />
+			<description>
+				Calculates the appropriate LOD level for a chunk based on its distance from [member lod_reference_position].
+				Returns 0 (highest detail) to 7 (lowest detail).
+			</description>
+		</method>
+		<method name="get_chunk_center_world_position">
+			<return type="Vector3" />
+			<param index="0" name="chunk_index" type="int" />
+			<description>
+				Returns the world-space center position of the chunk at the given index.
+			</description>
+		</method>
+		<method name="update_chunks_lod">
+			<return type="int" />
+			<description>
+				Recalculates LOD levels for all chunks based on distance from [member lod_reference_position].
+				Returns the number of chunks that need regeneration due to LOD changes.
+				Call [method regenerate_dirty_chunks] after this to apply the changes.
+			</description>
+		</method>
+		<method name="mark_chunk_dirty">
+			<return type="void" />
+			<param index="0" name="chunk_coord" type="Vector3i" />
+			<description>
+				Marks a chunk as needing regeneration. Use with [method regenerate_dirty_chunks] for incremental updates.
+			</description>
+		</method>
+		<method name="regenerate_dirty_chunks">
+			<return type="void" />
+			<description>
+				Regenerates all chunks that have been marked dirty via [method mark_chunk_dirty] or [method update_chunks_lod].
+			</description>
+		</method>
+		<method name="reset_lod_distances_to_default">
+			<return type="void" />
+			<description>
+				Resets [member lod_distances] to default values calculated from [member chunk_size] and [member lod_distance_multiplier].
+			</description>
+		</method>
+		<method name="debug_print_state">
+			<return type="void" />
+			<description>
+				Prints comprehensive debug information about the generator's current state to the output console.
+            </description>
+        </method>
+    </methods>
+    <members>
+        <member name="world_size" type="Vector3i" setter="set_world_size" getter="get_world_size" default="Vector3i(1, 1, 1)">
+            The size of the world in chunks. Each axis can be 1-100 chunks.
+        </member>
+        <member name="chunk_size" type="int" setter="set_chunk_size" getter="get_chunk_size" default="8">
+            The size of each chunk in voxels per axis. Valid range: 8-64.
+        </member>
+        <member name="resolution" type="int" setter="set_resolution" getter="get_resolution" default="1">
+            The number of marching cubes samples per voxel. Higher values create smoother terrain but increase generation time exponentially.
+        </member>
+        <member name="generation_mode" type="int" setter="set_generation_mode" getter="get_generation_mode" default="0" enum="VoxelGenerator.GenerationMode">
+            The generation algorithm to use:
+            - [code]0[/code] (VOXELS_FIRST): Full 3D marching cubes. Most accurate but slower.
+            - [code]1[/code] (HEIGHTMAP_FIRST): Optimized for terrain. Only processes voxels near the surface.
+        </member>
+        <member name="surface_band" type="float" setter="set_surface_band" getter="get_surface_band" default="4.0">
+            In HEIGHTMAP_FIRST mode, the vertical distance above and below the terrain surface to process. Larger values handle steeper terrain but are slower.
+        </member>
+        <member name="lod_level" type="int" setter="set_lod_level" getter="get_lod_level" default="0">
+            Global LOD level (0-7). Higher values reduce detail. LOD N uses resolution/(2^N) effective samples.
+        </member>
+        <member name="enable_distance_lod" type="bool" setter="set_enable_distance_lod" getter="get_enable_distance_lod" default="false">
+			When enabled, each chunk's LOD is calculated based on distance from [member lod_reference_position].
+		</member>
+		<member name="lod_reference_position" type="Vector3" setter="set_lod_reference_position" getter="get_lod_reference_position" default="Vector3(0, 0, 0)">
+			The position used for distance-based LOD calculations. Typically set to the camera or player position.
+		</member>
+		<member name="lod_distances" type="PackedFloat64Array" setter="set_lod_distances" getter="get_lod_distances">
+			Distance thresholds for LOD levels 0-7. Chunks closer than [code]lod_distances[N][/code] use LOD N or lower.
+		</member>
+		<member name="lod_distance_multiplier" type="float" setter="set_lod_distance_multiplier" getter="get_lod_distance_multiplier" default="2.0">
+			Multiplier for default LOD distance calculations. Higher values extend detail further from the reference position.
+		</member>
+		<member name="show_lod_colors" type="bool" setter="set_show_lod_colors" getter="get_show_lod_colors" default="false">
+			When enabled, chunks are colored by their LOD level (green=LOD 0, red=LOD 7) for debugging.
+		</member>
+		<member name="terrain_noise" type="NoiseGenerator" setter="set_terrain_noise" getter="get_terrain_noise">
+			The noise generator used for base terrain height. Uses 2D noise sampling.
+		</member>
+		<member name="detail_noise" type="NoiseGenerator" setter="set_detail_noise" getter="get_detail_noise">
+			The noise generator used for 3D rocky detail. Combined with terrain noise based on [member rock_influence].
+		</member>
+		<member name="terrain_height" type="float" setter="set_terrain_height" getter="get_terrain_height" default="4.0">
+			Base terrain height offset in world units.
+		</member>
+		<member name="terrain_amplitude" type="float" setter="set_terrain_amplitude" getter="get_terrain_amplitude" default="8.0">
+			Maximum height variation from noise. Terrain ranges from [code]terrain_height - amplitude[/code] to [code]terrain_height + amplitude[/code].
+		</member>
+		<member name="rock_influence" type="float" setter="set_rock_influence" getter="get_rock_influence" default="0.3">
+			How much the 3D detail noise affects the terrain (0.0-1.0). Higher values create more rocky, overhanging terrain.
+		</member>
+		<member name="cutoff" type="float" setter="set_cutoff" getter="get_cutoff" default="0.0">
+			The density threshold for the marching cubes algorithm. Values below cutoff are solid, above are air.
+		</member>
+		<member name="auto_generate" type="bool" setter="set_auto_generate" getter="get_auto_generate" default="true">
+			When enabled, terrain regenerates automatically when properties change.
+		</member>
+		<member name="debug_mode" type="bool" setter="set_debug_mode" getter="get_debug_mode" default="true">
+			Enables debug logging output.
+		</member>
+		<member name="debug_verbosity" type="int" setter="set_debug_verbosity" getter="get_debug_verbosity" default="1">
+			Debug output detail level (0-3). Higher values show more detailed logging.
+		</member>
+	</members>
+	<signals>
+		<signal name="chunk_ready">
+			<param index="0" name="chunk_index" type="int" />
+			<param index="1" name="chunk_coord" type="Vector3i" />
+			<description>
+				Emitted when a chunk's mesh has been applied during async generation.
+            </description>
+        </signal>
+        <signal name="generation_progress">
+            <param index="0" name="completed" type="int" />
+            <param index="1" name="total" type="int" />
+            <description>
+                Emitted periodically during async generation to report progress.
+            </description>
+        </signal>
+        <signal name="generation_complete">
+            <description>
+                Emitted when async generation has finished.
+            </description>
+        </signal>
+    </signals>
+    <constants>
+    </constants>
+</class>

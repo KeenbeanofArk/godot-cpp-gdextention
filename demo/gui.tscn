@@ -1,6 +1,25 @@
-[gd_scene load_steps=3 format=3 uid="uid://deg7mq7jukfdi"]
+[gd_scene load_steps=4 format=3 uid="uid://deg7mq7jukfdi"]
 
 [ext_resource type="Script" uid="uid://bauyh07bob54l" path="res://gui.gd" id="1_80edf"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6lon5"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 5.0
+bg_color = Color(0.15820366, 0.6758806, 0.7166343, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+expand_margin_left = 4.0
+expand_margin_top = 4.0
+expand_margin_right = 4.0
+expand_margin_bottom = 4.0
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_80edf"]
 bg_color = Color(0.1511538, 0.3562082, 0.60453117, 1)
@@ -26,188 +45,235 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="DebugContainer" type="VBoxContainer" parent="DebugDisplay"]
+[node name="DebugPanel" type="Panel" parent="DebugDisplay"]
 layout_mode = 1
-offset_left = 20.0
-offset_top = 20.0
-offset_right = 352.0
-offset_bottom = 744.0
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -450.0
+offset_right = 300.0
+offset_bottom = 450.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_6lon5")
 
-[node name="Title" type="Label" parent="DebugDisplay/DebugContainer"]
+[node name="DebugContainer" type="VBoxContainer" parent="DebugDisplay/DebugPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "VoxelGenerator Debug"
 horizontal_alignment = 1
 
-[node name="DebugMode" type="CheckButton" parent="DebugDisplay/DebugContainer"]
+[node name="DebugMode" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Debug Mode"
 
-[node name="VisualizeNoise" type="CheckButton" parent="DebugDisplay/DebugContainer"]
+[node name="VisualizeNoise" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Visualize Noise"
 
-[node name="AutoGenerate" type="CheckButton" parent="DebugDisplay/DebugContainer"]
+[node name="AutoGenerate" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Auto Regenerate"
 
-[node name="ShowVoxelGrids" type="CheckButton" parent="DebugDisplay/DebugContainer"]
+[node name="ShowVoxelGrids" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Show Voxel Grids"
 
-[node name="ShowChunkGrids" type="CheckButton" parent="DebugDisplay/DebugContainer"]
+[node name="ShowChunkGrids" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Show Chunk Grids"
 
-[node name="ShowCenters" type="CheckButton" parent="DebugDisplay/DebugContainer"]
+[node name="ShowCenters" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Show Centers	"
 
-[node name="SliderGrid" type="GridContainer" parent="DebugDisplay/DebugContainer"]
+[node name="SliderGrid" type="GridContainer" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 columns = 2
 
-[node name="VerbosityLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="VerbosityLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Verbosity: 0"
 
-[node name="VerbositySlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="VerbositySlider" type="HSlider" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
 tick_count = 4
 
-[node name="ChunkSizeLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="ChunkSizeLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Chunk Size: 8"
 
-[node name="ChunkSizeSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="ChunkSizeSlider" type="HSlider" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
 tick_count = 2
 
-[node name="ResolutionLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="ResolutionLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Resolution: 1"
 
-[node name="ResolutionSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="ResolutionSpinner" type="SpinBox" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+min_value = 1.0
+max_value = 10.0
+value = 1.0
 
-[node name="SurfaceBandLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="SurfaceBandLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Surface Band: 1"
 
-[node name="SurfaceBandSlider" type="HSlider" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="SurfaceBandSlider" type="HSlider" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
 tick_count = 40
 
-[node name="LodLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="LodLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "LOD: 1"
 
-[node name="LodSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="LodSpinner" type="SpinBox" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
 prefix = "Level"
 
-[node name="WorldSizeXLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="LodDistanceMultLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "LOD Distance Multiplier: 1"
+
+[node name="LodDistanceMultSpinner" type="SpinBox" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 10.0
+step = 0.1
+value = 1.0
+
+[node name="WorldSizeXLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "World X: 1"
 
-[node name="WorldSizeXSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="WorldSizeXSpinner" type="SpinBox" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+min_value = 1.0
+value = 1.0
 prefix = "x="
 
-[node name="WorldSizeYLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="WorldSizeYLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "World Y: 1"
 
-[node name="WorldSizeYSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="WorldSizeYSpinner" type="SpinBox" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+min_value = 1.0
+value = 1.0
 prefix = "y="
 
-[node name="WorldSizeZLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="WorldSizeZLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "World Z: 1"
 
-[node name="WorldSizeZSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="WorldSizeZSpinner" type="SpinBox" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+min_value = 1.0
+value = 1.0
 prefix = "z="
 
-[node name="TerrainHeightLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="TerrainHeightLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Terrain Height: 1"
 
-[node name="TerrainHeightSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="TerrainHeightSpinner" type="SpinBox" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+min_value = -100.0
+step = 0.5
 custom_arrow_step = 0.5
 
-[node name="TerrainAmplitudeLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="TerrainAmplitudeLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Terrain Amplitude: 1"
 
-[node name="TerrainAmplitudeSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="TerrainAmplitudeSpinner" type="SpinBox" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+step = 0.5
 
-[node name="RockInfluenceLabel" type="Label" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="RockInfluenceLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Rock Influence: 1"
 
-[node name="RockInfluenceSpinner" type="SpinBox" parent="DebugDisplay/DebugContainer/SliderGrid"]
+[node name="RockInfluenceSpinner" type="SpinBox" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+max_value = 1.0
+step = 0.1
+rounded = true
 
-[node name="GenerateButton" type="Button" parent="DebugDisplay/DebugContainer"]
+[node name="GenerateButton" type="Button" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Regenerate"
 
-[node name="PrintStateButton" type="Button" parent="DebugDisplay/DebugContainer"]
+[node name="PrintStateButton" type="Button" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Print Debug State"

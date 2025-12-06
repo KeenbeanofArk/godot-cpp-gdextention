@@ -1,44 +1,46 @@
 extends CanvasLayer
 class_name gui
 
-@onready var fps_counter: Label = $FPSControl/FPS/FpsCounter
 @onready var debug_display: Control = $DebugDisplay
-@onready var debug_container: VBoxContainer = $DebugDisplay/DebugContainer
-@onready var title: Label = $DebugDisplay/DebugContainer/Title
-@onready var debug_mode: CheckButton = $DebugDisplay/DebugContainer/DebugMode
-@onready var visualize_noise: CheckButton = $DebugDisplay/DebugContainer/VisualizeNoise
-@onready var auto_generate: CheckButton = $DebugDisplay/DebugContainer/AutoGenerate
-@onready var show_voxel_grids: CheckButton = $DebugDisplay/DebugContainer/ShowVoxelGrids
-@onready var show_chunk_grids: CheckButton = $DebugDisplay/DebugContainer/ShowChunkGrids
-@onready var show_centers: CheckButton = $DebugDisplay/DebugContainer/ShowCenters
-@onready var slider_grid: GridContainer = $DebugDisplay/DebugContainer/SliderGrid
-@onready var verbosity_label: Label = $DebugDisplay/DebugContainer/SliderGrid/VerbosityLabel
-@onready var verbosity_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/VerbositySlider
-@onready var chunk_size_label: Label = $DebugDisplay/DebugContainer/SliderGrid/ChunkSizeLabel
-@onready var chunk_size_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/ChunkSizeSlider
-@onready var resolution_label: Label = $DebugDisplay/DebugContainer/SliderGrid/ResolutionLabel
-@onready var resolution_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/ResolutionSpinner
-@onready var surface_band_label: Label = $DebugDisplay/DebugContainer/SliderGrid/SurfaceBandLabel
-@onready var surface_band_slider: HSlider = $DebugDisplay/DebugContainer/SliderGrid/SurfaceBandSlider
-@onready var lod_label: Label = $DebugDisplay/DebugContainer/SliderGrid/LodLabel
-@onready var lod_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/LodSpinner
-@onready var world_size_x_label: Label = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeXLabel
-@onready var world_size_x_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeXSpinner
-@onready var world_size_y_label: Label = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeYLabel
-@onready var world_size_y_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeYSpinner
-@onready var world_size_z_label: Label = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeZLabel
-@onready var world_size_z_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/WorldSizeZSpinner
-@onready var terrain_height_label: Label = $DebugDisplay/DebugContainer/SliderGrid/TerrainHeightLabel
-@onready var terrain_height_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/TerrainHeightSpinner
-@onready var terrain_amplitude_label: Label = $DebugDisplay/DebugContainer/SliderGrid/TerrainAmplitudeLabel
-@onready var terrain_amplitude_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/TerrainAmplitudeSpinner
-@onready var rock_influence_label: Label = $DebugDisplay/DebugContainer/SliderGrid/RockInfluenceLabel
-@onready var rock_influence_spinner: SpinBox = $DebugDisplay/DebugContainer/SliderGrid/RockInfluenceSpinner
-@onready var generate_button: Button = $DebugDisplay/DebugContainer/GenerateButton
-@onready var print_state_button: Button = $DebugDisplay/DebugContainer/PrintStateButton
+@onready var debug_panel: Panel = $DebugDisplay/DebugPanel
+@onready var debug_container: VBoxContainer = $DebugDisplay/DebugPanel/DebugContainer
+@onready var title: Label = $DebugDisplay/DebugPanel/DebugContainer/Title
+@onready var debug_mode: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/DebugMode
+@onready var visualize_noise: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/VisualizeNoise
+@onready var auto_generate: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/AutoGenerate
+@onready var show_voxel_grids: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/ShowVoxelGrids
+@onready var show_chunk_grids: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/ShowChunkGrids
+@onready var show_centers: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/ShowCenters
+@onready var slider_grid: GridContainer = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid
+@onready var verbosity_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/VerbosityLabel
+@onready var verbosity_slider: HSlider = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/VerbositySlider
+@onready var chunk_size_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/ChunkSizeLabel
+@onready var chunk_size_slider: HSlider = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/ChunkSizeSlider
+@onready var resolution_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/ResolutionLabel
+@onready var resolution_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/ResolutionSpinner
+@onready var surface_band_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/SurfaceBandLabel
+@onready var surface_band_slider: HSlider = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/SurfaceBandSlider
+@onready var lod_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/LodLabel
+@onready var lod_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/LodSpinner
+@onready var lod_distance_mult_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/LodDistanceMultLabel
+@onready var lod_distance_mult_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/LodDistanceMultSpinner
+@onready var world_size_x_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/WorldSizeXLabel
+@onready var world_size_x_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/WorldSizeXSpinner
+@onready var world_size_y_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/WorldSizeYLabel
+@onready var world_size_y_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/WorldSizeYSpinner
+@onready var world_size_z_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/WorldSizeZLabel
+@onready var world_size_z_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/WorldSizeZSpinner
+@onready var terrain_height_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/TerrainHeightLabel
+@onready var terrain_height_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/TerrainHeightSpinner
+@onready var terrain_amplitude_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/TerrainAmplitudeLabel
+@onready var terrain_amplitude_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/TerrainAmplitudeSpinner
+@onready var rock_influence_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/RockInfluenceLabel
+@onready var rock_influence_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/RockInfluenceSpinner
+@onready var generate_button: Button = $DebugDisplay/DebugPanel/DebugContainer/GenerateButton
+@onready var print_state_button: Button = $DebugDisplay/DebugPanel/DebugContainer/PrintStateButton
+@onready var fps_counter: Label = $FPSControl/FPS/FpsCounter
 
 var voxel_generator: VoxelGenerator
-var chunk: Chunk
 
 @export_category("Debug Settings")
 @export var debug_show: bool = false
@@ -46,12 +48,9 @@ var chunk: Chunk
 func _ready() -> void:
 	# Get references after node is in tree
 	voxel_generator = get_node_or_null("../Terrain/VoxelGenerator")
-	chunk = get_node_or_null("../Terrain/Chunk")
 	
 	if voxel_generator == null:
 		push_error("GUI: VoxelGenerator not found at ../Terrain/VoxelGenerator")
-	if chunk == null:
-		push_error("GUI: Chunk not found at ../Terrain/Chunk")
 	
 	debug_display.visible = debug_show
 	
@@ -64,10 +63,15 @@ func update_label(label: Label, prefix: String, value) -> void:
 	label.text = prefix + str(value)
 
 func create_debug_ui():
-	# Debug Container
-	#debug_container.anchor_left = 1.0
-	#debug_container.anchor_right = 1.0
-	#debug_container.size = Vector2(300, 400)
+	# Debug Container - centered on screen
+	debug_panel.anchor_left = 0.5
+	debug_panel.anchor_right = 0.5
+	debug_panel.anchor_top = 0.5
+	debug_panel.anchor_bottom = 0.5
+	debug_panel.offset_left = -300
+	debug_panel.offset_right = 300
+	debug_panel.offset_top = -450
+	debug_panel.offset_bottom = 450
 	
 	# Debug Title
 	title.text = "VoxelGenerator Debug"
@@ -162,7 +166,7 @@ func create_debug_ui():
 		
 		# LOD Spinner
 		update_label(lod_label, "LOD: ", voxel_generator.lod_level)
-		lod_spinner.min_value = 1
+		lod_spinner.min_value = 0
 		lod_spinner.max_value = 7
 		lod_spinner.step = 1
 		lod_spinner.value = voxel_generator.lod_level
@@ -170,6 +174,18 @@ func create_debug_ui():
 		lod_spinner.value_changed.connect(func(value):
 			voxel_generator.lod_level = int(value)
 			update_label(lod_label, "LOD: ", int(value))
+		)
+		
+		# LOD Distance Multiplier
+		update_label(lod_distance_mult_label, "LOD Distance Multiplier: ", voxel_generator.lod_distance_multiplier)
+		lod_distance_mult_spinner.min_value = 1.0
+		lod_distance_mult_spinner.max_value = 10.0
+		lod_distance_mult_spinner.step = 0.1
+		lod_distance_mult_spinner.value = voxel_generator.lod_distance_multiplier
+		lod_distance_mult_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lod_distance_mult_spinner.value_changed.connect(func(value):
+			voxel_generator.lod_distance_multiplier = value
+			update_label(lod_distance_mult_label, "LOD Distance Multiplier: ", value)
 		)
 		
 		# World Size X spinner
@@ -252,7 +268,7 @@ func create_debug_ui():
 func _on_generate_pressed():
 	print("Generate button pressed!")
 	if voxel_generator:
-		voxel_generator.generate()
+		voxel_generator.generate_async()
 
 func _on_slice_pressed():
 	print("Slice button pressed!")

@@ -1,5 +1,5 @@
 extends CharacterBody3D
-class_name Picele # Picture Element or Pixel 
+class_name Picele # Picture Element or Pixel
 
 # Swimming properties
 @export_category("Swimming")
@@ -15,32 +15,15 @@ class_name Picele # Picture Element or Pixel
 @export var walk_speed = 7.0
 @export var sprint_speed = 10.0
 
-# Resource collection
-@export_category("Resources")
-@export var collection_range = 3.0
-@export var terraforming_strength = 1.0
+# Stamina system
+@export_category("Stamina")
+@export var stamina: float = 100.0
 
-# Oxygen system
-@export_category("Breathing")
-@export var max_oxygen = 100.0
-@export var oxygen_depletion_rate = 0.01 # Oxygen lost per second
-@export var oxygen_damage_rate = 5.0 # Damage taken when out of oxygen
-var current_oxygen = 100.0
-
-# Health system
-@export_category("Health")
-@export var max_health = 100.0
-var current_health = 100.0
-var in_habitat = false
-
-# Inventory system
-var inventory = {
-	"metal": 1000,
-	"crystal": 500,
-	"coral": 500,
-	"algae": 400
-}
-var max_inventory_size = 100
+# Advanced Movement
+@export_category("Advanced Movement")
+@export var jump_velocity: float = 4.5
+@export var mouse_sensitivity: float = 0.003
+@export var is_sprinting: bool = false
 
 # References
 @onready var picele_camera: Camera3D = $PiceleCamera
@@ -54,11 +37,9 @@ func _ready() -> void:
 	# Lock mouse cursor to center of screen
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	add_to_group("player")
-	current_health = max_health
-	current_oxygen = max_oxygen
-	# Set position immediately - ensure we have closing parenthesis
-	# global_position = Vector3.ZERO
 	global_position = Vector3(0.0, 5.0, 0.0)
+	# Ensure the raycast can hit world geometry (layer 1) while keeping existing masks
+	picele_ray_cast.set_collision_mask_value(1, true)
 
 	print("Player initial position set in _ready: ", global_position)
 
@@ -92,20 +73,22 @@ func _physics_process(delta):
 	
 	move_and_slide()
 
-	# Highlight resources
-	_highlight_resources()
+	# Handle terraforming and voxel placement
+	if Input.is_action_just_pressed("primary_action"):
+		terraform()
 	
-	# Handle resource collection, terraforming and voxel placement
-	#if Input.is_action_just_pressed("primary_action"):
-		#collect_resource()
-	#if Input.is_action_just_pressed("secondary_action"):
-		#terraform()
+	# Add gravity
+	if not is_on_floor():
+		velocity += get_gravity() * delta
+
+	# Handle jump
+	if Input.is_action_just_pressed("jump") and is_on_floor():
+		if stamina >= 10.0:
+			velocity.y = jump_velocity
+			stamina -= 5.0 # Jump cost
 	
-	# Handle oxygen depletion
-	_process_oxygen(delta)
-	
-	# Update UI
-	_update_ui()
+	# Handle sprint
+	is_sprinting = Input.is_action_pressed("sprint") and stamina > 0.0
 	
 func _input(event):
 	# Only process camera rotation when mouse is captured
@@ -121,107 +104,16 @@ func _input(event):
 		else:
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
-func collect_resource():
-	if picele_ray_cast.is_colliding():
-		var collider = picele_ray_cast.get_collider()
-		if collider != null and collider.is_in_group("resources") and collider.has_method("collect"):
-			var resource = collider.collect()
-			add_to_inventory(resource)
-
 func terraform():
-	if picele_ray_cast.is_colliding():
-		var collision_point = picele_ray_cast.get_collision_point()
-		var terrain = picele_ray_cast.get_collider()
-		if terrain != null and terrain.get_parent() == get_parent().get_node("UnderwaterWorld"):
-			if terrain.get_parent().has_method("modify_terrain"):
-				terrain.get_parent().modify_terrain(collision_point, terraforming_strength)
+	var voxel_gen = get_node("/root/World/Terrain/VoxelGenerator") as VoxelGenerator
+	picele_ray_cast.force_raycast_update()
 
-func add_to_inventory(resource):
-	if not inventory.has(resource.type):
-		inventory[resource.type] = 0
-	
-	if get_inventory_weight() < max_inventory_size:
-		inventory[resource.type] += resource.amount
-		print("Collected ", resource.amount, " of ", resource.type)
-		return true
-	else:
-		print("Inventory full!")
-		return false
+	if not picele_ray_cast.is_colliding():
+		push_error("Terraform called with no collision hit")
+		return
 
-func get_inventory_weight():
-	var total = 0
-	for item in inventory:
-		total += inventory[item]
-	return total
-
-func _highlight_resources():
-	# Check if raycast hits a resource
-	if picele_ray_cast.is_colliding():
-		var collider = picele_ray_cast.get_collider()
+	var hit_position = picele_ray_cast.get_collision_point()
 		
-		# Unhighlight all resources first
-		var resources = get_tree().get_nodes_in_group("resources")
-		for resource in resources:
-			if resource.has_method("highlight_toggle"):
-				resource.highlight_toggle(false)
-		
-		# Highlight the targeted resource
-		if collider != null and collider.is_in_group("resources") and collider.has_method("highlight_toggle"):
-			collider.highlight_toggle(true)
-
-func _process_oxygen(delta):
-	# Check if player is inside a habitat
-	var buildings = get_tree().get_nodes_in_group("buildings")
-	in_habitat = false
-	
-	for building in buildings:
-		if building.has_method("is_inside") and building.is_inside(global_position):
-			in_habitat = true
-			break
-	
-	# Manage oxygen levels
-	if in_habitat:
-		# Replenish oxygen when in habitat
-		current_oxygen = min(current_oxygen + (oxygen_depletion_rate * 2 * delta), max_oxygen)
-	else:
-		# Deplete oxygen when underwater
-		current_oxygen = max(current_oxygen - (oxygen_depletion_rate * delta), 0)
-		
-		# Apply damage when out of oxygen
-		if current_oxygen <= 0:
-			take_damage(oxygen_damage_rate * delta)
-
-func take_damage(amount):
-	current_health = max(current_health - amount, 0)
-	if current_health <= 0:
-		_die()
-
-func heal(amount):
-	current_health = min(current_health + amount, max_health)
-
-func _die():
-	# Handle player death
-	print("Picele died!")
-	# Could show death screen, restart level, etc.
-	# For now just reset health and teleport to origin
-	current_health = max_health
-	current_oxygen = max_oxygen
-	var t = global_transform
-	t.origin = Vector3.ZERO
-	global_transform = t
-	
-func _update_ui():
-	if oxygen_bar:
-		oxygen_bar.value = current_oxygen
-	
-	if health_bar:
-		health_bar.value = current_health
-	
-	if depth_gauge:
-		# Display depth in meters (negative Y position)
-		var depth = - global_position.y
-		depth_gauge.text = "Depth: %d m" % [int(depth)]
-
-func _place_building():
-	# Delegate to building system
-	pass
+	voxel_gen.dig_sphere(hit_position, 0.5, 2.0)
+	voxel_gen.regenerate_dirty_chunks() # Manual batching
+	print("Terraforming at: ", hit_position)

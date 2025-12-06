@@ -34,6 +34,10 @@
 #include "voxel_constants.h"
 
 // Godot includes
+#include <godot_cpp/classes/collision_shape3d.hpp>
+#include <godot_cpp/classes/concave_polygon_shape3d.hpp>
+#include <godot_cpp/classes/static_body3d.hpp>
+#include <godot_cpp/classes/surface_tool.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
 namespace voxel_engine {
@@ -55,8 +59,18 @@ void Chunk::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("notify_neighbor_chunks_if_on_border", "local_pos"), &Chunk::notify_neighbor_chunks_if_on_border);
 	ClassDB::bind_method(D_METHOD("get_voxel_material_category_id", "local_pos"), &Chunk::get_voxel_material_category_id);
 
-	//ADD_GROUP("Chunk Settings", "voxel_generator_");
-	//ADD_PROPERTY(PropertyInfo(Variant::INT, "voxel_generator_chunk_size", PROPERTY_HINT_RANGE, "8,64,8"), "set_chunk_size", "get_chunk_size");
+	// Chunk coordinate bindings (exposed for debugging)
+	ClassDB::bind_method(D_METHOD("set_chunk_coord", "coord"), &Chunk::set_chunk_coord);
+	ClassDB::bind_method(D_METHOD("get_chunk_coord"), &Chunk::get_chunk_coord);
+
+	// Mesh methods
+	ClassDB::bind_method(D_METHOD("apply_mesh_data", "vertices", "normals", "colors"), &Chunk::apply_mesh_data);
+	ClassDB::bind_method(D_METHOD("clear_mesh"), &Chunk::clear_mesh);
+	ClassDB::bind_method(D_METHOD("is_mesh_ready"), &Chunk::is_mesh_ready);
+
+	// Properties
+	ADD_GROUP("Chunk Info", "");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3I, "chunk_coord"), "set_chunk_coord", "get_chunk_coord");
 }
 
 Chunk::Chunk() {
@@ -68,6 +82,9 @@ Chunk::Chunk() {
 
 	position = Vector3();
 	current_lod_level = 0;
+	chunk_coord = Vector3i(0, 0, 0);
+	mesh_instance = nullptr;
+	mesh_ready.store(false);
 
 	// Initialize all voxels to air
 	for (int x = 0; x < m_chunk_size; ++x) {
@@ -83,6 +100,19 @@ Chunk::Chunk() {
 }
 
 Chunk::~Chunk() {
+	// Clean up mesh instance if it exists
+	if (mesh_instance && is_inside_tree()) {
+		remove_child(mesh_instance);
+		mesh_instance->queue_free();
+		mesh_instance = nullptr;
+	}
+	if (collision_body && is_inside_tree()) {
+		remove_child(collision_body);
+		collision_body->queue_free();
+		collision_body = nullptr;
+		collision_shape = nullptr;
+	}
+	concave_shape.unref();
 	// Smart pointer automatically cleans up voxel array
 	// No manual delete needed
 }
@@ -150,6 +180,7 @@ void Chunk::set_default_chunk_size(int p_chunk_size) {
 }
 
 void Chunk::set_voxel(Vector3i local_pos, int type) {
+	std::lock_guard<std::mutex> lock(voxel_mutex);
 	if (local_pos.x >= 0 && local_pos.x < m_chunk_size &&
 			local_pos.y >= 0 && local_pos.y < m_chunk_size &&
 			local_pos.z >= 0 && local_pos.z < m_chunk_size) {
@@ -159,6 +190,7 @@ void Chunk::set_voxel(Vector3i local_pos, int type) {
 }
 
 Ref<Voxel> Chunk::get_voxel(Vector3i local_pos) {
+	std::lock_guard<std::mutex> lock(voxel_mutex);
 	if (local_pos.x >= 0 && local_pos.x < m_chunk_size &&
 			local_pos.y >= 0 && local_pos.y < m_chunk_size &&
 			local_pos.z >= 0 && local_pos.z < m_chunk_size) {
@@ -183,6 +215,14 @@ void Chunk::rebuild_mesh_with_lod(int lod_level) {
 	current_lod_level = lod_level;
 }
 
+void Chunk::set_current_lod_level(int lod) {
+	current_lod_level = lod;
+}
+
+int Chunk::get_current_lod_level() const {
+	return current_lod_level;
+}
+
 void Chunk::update_lod(Vector3 camera_position) {
 	float distance = position.distance_to(camera_position);
 	int new_lod = 0;
@@ -200,6 +240,7 @@ void Chunk::update_lod(Vector3 camera_position) {
 }
 
 bool Chunk::is_voxel_solid(Vector3i local_pos) {
+	std::lock_guard<std::mutex> lock(voxel_mutex);
 	if (local_pos.x >= 0 && local_pos.x < m_chunk_size &&
 			local_pos.y >= 0 && local_pos.y < m_chunk_size &&
 			local_pos.z >= 0 && local_pos.z < m_chunk_size) {
@@ -215,6 +256,7 @@ void Chunk::notify_neighbor_chunks_if_on_border(Vector3i local_pos) {
 }
 
 int Chunk::get_voxel_material_category_id(Vector3i local_pos) {
+	std::lock_guard<std::mutex> lock(voxel_mutex);
 	if (local_pos.x >= 0 && local_pos.x < m_chunk_size &&
 			local_pos.y >= 0 && local_pos.y < m_chunk_size &&
 			local_pos.z >= 0 && local_pos.z < m_chunk_size) {
@@ -222,6 +264,126 @@ int Chunk::get_voxel_material_category_id(Vector3i local_pos) {
 		return voxels[idx]->get_type();
 	}
 	return VoxelType::AIR;
+}
+
+// ============================================================================
+// Chunk Coordinate Methods
+// ============================================================================
+
+void Chunk::set_chunk_coord(const Vector3i &coord) {
+	chunk_coord = coord;
+}
+
+Vector3i Chunk::get_chunk_coord() const {
+	return chunk_coord;
+}
+
+// ============================================================================
+// Mesh Application Methods (Main Thread Only)
+// ============================================================================
+
+void Chunk::apply_mesh_data(const PackedVector3Array &vertices, const PackedVector3Array &normals, const PackedColorArray &colors) {
+	// This must be called from the main thread only!
+
+	// Clear existing mesh if any
+	clear_mesh();
+
+	// Don't create mesh if no vertices
+	if (vertices.size() == 0) {
+		mesh_ready.store(true);
+		return;
+	}
+
+	// Create ArrayMesh from the data
+	Ref<ArrayMesh> array_mesh;
+	array_mesh.instantiate();
+
+	Array arrays;
+	arrays.resize(Mesh::ARRAY_MAX);
+	arrays[Mesh::ARRAY_VERTEX] = vertices;
+	arrays[Mesh::ARRAY_NORMAL] = normals;
+	arrays[Mesh::ARRAY_COLOR] = colors;
+
+	array_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
+
+	// Create material with vertex colors
+	Ref<StandardMaterial3D> material;
+	material.instantiate();
+	material->set_flag(BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
+	array_mesh->surface_set_material(0, material);
+
+	// Create MeshInstance3D if needed
+	if (!mesh_instance) {
+		mesh_instance = memnew(MeshInstance3D);
+		mesh_instance->set_name("ChunkMesh");
+		add_child(mesh_instance);
+	}
+
+	mesh_instance->set_mesh(array_mesh);
+	update_collision_shape(array_mesh);
+	mesh_ready.store(true);
+}
+
+void Chunk::clear_mesh() {
+	if (mesh_instance) {
+		mesh_instance->set_mesh(Ref<Mesh>());
+	}
+	clear_collision_shape();
+	mesh_ready.store(false);
+}
+
+bool Chunk::is_mesh_ready() const {
+	return mesh_ready.load();
+}
+
+void Chunk::clear_collision_shape() {
+	if (collision_shape) {
+		collision_shape->set_shape(Ref<Shape3D>());
+	}
+	concave_shape.unref();
+}
+
+void Chunk::update_collision_shape(const Ref<ArrayMesh> &mesh) {
+	if (mesh.is_null() || mesh->get_surface_count() == 0) {
+		clear_collision_shape();
+		return;
+	}
+
+	PackedVector3Array faces;
+	for (int surface = 0; surface < mesh->get_surface_count(); ++surface) {
+		Array arrays = mesh->surface_get_arrays(surface);
+		PackedVector3Array surface_vertices = arrays[Mesh::ARRAY_VERTEX];
+		if (surface_vertices.is_empty()) {
+			continue;
+		}
+		faces.append_array(surface_vertices);
+	}
+
+	if (faces.size() < 3) {
+		clear_collision_shape();
+		return;
+	}
+
+	if (!collision_body) {
+		collision_body = memnew(StaticBody3D);
+		collision_body->set_name("ChunkCollider");
+		collision_body->set_collision_layer(1); // World layer (bit 0)
+		collision_body->set_collision_mask(2 | 4); // Collide with players (bit 1) and creatures (bit 2)
+		add_child(collision_body);
+	}
+
+	if (!collision_shape) {
+		collision_shape = memnew(CollisionShape3D);
+		collision_shape->set_name("ChunkCollisionShape");
+		collision_body->add_child(collision_shape);
+	}
+
+	if (concave_shape.is_null()) {
+		concave_shape.instantiate();
+	}
+
+	concave_shape->set_faces(faces);
+	collision_shape->set_shape(concave_shape);
 }
 
 } // namespace voxel_engine

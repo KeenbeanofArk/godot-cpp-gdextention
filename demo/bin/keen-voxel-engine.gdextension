@@ -3,6 +3,9 @@
 entry_symbol = "voxel_engine_library_init"
 compatibility_minimum = "4.1"
 
+[documentation]
+class_reference = "res://addons/keen_voxel_engine/doc_classes"
+
 [libraries]
 ; Relative paths ensure that our GDExtension can be placed anywhere in the project directory.
 macos.single.debug = "./macos/libvoxel-engine-gd.macos.template_debug.dylib"

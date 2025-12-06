@@ -8,7 +8,10 @@
 #include "VoxelGenerator.h"
 #include "core/chunk.h"
 #include "core/voxel.h"
+#include "core/voxel_material.h"
+#include "core/voxel_registry.h"
 #include "generators/BiomeGenerator.h"
+#include "generators/FeatureGenerator.h"
 #include "generators/NoiseGenerator.h"
 
 using namespace godot;
@@ -28,8 +31,15 @@ void initialize_voxel_engine_module(ModuleInitializationLevel p_level) {
 	// Register the NoiseGenerator class
 	GDREGISTER_CLASS(NoiseGenerator);
 	// Register the BiomeGenerator class
-	GDREGISTER_CLASS(BiomeGenerator);	
-
+	GDREGISTER_CLASS(BiomeGenerator);
+	// Register the FeatureGenerator class
+	GDREGISTER_CLASS(FeatureGenerator);
+	// Register the VoxelRegistry class
+	GDREGISTER_CLASS(VoxelRegistry);
+	// Register the VoxelMaterial class
+	GDREGISTER_CLASS(VoxelMaterial);
+	// Register the VoxelMaterialLibrary class
+	GDREGISTER_CLASS(VoxelMaterialLibrary);
 }
 
 void uninitialize_voxel_engine_module(ModuleInitializationLevel p_level) {
