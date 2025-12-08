@@ -1,8 +1,11 @@
-[gd_scene load_steps=16 format=3 uid="uid://etd11wxpmror"]
+[gd_scene load_steps=18 format=3 uid="uid://etd11wxpmror"]
 
 [ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://main.gd" id="1_fj7yv"]
+[ext_resource type="Script" uid="uid://gdi5e7som4a" path="res://terrain_plains.gd" id="2_036b0"]
 [ext_resource type="PackedScene" uid="uid://cp6m8e8v6rkjm" path="res://player/picele.tscn" id="2_tlwt5"]
+[ext_resource type="Script" uid="uid://bdja4113u1o6m" path="res://terrain_mountains.gd" id="3_dwbse"]
 [ext_resource type="PackedScene" uid="uid://deg7mq7jukfdi" path="res://gui.tscn" id="3_tlwt5"]
+[ext_resource type="Script" uid="uid://ddngrcvi0p60i" path="res://multi_terrain_manager.gd" id="4_multi"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_fj7yv"]
 sky_top_color = Color(0.13206878, 0.4293424, 0.85518116, 1)
@@ -21,42 +24,40 @@ glow_enabled = true
 
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_tlwt5"]
 noise_type = 3
-seed = 1240
+seed = -1025859142
 frequency = 0.02
 fractal_octaves = 4
 
 [sub_resource type="NoiseGenerator" id="NoiseGenerator_aqk2v"]
-seed = 1240
+seed = -1025859142
 noise = SubResource("FastNoiseLite_tlwt5")
 
-[sub_resource type="FastNoiseLite" id="FastNoiseLite_036b0"]
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_aqk2v"]
 noise_type = 3
-seed = 1241
+seed = -1025859141
 frequency = 0.1
 fractal_octaves = 3
 fractal_lacunarity = 2.5
 fractal_gain = 0.6
 
-[sub_resource type="NoiseGenerator" id="NoiseGenerator_dwbse"]
-seed = 1241
-noise = SubResource("FastNoiseLite_036b0")
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_036b0"]
+seed = -1025859141
+noise = SubResource("FastNoiseLite_aqk2v")
 octaves = 3
 period = 10.0
 persistence = 0.6
 lacunarity = 2.5
 
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_tlwt5"]
+
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_dwbse"]
+
 [sub_resource type="NoiseGenerator" id="NoiseGenerator_pkg7o"]
 
-[sub_resource type="NoiseGenerator" id="NoiseGenerator_gbfbk"]
-
-[sub_resource type="NoiseGenerator" id="NoiseGenerator_ioo17"]
-
-[sub_resource type="BiomeGenerator" id="BiomeGenerator_wse8f"]
-height_noise = SubResource("NoiseGenerator_pkg7o")
-temperature_noise = SubResource("NoiseGenerator_ioo17")
-humidity_noise = SubResource("NoiseGenerator_gbfbk")
-
-[sub_resource type="FeatureGenerator" id="FeatureGenerator_ic0uy"]
+[sub_resource type="BiomeGenerator" id="BiomeGenerator_gbfbk"]
+height_noise = SubResource("NoiseGenerator_tlwt5")
+temperature_noise = SubResource("NoiseGenerator_pkg7o")
+humidity_noise = SubResource("NoiseGenerator_dwbse")
 
 [node name="World" type="Node3D"]
 script = ExtResource("1_fj7yv")
@@ -72,24 +73,34 @@ light_color = Color(1, 1, 0.8392157, 1)
 shadow_enabled = true
 directional_shadow_max_distance = 1.0
 
-[node name="Terrain" type="Node3D" parent="."]
+[node name="TerrainPlains" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, 0, 0)
+script = ExtResource("2_036b0")
 
-[node name="VoxelGenerator" type="VoxelGenerator" parent="Terrain"]
-world_size = Vector3i(10, 5, 10)
-enable_distance_lod = true
-lod_distances = PackedFloat64Array(40, 200, 1000, 5000, 25000, 125000, 625000, 3125000)
-lod_distance_multiplier = 5.0
-show_lod_colors = true
+[node name="VoxelGenerator" type="VoxelGenerator" parent="TerrainPlains"]
+world_size = Vector3i(5, 5, 5)
+seeder = 440521024
 terrain_noise = SubResource("NoiseGenerator_aqk2v")
-detail_noise = SubResource("NoiseGenerator_dwbse")
-biome_generator = SubResource("BiomeGenerator_wse8f")
-feature_generator = SubResource("FeatureGenerator_ic0uy")
+detail_noise = SubResource("NoiseGenerator_036b0")
+biome_generator = SubResource("BiomeGenerator_gbfbk")
+
+[node name="CentralDebugGUI" parent="." instance=ExtResource("3_tlwt5")]
+
+[node name="TerrainMountains" type="Node3D" parent="."]
+script = ExtResource("3_dwbse")
+
+[node name="VoxelGenerator" type="VoxelGenerator" parent="TerrainMountains"]
+world_size = Vector3i(5, 5, 5)
+seeder = -1025859142
+terrain_noise = SubResource("NoiseGenerator_aqk2v")
+detail_noise = SubResource("NoiseGenerator_036b0")
+biome_generator = SubResource("BiomeGenerator_gbfbk")
+
+[node name="MultiTerrainManager" type="Node" parent="."]
+script = ExtResource("4_multi")
 
 [node name="Picele" parent="." instance=ExtResource("2_tlwt5")]
-visible = false
 
 [node name="WorldCamera" type="Camera3D" parent="."]
 transform = Transform3D(-0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, -0.70710677, -40, 0, -40)
 fov = 26.8
-
-[node name="DebugGUI" parent="." instance=ExtResource("3_tlwt5")]

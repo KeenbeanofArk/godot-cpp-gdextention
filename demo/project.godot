@@ -15,6 +15,10 @@ run/main_scene="uid://etd11wxpmror"
 config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://icon.svg"
 
+[autoload]
+
+MultiTerrainManager="*res://multi_terrain_manager.gd"
+
 [display]
 
 window/size/viewport_width=1200

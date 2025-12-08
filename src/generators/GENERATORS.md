@@ -2,16 +2,16 @@
 
 This document describes the generator system in the Keen Voxel Engine, including:
 
-- **VoxelGenerator** - Main terrain generation with per-chunk mesh rendering
+- **VoxelGenerator** - Main terrain generation with per-chunk mesh rendering, biome integration, and procedural features
+- **BiomeGenerator** - Biome-based terrain with blending and layered block placement
+- **FeatureGenerator** - Decoration and structure placement (trees, rocks, ore)
 - **NoiseGenerator** - Procedural noise for terrain generation
-- **BiomeGenerator** - Biome-based terrain with blending
-- **FeatureGenerator** - Decoration and structure placement
 
 ---
 
 ## VoxelGenerator
 
-The [`VoxelGenerator`](../VoxelGenerator.h) is the main class that orchestrates terrain generation. It uses a **per-chunk mesh system** where each chunk has its own `MeshInstance3D` for efficient rendering and incremental updates.
+The [`VoxelGenerator`](../VoxelGenerator.h) is the main class that orchestrates terrain generation. It uses a **per-chunk mesh system** where each chunk has its own `MeshInstance3D` for efficient rendering and incremental updates. It integrates biome generation and procedural feature placement with automatic world vertical extent adjustment.
 
 ### Generation Modes
 
@@ -22,20 +22,20 @@ The [`VoxelGenerator`](../VoxelGenerator.h) is the main class that orchestrates 
 
 ### Properties
 
-| Property            | Type     | Range    | Default | Description                                             |
-| ------------------- | -------- | -------- | ------- | ------------------------------------------------------- |
-| `world_size`        | Vector3i | 1-100    | (1,1,1) | Number of chunks in each dimension                      |
-| `chunk_size`        | int      | 8-64     | 8       | Size of each chunk in voxels                            |
-| `resolution`        | int      | 1-10     | 1       | Marching cubes samples per voxel (higher = more detail) |
-| `generation_mode`   | int      | 0-1      | 0       | VOXELS_FIRST or HEIGHTMAP_FIRST                         |
-| `surface_band`      | float    | 1.0-20.0 | 4.0     | Vertical band around terrain surface (heightmap mode)   |
-| `lod_level`         | int      | 0-7      | 0       | Level of detail (0 = highest, 7 = lowest)               |
-| `cutoff`            | float    | -1.0-1.0 | 0.0     | Density threshold for solid/air boundary                |
-| `terrain_height`    | float    | -100-100 | 4.0     | Base terrain height in world units                      |
-| `terrain_amplitude` | float    | 0-100    | 8.0     | Height variation range                                  |
-| `rock_influence`    | float    | 0-1      | 0.3     | Strength of 3D rocky detail noise                       |
-| `auto_generate`     | bool     | -        | true    | Auto-regenerate when properties change                  |
-| `vertex_limit`      | bool     | -        | false   | Stop generation when vertex limit reached               |
+| Property            | Type     | Range    | Default | Description                                                          |
+| ------------------- | -------- | -------- | ------- | -------------------------------------------------------------------- |
+| `world_size`        | Vector3i | 1-100    | (1,1,1) | Number of chunks in each dimension (auto-expands Y if biome enabled) |
+| `chunk_size`        | int      | 8-64     | 8       | Size of each chunk in voxels                                         |
+| `resolution`        | int      | 1-10     | 1       | Marching cubes samples per voxel (higher = more detail)              |
+| `generation_mode`   | int      | 0-1      | 1       | VOXELS_FIRST or HEIGHTMAP_FIRST                                      |
+| `surface_band`      | float    | 1.0-20.0 | 4.0     | Vertical band around terrain surface (heightmap mode)                |
+| `lod_level`         | int      | 0-7      | 0       | Level of detail (0 = highest, 7 = lowest)                            |
+| `cutoff`            | float    | -1.0-1.0 | 0.0     | Density threshold for solid/air boundary                             |
+| `terrain_height`    | float    | -100-100 | 0.3     | Base terrain height in world units                                   |
+| `terrain_amplitude` | float    | 0-100    | 10.0    | Height variation range                                               |
+| `rock_influence`    | float    | 0-1      | 0.2     | Strength of 3D rocky detail noise                                    |
+| `auto_generate`     | bool     | -        | true    | Auto-regenerate when properties change                               |
+| `vertex_limit`      | bool     | -        | false   | Stop generation when vertex limit reached                            |
 
 ### Terrain Noise Properties
 
@@ -43,6 +43,15 @@ The [`VoxelGenerator`](../VoxelGenerator.h) is the main class that orchestrates 
 | --------------- | -------------- | -------------------------------- |
 | `terrain_noise` | NoiseGenerator | 2D noise for base terrain height |
 | `detail_noise`  | NoiseGenerator | 3D noise for rocky detail        |
+
+### Biome & Feature Integration
+
+| Property            | Type             | Description                                 |
+| ------------------- | ---------------- | ------------------------------------------- |
+| `biome_generator`   | BiomeGenerator   | Biome system for height and block placement |
+| `feature_generator` | FeatureGenerator | Procedural decoration/structure placement   |
+
+The VoxelGenerator automatically expands `world_size.y` when a biome generator is attached, ensuring vertical extent accommodates biome-derived terrain heights. Feature density edits are baked during generation and combined with player terrain edits in the density cache.
 
 ### Debug Visualization
 
@@ -53,6 +62,7 @@ The [`VoxelGenerator`](../VoxelGenerator.h) is the main class that orchestrates 
 | `show_centers`    | bool | Show debug points at voxel centers    |
 | `debug_mode`      | bool | Enable debug logging                  |
 | `debug_verbosity` | int  | Log detail level (0-3)                |
+| `show_lod_colors` | bool | Visualize LOD levels with colors      |
 
 ### Per-Chunk Mesh System
 
@@ -61,11 +71,11 @@ The VoxelGenerator creates a `Chunk` node for each chunk in the world. Each chun
 ```
 VoxelGenerator (Node3D)
 ├── Chunk_0_0_0 (Chunk)
-│   └── ChunkMesh (MeshInstance3D)
+│   ├── ChunkMesh (MeshInstance3D)
+│   └── ChunkCollider (StaticBody3D)
 ├── Chunk_1_0_0 (Chunk)
-│   └── ChunkMesh (MeshInstance3D)
-├── Chunk_0_1_0 (Chunk)
-│   └── ChunkMesh (MeshInstance3D)
+│   ├── ChunkMesh (MeshInstance3D)
+│   └── ChunkCollider (StaticBody3D)
 ...
 ├── MeshInstanceVoxelGrid (debug visualization)
 ├── MeshInstanceChunkGrid (debug visualization)
@@ -127,7 +137,32 @@ The LOD level affects effective resolution and surface band:
 | 1         | resolution / 2       | 1.5x                    |
 | 2         | resolution / 4       | 2.0x                    |
 | 3         | resolution / 8       | 2.5x                    |
-| ...       | ...                  | ...                     |
+| 4         | resolution / 16      | 3.0x                    |
+
+Distance-based LOD can be enabled to automatically adjust LOD per chunk based on distance from a reference position.
+
+### Terraforming API
+
+```gdscript
+# Modify terrain in a spherical region with smooth falloff
+# center: world position of edit center
+# radius: radius of effect in world units
+# delta: density change (negative = dig, positive = build)
+voxel_gen.modify_terrain(center, radius, delta)
+
+# Convenience functions
+voxel_gen.dig_sphere(center, radius, strength)
+voxel_gen.build_sphere(center, radius, strength)
+
+# Clear all terrain edits
+voxel_gen.clear_terrain_edits()
+
+# Serialization for save/load
+var edits_data = voxel_gen.get_terrain_edits_data()
+voxel_gen.set_terrain_edits_data(edits_data)
+```
+
+Terrain edits are combined with procedural feature edits during density sampling, allowing for hybrid player-authored and procedural terrain.
 
 ### GDScript Example
 
@@ -136,22 +171,27 @@ var voxel_gen = $VoxelGenerator
 
 # Configure world
 voxel_gen.world_size = Vector3i(4, 2, 4)
-voxel_gen.chunk_size = 16
-voxel_gen.resolution = 2
+voxel_gen.chunk_size = 8
+voxel_gen.resolution = 3
 
 # Use optimized heightmap mode
 voxel_gen.generation_mode = 1  # HEIGHTMAP_FIRST
-voxel_gen.surface_band = 6.0
+voxel_gen.surface_band = 4.0
 voxel_gen.lod_level = 0
 
 # Configure terrain
-voxel_gen.terrain_height = 0.0
-voxel_gen.terrain_amplitude = 15.0
-voxel_gen.rock_influence = 0.3
+voxel_gen.terrain_height = 0.3
+voxel_gen.terrain_amplitude = 10.0
+voxel_gen.rock_influence = 0.2
 voxel_gen.cutoff = 0.0
 
+# Configure biome and features (will auto-expand world Y)
+var biome_gen = BiomeGenerator.new()
+setup_biomes(biome_gen)
+voxel_gen.biome_generator = biome_gen
+
 # Generate
-voxel_gen.generate()
+voxel_gen.generate_async()
 ```
 
 ---
@@ -236,12 +276,12 @@ Each biome is defined with the following parameters:
 ```gdscript
 add_biome_extended(
     name,              # String: Biome identifier
-    min_height,        # float: Minimum terrain height (0.0-1.0 normalized)
-    max_height,        # float: Maximum terrain height
-    min_temperature,   # float: Minimum temperature (0.0-1.0)
-    max_temperature,   # float: Maximum temperature
-    min_humidity,      # float: Minimum humidity (0.0-1.0)
-    max_humidity,      # float: Maximum humidity
+    min_height,        # float: Minimum terrain height (in world units, 0-100)
+    max_height,        # float: Maximum terrain height (in world units, 0-100)
+    min_temperature,   # float: Minimum temperature (0.0-1.0 normalized)
+    max_temperature,   # float: Maximum temperature (0.0-1.0 normalized)
+    min_humidity,      # float: Minimum humidity (0.0-1.0 normalized)
+    max_humidity,      # float: Maximum humidity (0.0-1.0 normalized)
     surface_blocks,    # Array[int]: Block types for surface layer
     subsurface_blocks, # Array[int]: Block types below surface
     depth,             # int: Depth of surface/subsurface layers
@@ -249,6 +289,8 @@ add_biome_extended(
     filler_block       # int: Block type between subsurface and bedrock
 )
 ```
+
+**Note:** Terrain height values are in world units (0-100 range). The BiomeGenerator internally scales noise from -1 to +1 into this 0-100 range.
 
 ### Methods
 
@@ -296,9 +338,9 @@ var grass_blocks: Array[int] = [Voxel.GRASS]
 var dirt_blocks: Array[int] = [Voxel.DIRT]
 biome_gen.add_biome_extended(
     "Plains",
-    0.0, 0.4,        # height range
-    0.3, 0.7,        # temperature range
-    0.3, 0.7,        # humidity range
+    10.0, 40.0,      # height range (world units)
+    0.3, 0.7,        # temperature range (normalized)
+    0.3, 0.7,        # humidity range (normalized)
     grass_blocks,    # surface
     dirt_blocks,     # subsurface
     3,               # depth
@@ -310,9 +352,9 @@ biome_gen.add_biome_extended(
 var sand_blocks: Array[int] = [Voxel.SAND]
 biome_gen.add_biome_extended(
     "Desert",
-    0.0, 0.3,
-    0.7, 1.0,        # hot
-    0.0, 0.3,        # dry
+    5.0, 35.0,       # height range (world units)
+    0.7, 1.0,        # temperature range (hot, normalized)
+    0.0, 0.3,        # humidity range (dry, normalized)
     sand_blocks,
     sand_blocks,
     5,

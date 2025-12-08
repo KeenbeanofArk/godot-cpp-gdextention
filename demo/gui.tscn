@@ -75,6 +75,12 @@ theme_override_font_sizes/font_size = 24
 text = "VoxelGenerator Debug"
 horizontal_alignment = 1
 
+[node name="Subtitle" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Looking at: None"
+horizontal_alignment = 1
+
 [node name="DebugMode" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
@@ -153,11 +159,14 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Surface Band: 1"
 
-[node name="SurfaceBandSlider" type="HSlider" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
+[node name="SurfaceBandSpinner" type="SpinBox" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
-tick_count = 40
+min_value = 1.0
+max_value = 20.0
+step = 0.5
+value = 1.0
 
 [node name="LodLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
 custom_minimum_size = Vector2(120, 0)
@@ -169,6 +178,8 @@ text = "LOD: 1"
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 size_flags_horizontal = 3
+max_value = 7.0
+value = 1.0
 prefix = "Level"
 
 [node name="LodDistanceMultLabel" type="Label" parent="DebugDisplay/DebugPanel/DebugContainer/SliderGrid"]
@@ -266,17 +277,21 @@ layout_mode = 2
 size_flags_horizontal = 3
 max_value = 1.0
 step = 0.1
-rounded = true
 
 [node name="GenerateButton" type="Button" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
-text = "Regenerate"
+text = "Generate"
 
 [node name="PrintStateButton" type="Button" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Print Debug State"
+
+[node name="ExitButton" type="Button" parent="DebugDisplay/DebugPanel/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Exit"
 
 [node name="FPSControl" type="Control" parent="."]
 layout_mode = 3
@@ -312,3 +327,33 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_font_sizes/font_size = 30
 text = "FPS:"
+
+[node name="CrossHair" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_right = 40.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 2
+rotation = 0.7853982
+
+[node name="ColorRect" type="ColorRect" parent="CrossHair"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -5.0
+offset_top = -5.0
+offset_right = 5.0
+offset_bottom = 5.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.8959682, 0, 0.012285085, 1)
+
+[connection signal="pressed" from="DebugDisplay/DebugPanel/DebugContainer/ExitButton" to="." method="_on_exit_button_pressed"]

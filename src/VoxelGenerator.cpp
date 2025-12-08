@@ -1996,6 +1996,9 @@ void VoxelGenerator::create_chunks() {
 	}
 	chunks.clear();
 
+	int num_chunks = world_size.x * world_size.y * world_size.z;
+    chunk_dirty_flags.resize(num_chunks, false);
+
 	// Create new chunks properly
 	for (int x = 0; x < world_size.x; x++) {
 		for (int y = 0; y < world_size.y; y++) {
@@ -2098,6 +2101,13 @@ void VoxelGenerator::ensure_vertical_extent_for_biomes() {
 		world_size.y = required_world_y;
 		clear_density_cache();
 		clear_heightmap_cache();
+
+		 // Recreate chunk nodes to match new world size
+        create_chunks();
+        
+        // Clear old debug visualizations since world size changed
+        remove_children();
+		
 		log_message(String("Auto-expanded world Y from {0} to {1} chunks to fit biome heights (min={2}, max={3})")
 							.format(Array::make(previous_world_y, world_size.y, min_height, max_height)),
 				1);
@@ -2601,10 +2611,15 @@ void VoxelGenerator::regenerate_dirty_chunks() {
 
 	log_message("Regenerating dirty chunks...", 2);
 
-	// Rebuild density cache for affected region (for now, full rebuild)
-	build_density_cache();
-
-	// Synchronously regenerate dirty chunks using per-chunk mesh generation
+	// Only rebuild density cache if it's invalid or doesn't match current parameters
+	if (!cache_is_valid || cache_size_x == 0 || cache_size_y == 0 || cache_size_z == 0 ||
+			cache_resolution != get_effective_resolution() || cache_voxel_size != effective_voxel_size) {
+		log_message("Cache invalid or params changed - rebuilding density cache", 3);
+		build_density_cache();
+		cache_is_valid = true;
+	} else {
+		log_message("Reusing existing density cache", 3);
+	} // Synchronously regenerate dirty chunks using per-chunk mesh generation
 	int regenerated_count = 0;
 
 	for (int idx = 0; idx < static_cast<int>(chunk_dirty_flags.size()); ++idx) {
@@ -2629,9 +2644,6 @@ void VoxelGenerator::regenerate_dirty_chunks() {
 			log_message(String("Regenerated chunk ({0},{1},{2})").format(Array::make(chunk_coord.x, chunk_coord.y, chunk_coord.z)), 3);
 		}
 	}
-
-	// Clear density cache after regeneration
-	clear_density_cache();
 
 	log_message(String("Regenerated {0} dirty chunks").format(Array::make(regenerated_count)), 2);
 
@@ -2693,10 +2705,9 @@ void VoxelGenerator::invalidate_density_region(const Vector3i &min_voxel, const 
 		}
 	}
 
-	// Optionally update the density cache for the affected region
-	// For now, we clear the entire cache and rebuild on next generate()
-	// A more sophisticated approach would update only the affected entries
-	clear_density_cache();
+	// Mark cache as invalid so it will be rebuilt on next regenerate_dirty_chunks()
+	cache_is_valid = false;
+	log_message("Density cache invalidated due to terrain edit", 3);
 }
 
 // ==================== Terraforming Implementation ====================
@@ -3108,6 +3119,16 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 					cube_values = get_cube_values_at_world_position(center, half_size);
 				}
 
+				// DEBUG: Log first voxel of each chunk to diagnose empty meshes
+				if (local_ix == 0 && local_iy == 0 && local_iz == 0) {
+					log_message(String("Chunk ({0},{1},{2}): first voxel center=({3:.2f},{4:.2f},{5:.2f}) density=[{6:.2f},{7:.2f},{8:.2f},{9:.2f}] cutoff={10:.2f}")
+										.format(Array::make(chunk_coord.x, chunk_coord.y, chunk_coord.z,
+												center.x, center.y, center.z,
+												cube_values[0], cube_values[1], cube_values[2], cube_values[3],
+												cutoff)),
+							3);
+				}
+
 				int lookup_index = get_lookup_index(cube_values, cutoff);
 				const auto &marching_triangles = Constants::get_marching_triangles();
 
@@ -3358,7 +3379,7 @@ void VoxelGenerator::generate_async() {
 		detail_noise->set_lacunarity(2.5f);
 		detail_noise->set_seed(seeder + 1);
 	}
-	
+
 	// Ensure vertical extent matches biome heights before building caches
 	ensure_vertical_extent_for_biomes();
 	recalculate_voxel_scale();

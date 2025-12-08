@@ -115,7 +115,7 @@ private:
 	float terrain_height = 4.0f; // Base terrain height in world units
 	float terrain_amplitude = 8.0f; // Height variation range
 
-	inline static Vector3i world_size = Vector3i(1, 1, 1);
+	Vector3i world_size = Vector3i(1, 1, 1);
 	int resolution = 1;
 	float cutoff = 0.0f;
 	bool show_centers = false;
@@ -123,7 +123,7 @@ private:
 	bool show_chunk_grid = false;
 	bool randomizer = false;
 	int seeder = 1240;
-	bool auto_generate = true;
+	bool auto_generate = false;
 	bool vertex_limit = false; // Limit the number of vertices generated
 
 	// Debug properties
@@ -143,6 +143,7 @@ private:
 	int cache_size_z = 0; // Number of corner points in Z (total_voxels_z + 1)
 	int cache_resolution = 1; // The effective resolution the cache was built with
 	Vector3 cache_voxel_size = Vector3(1.0f, 1.0f, 1.0f); // Voxel size used when cache was built
+	bool cache_is_valid = false; // True if density cache is current and can be reused
 
 	// ==================== Terrain Edits Storage ====================
 	// Maps voxel index (packed x,y,z) to density delta

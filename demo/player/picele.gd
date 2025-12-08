@@ -24,24 +24,36 @@ class_name Picele # Picture Element or Pixel
 @export var jump_velocity: float = 4.5
 @export var mouse_sensitivity: float = 0.003
 @export var is_sprinting: bool = false
+@export var is_gravity: bool = false
 
 # References
 @onready var picele_camera: Camera3D = $PiceleCamera
 @onready var picele_ray_cast: RayCast3D = $PiceleCamera/PiceleRayCast
-@onready var oxygen_bar = get_node_or_null("../UI/OxygenBar")
-@onready var health_bar = get_node_or_null("../UI/HealthBar")
-@onready var depth_gauge = get_node_or_null("../UI/DepthGauge")
 
+var terrain_manager: MultiTerrainManager = null
+var voxel_generator_plains: VoxelGenerator
 
 func _ready() -> void:
+	# Get references after node is in tree
+	var world = get_parent()
+	if world:
+		terrain_manager = world.get_node_or_null("MultiTerrainManager")
+	voxel_generator_plains = get_node_or_null("../TerrainPlains/VoxelGenerator")
+	
+	if terrain_manager == null:
+		push_error("Picele: MultiTerrainManager not found as autoload")
+	
+	if voxel_generator_plains == null:
+		push_error("Picele: VoxelGenPlains not found at ../TerrainPlains/VoxelGenerator")
+		
 	# Lock mouse cursor to center of screen
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	add_to_group("player")
-	global_position = Vector3(0.0, 5.0, 0.0)
+	global_position = Vector3(0.0, 50.0, 0.0)
 	# Ensure the raycast can hit world geometry (layer 1) while keeping existing masks
 	picele_ray_cast.set_collision_mask_value(1, true)
 
-	print("Player initial position set in _ready: ", global_position)
+	print("Picele initial position set in _ready: ", global_position)
 
 func _physics_process(delta):
 	# Get input direction
@@ -68,8 +80,9 @@ func _physics_process(delta):
 		velocity = velocity.lerp(Vector3.ZERO, swim_deceleration * delta)
 	
 	# Apply gravity when on land
-	if is_on_floor() and not Input.is_action_pressed("move_up"):
-		velocity.y -= gravity * delta
+	if is_gravity:
+		if is_on_floor() and not Input.is_action_pressed("move_up"):
+			velocity.y -= gravity * delta
 	
 	move_and_slide()
 
@@ -78,8 +91,9 @@ func _physics_process(delta):
 		terraform()
 	
 	# Add gravity
-	if not is_on_floor():
-		velocity += get_gravity() * delta
+	if is_gravity:
+		if not is_on_floor():
+			velocity += get_gravity() * delta
 
 	# Handle jump
 	if Input.is_action_just_pressed("jump") and is_on_floor():
@@ -105,15 +119,23 @@ func _input(event):
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func terraform():
-	var voxel_gen = get_node("/root/World/Terrain/VoxelGenerator") as VoxelGenerator
-	picele_ray_cast.force_raycast_update()
-
-	if not picele_ray_cast.is_colliding():
-		push_error("Terraform called with no collision hit")
+	if not terrain_manager:
+		push_error("Terraform: MultiTerrainManager not available")
 		return
-
-	var hit_position = picele_ray_cast.get_collision_point()
-		
-	voxel_gen.dig_sphere(hit_position, 0.5, 2.0)
-	voxel_gen.regenerate_dirty_chunks() # Manual batching
-	print("Terraforming at: ", hit_position)
+	
+	var raycast_info = terrain_manager.get_raycast_info()
+	
+	if not raycast_info.get("hit", false):
+		print("Terraform called with no collision hit")
+		return
+	
+	var hit_position = raycast_info["position"]
+	var all_generators = terrain_manager.get_all_voxel_generators()
+	
+	# Apply terraform to all terrain generators (each will handle collisions independently)
+	for voxel_gen in all_generators:
+		voxel_gen.dig_sphere(hit_position, 0.5, 2.0)
+		voxel_gen.regenerate_dirty_chunks()
+	
+	var distance = raycast_info["distance"]
+	print("Terraforming at: %s (distance: %.2f)" % [hit_position, distance])
