@@ -22,42 +22,57 @@ sky = SubResource("Sky_tlwt5")
 tonemap_mode = 2
 glow_enabled = true
 
-[sub_resource type="FastNoiseLite" id="FastNoiseLite_tlwt5"]
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_dwbse"]
 noise_type = 3
-seed = -1025859142
+seed = 1240
 frequency = 0.02
 fractal_octaves = 4
 
-[sub_resource type="NoiseGenerator" id="NoiseGenerator_aqk2v"]
-seed = -1025859142
-noise = SubResource("FastNoiseLite_tlwt5")
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_pkg7o"]
+seed = 1240
+noise = SubResource("FastNoiseLite_dwbse")
 
-[sub_resource type="FastNoiseLite" id="FastNoiseLite_aqk2v"]
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_pkg7o"]
 noise_type = 3
-seed = -1025859141
+seed = 1241
 frequency = 0.1
 fractal_octaves = 3
 fractal_lacunarity = 2.5
 fractal_gain = 0.6
 
-[sub_resource type="NoiseGenerator" id="NoiseGenerator_036b0"]
-seed = -1025859141
-noise = SubResource("FastNoiseLite_aqk2v")
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_gbfbk"]
+seed = 1241
+noise = SubResource("FastNoiseLite_pkg7o")
 octaves = 3
 period = 10.0
 persistence = 0.6
 lacunarity = 2.5
 
-[sub_resource type="NoiseGenerator" id="NoiseGenerator_tlwt5"]
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_wse8f"]
+noise_type = 3
+seed = 1240
+frequency = 0.02
+fractal_octaves = 4
 
-[sub_resource type="NoiseGenerator" id="NoiseGenerator_dwbse"]
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_ic0uy"]
+seed = 1240
+noise = SubResource("FastNoiseLite_wse8f")
 
-[sub_resource type="NoiseGenerator" id="NoiseGenerator_pkg7o"]
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_k3n1d"]
+noise_type = 3
+seed = 1241
+frequency = 0.1
+fractal_octaves = 3
+fractal_lacunarity = 2.5
+fractal_gain = 0.6
 
-[sub_resource type="BiomeGenerator" id="BiomeGenerator_gbfbk"]
-height_noise = SubResource("NoiseGenerator_tlwt5")
-temperature_noise = SubResource("NoiseGenerator_pkg7o")
-humidity_noise = SubResource("NoiseGenerator_dwbse")
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_2o6r5"]
+seed = 1241
+noise = SubResource("FastNoiseLite_k3n1d")
+octaves = 3
+period = 10.0
+persistence = 0.6
+lacunarity = 2.5
 
 [node name="World" type="Node3D"]
 script = ExtResource("1_fj7yv")
@@ -78,11 +93,20 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, 0, 0)
 script = ExtResource("2_036b0")
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="TerrainPlains"]
-world_size = Vector3i(5, 5, 5)
-seeder = 440521024
-terrain_noise = SubResource("NoiseGenerator_aqk2v")
-detail_noise = SubResource("NoiseGenerator_036b0")
-biome_generator = SubResource("BiomeGenerator_gbfbk")
+world_size = Vector3i(6, 6, 6)
+auto_generate = true
+surface_band = 2.5
+lod_distances = PackedFloat64Array(80, 800, 8000, 80000, 800000, 8000000, 80000000, 800000000)
+lod_distance_multiplier = 10.0
+show_lod_colors = true
+terrain_noise = SubResource("NoiseGenerator_pkg7o")
+detail_noise = SubResource("NoiseGenerator_gbfbk")
+terrain_height = 2.5
+terrain_amplitude = 15.0
+rock_influence = 0.11
+show_voxel_grid = true
+show_chunk_grid = true
+visualize_noise_values = true
 
 [node name="CentralDebugGUI" parent="." instance=ExtResource("3_tlwt5")]
 
@@ -90,11 +114,18 @@ biome_generator = SubResource("BiomeGenerator_gbfbk")
 script = ExtResource("3_dwbse")
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="TerrainMountains"]
-world_size = Vector3i(5, 5, 5)
-seeder = -1025859142
-terrain_noise = SubResource("NoiseGenerator_aqk2v")
-detail_noise = SubResource("NoiseGenerator_036b0")
-biome_generator = SubResource("BiomeGenerator_gbfbk")
+world_size = Vector3i(6, 6, 6)
+auto_generate = true
+terrain_noise = SubResource("NoiseGenerator_ic0uy")
+detail_noise = SubResource("NoiseGenerator_2o6r5")
+terrain_height = 6.0
+terrain_amplitude = 25.5
+rock_influence = 0.27
+show_voxel_grid = true
+show_chunk_grid = true
+visualize_noise_values = true
+max_chunks_per_frame = 2
+signal_every_n_chunks = 20
 
 [node name="MultiTerrainManager" type="Node" parent="."]
 script = ExtResource("4_multi")

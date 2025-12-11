@@ -115,6 +115,9 @@ private:
 	float terrain_height = 4.0f; // Base terrain height in world units
 	float terrain_amplitude = 8.0f; // Height variation range
 
+	// Vertical placement offset: allows aligning voxel volume center to biome sample mid-height
+	float world_vertical_center_offset = 0.0f;
+
 	Vector3i world_size = Vector3i(1, 1, 1);
 	int resolution = 1;
 	float cutoff = 0.0f;

@@ -134,7 +134,7 @@ func terraform():
 	
 	# Apply terraform to all terrain generators (each will handle collisions independently)
 	for voxel_gen in all_generators:
-		voxel_gen.dig_sphere(hit_position, 0.5, 2.0)
+		voxel_gen.dig_sphere(hit_position, 1.0, 3.0)
 		voxel_gen.regenerate_dirty_chunks()
 	
 	var distance = raycast_info["distance"]

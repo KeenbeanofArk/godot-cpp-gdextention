@@ -6,6 +6,9 @@ var terrain_manager: MultiTerrainManager = null
 var current_voxel_generator: VoxelGenerator = null
 var current_terrain_name: String = ""
 
+# Prevent multiple repeated UI connections
+var ui_initialized: bool = false
+
 # Color coding for terrains
 var terrain_colors: Dictionary = {
 	"TerrainPlains": Color(0.4, 0.8, 0.4), # Green
@@ -162,11 +165,6 @@ func update_ui_from_voxel_generator() -> void:
 
 	update_label(rock_influence_label, "Rock Influence: ", current_voxel_generator.rock_influence)
 	rock_influence_spinner.value = current_voxel_generator.rock_influence
-	
-#func _process(_delta: float) -> void:
-	## Update FPS counter
-	#fps_counter.add_theme_font_size_override("font_size", 30)
-	#fps_counter.text = "FPS: %d" % [Engine.get_frames_per_second()]
 
 func update_label(label: Label, prefix: String, value) -> void:
 	label.text = prefix + str(value)

@@ -36,6 +36,9 @@ func _ready() -> void:
 		current_terrain_name = keys[0]
 		current_voxel_generator = terrain_registry[current_terrain_name]["voxel_gen"]
 	print("[MultiTerrainManager] Initialized with terrain: %s" % current_terrain_name)
+	# Emit initial selection so listeners (GUI, etc.) can bind to the current generator
+	if current_voxel_generator:
+		emit_signal("terrain_selected", current_terrain_name, current_voxel_generator)
 
 func register_terrains() -> void:
 	var world = get_parent()

@@ -319,7 +319,7 @@ float BiomeGenerator::get_height_at(float x, float z) const {
 	}
 
 	float noise_value = height_noise->get_noise_2d(x, z);
-	float height = (noise_value + 1.0f) * 0.5f * 100.0f;
+	float height = (noise_value + 1.0f) * 0.5f * 100.0f; // Scale to 0-100 range
 
 	return height > sea_level ? height : sea_level;
 }

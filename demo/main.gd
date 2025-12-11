@@ -6,3 +6,4 @@ extends Node3D
 func _ready():
 	terrain_plains.generate_plains()
 	terrain_mountains.generate_mountains()
+	#pass

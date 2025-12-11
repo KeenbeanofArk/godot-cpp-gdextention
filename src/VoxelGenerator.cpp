@@ -230,13 +230,13 @@ VoxelGenerator::VoxelGenerator() :
 		object_instance_binding_set_by_parent_constructor(false) {
 	// Initialize default values only - don't call Godot API functions yet
 	resolution = 1;
-	cutoff = 0.0f;
+	cutoff = 0.1f;
 	show_centers = false;
 	show_voxel_grid = false;
 	show_chunk_grid = false;
 	randomizer = false;
 	seeder = 1240;
-	auto_generate = true;
+	auto_generate = false;
 	vertex_limit = false;
 
 	// Terrain generation defaults
@@ -368,7 +368,7 @@ void VoxelGenerator::reset() {
 	chunks.clear();
 
 	remove_children();
-	randomize_seed();
+	//randomize_seed(); // Do we want to randomize seed on reset?
 	resolution = 1;
 	cutoff = 0.0f;
 	show_centers = false;
@@ -629,7 +629,7 @@ int VoxelGenerator::update_chunks_lod() {
 		}
 	}
 
-	log_message(String("update_chunks_lod(): {0} chunks need regeneration").format(Array::make(chunks_needing_regen)), 2);
+	log_message(String("update_chunks_lod(): {0} chunks need regeneration").format(Array::make(chunks_needing_regen)), 3);
 	return chunks_needing_regen;
 }
 
@@ -1026,12 +1026,14 @@ void VoxelGenerator::generate() {
 	ensure_vertical_extent_for_biomes();
 	recalculate_voxel_scale();
 
+	// Calculate total chunks AFTER vertical extent expansion
+	total_chunks = world_size.x * world_size.y * world_size.z;
+
 	// Initialize dirty flags if needed
 	{
 		std::lock_guard<std::mutex> lock(chunks_mutex);
-		int num_chunks = world_size.x * world_size.y * world_size.z;
-		if (chunk_dirty_flags.size() != static_cast<size_t>(num_chunks)) {
-			chunk_dirty_flags.resize(num_chunks, false);
+		if (chunk_dirty_flags.size() != static_cast<size_t>(total_chunks)) {
+			chunk_dirty_flags.resize(total_chunks, false);
 		}
 	}
 
@@ -1052,17 +1054,16 @@ void VoxelGenerator::generate() {
 	}
 
 	// Generate mesh for each chunk synchronously
-	int num_chunks = world_size.x * world_size.y * world_size.z;
-	for (int chunk_index = 0; chunk_index < num_chunks; ++chunk_index) {
+	for (int chunk_index = 0; chunk_index < total_chunks; ++chunk_index) {
 		generate_chunk_mesh_sync(chunk_index);
 	}
 
-	log_message(String("Generated {0} chunk meshes").format(Array::make(num_chunks)), 2);
+	log_message(String("Generated {0} chunk meshes").format(Array::make(total_chunks)), 2);
 
 	// Log LOD distribution summary when distance LOD is enabled
 	if (enable_distance_lod && debug_mode) {
 		int lod_counts[8] = { 0 };
-		for (int i = 0; i < num_chunks; ++i) {
+		for (int i = 0; i < total_chunks; ++i) {
 			if (i < static_cast<int>(chunks.size()) && chunks[i] && is_instance_valid(chunks[i])) {
 				int lod = chunks[i]->get_current_lod_level();
 				if (lod >= 0 && lod <= 7) {
@@ -1548,9 +1549,9 @@ void VoxelGenerator::generate_heightmap_first(Ref<ImmediateMesh> mesh_centers, R
 			float y_min_world = world_y_center - eff_surface_band;
 			float y_max_world = world_y_center + eff_surface_band;
 
-			// Convert to voxel indices
-			int iy_min = std::max(0, static_cast<int>((y_min_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
-			int iy_max = std::min(total_voxels_y - 1, static_cast<int>((y_max_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
+			// Convert to voxel indices (corner-space, same as density cache)
+			int iy_min = std::max(0, static_cast<int>(std::floor((y_min_world + physical_extent.y * 0.5f) / eff_voxel_size.y)));
+			int iy_max = std::min(total_voxels_y - 1, static_cast<int>(std::floor((y_max_world + physical_extent.y * 0.5f) / eff_voxel_size.y)));
 
 			// Only process voxels within the surface band
 			for (int iy = iy_min; iy <= iy_max; ++iy) {
@@ -1904,21 +1905,49 @@ void VoxelGenerator::debug_draw_noise_slice(float y_level) {
 	int slice_resolution = resolution * 2; // Higher resolution for better visualization
 	float step = 1.0f / slice_resolution;
 
+	// First pass: sample densities to find data range for auto-scaling
+	float min_density = std::numeric_limits<float>::infinity();
+	float max_density = -std::numeric_limits<float>::infinity();
 	for (float x = -half_extent_x; x < half_extent_x; x += step) {
 		for (float z = -half_extent_z; z < half_extent_z; z += step) {
 			// Use terrain density for visualization
 			float density = get_terrain_density(Vector3(x, y_level, z));
+			if (std::isfinite(density)) {
+				min_density = std::min(min_density, density);
+				max_density = std::max(max_density, density);
+			}
+		}
+	}
 
-			// Normalize density to color (blue = solid/negative, red = air/positive)
+	// Avoid zero range
+	float density_range = max_density - min_density;
+	if (density_range <= 1e-6f) {
+		// Fallback to using cutoff/terrain_amplitude heuristic if range is too small
+		min_density = cutoff - terrain_amplitude;
+		max_density = cutoff + terrain_amplitude;
+		density_range = max_density - min_density;
+	}
+
+	// Second pass: generate colored quads using normalized density (0..1) based on sampled min/max
+	for (float x = -half_extent_x; x < half_extent_x; x += step) {
+		for (float z = -half_extent_z; z < half_extent_z; z += step) {
+			float density = get_terrain_density(Vector3(x, y_level, z));
+			if (!std::isfinite(density)) {
+				density = min_density;
+			}
+			float norm = (density - min_density) / density_range;
+			norm = CLAMP(norm, 0.0f, 1.0f);
+
+			// Map normalized density to color gradient
 			Color color;
-			if (density < cutoff) {
-				// Below cutoff (solid) - blue to cyan
-				float t = CLAMP((density + terrain_amplitude) / (2.0f * terrain_amplitude), 0.0f, 1.0f);
-				color = Color(0, t, 1.0f);
+			if (norm < 0.5f) {
+				// lower half -> blue to cyan
+				float t = norm * 2.0f; // 0..1 across lower half
+				color = Color(0.0f, t, 1.0f);
 			} else {
-				// Above cutoff (air) - yellow to red
-				float t = CLAMP(density / terrain_amplitude, 0.0f, 1.0f);
-				color = Color(1.0f, 1.0f - t, 0);
+				// upper half -> yellow to red
+				float t = (norm - 0.5f) * 2.0f; // 0..1 across upper half
+				color = Color(1.0f, 1.0f - t, 0.0f);
 			}
 
 			// Draw a small quad for each sample point
@@ -1997,7 +2026,7 @@ void VoxelGenerator::create_chunks() {
 	chunks.clear();
 
 	int num_chunks = world_size.x * world_size.y * world_size.z;
-    chunk_dirty_flags.resize(num_chunks, false);
+	chunk_dirty_flags.resize(num_chunks, false);
 
 	// Create new chunks properly
 	for (int x = 0; x < world_size.x; x++) {
@@ -2102,12 +2131,6 @@ void VoxelGenerator::ensure_vertical_extent_for_biomes() {
 		clear_density_cache();
 		clear_heightmap_cache();
 
-		 // Recreate chunk nodes to match new world size
-        create_chunks();
-        
-        // Clear old debug visualizations since world size changed
-        remove_children();
-		
 		log_message(String("Auto-expanded world Y from {0} to {1} chunks to fit biome heights (min={2}, max={3})")
 							.format(Array::make(previous_world_y, world_size.y, min_height, max_height)),
 				1);
@@ -2609,7 +2632,7 @@ void VoxelGenerator::regenerate_dirty_chunks() {
 
 	generation_in_progress.store(true);
 
-	log_message("Regenerating dirty chunks...", 2);
+	log_message("Regenerating dirty chunks...", 3);
 
 	// Only rebuild density cache if it's invalid or doesn't match current parameters
 	if (!cache_is_valid || cache_size_x == 0 || cache_size_y == 0 || cache_size_z == 0 ||
@@ -2645,7 +2668,7 @@ void VoxelGenerator::regenerate_dirty_chunks() {
 		}
 	}
 
-	log_message(String("Regenerated {0} dirty chunks").format(Array::make(regenerated_count)), 2);
+	log_message(String("Regenerated {0} dirty chunks").format(Array::make(regenerated_count)), 3);
 
 	generation_in_progress.store(false);
 }
@@ -3090,7 +3113,7 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 				// Calculate the center position of the voxel (world-space coordinates)
 				Vector3 center;
 				center.x = -physical_extent.x * 0.5f + (chunk_coord.x * chunk_size + (local_ix + 0.5f) / static_cast<float>(eff_resolution));
-				center.y = -physical_extent.y * 0.5f + (chunk_coord.y * chunk_size + (local_iy + 0.5f) / static_cast<float>(eff_resolution));
+				center.y = -physical_extent.y * 0.5f + (chunk_coord.y * chunk_size + static_cast<float>(local_iy) / static_cast<float>(eff_resolution));
 				center.z = -physical_extent.z * 0.5f + (chunk_coord.z * chunk_size + (local_iz + 0.5f) / static_cast<float>(eff_resolution));
 
 				// Create marching cube vertices using chunk's voxel size
@@ -3351,17 +3374,6 @@ void VoxelGenerator::generate_async() {
 	chunks_completed.store(0);
 	last_signal_count = 0;
 
-	// Calculate total chunks
-	total_chunks = world_size.x * world_size.y * world_size.z;
-	if (total_chunks == 0) {
-		log_message("No chunks to generate (world_size is zero)", 1);
-		generation_in_progress.store(false);
-		emit_signal("generation_complete");
-		return;
-	}
-
-	log_message(String("Starting async generation of {0} chunks").format(Array::make(total_chunks)), 2);
-
 	// Ensure density cache is built before starting worker tasks
 	if (!terrain_noise.is_valid()) {
 		terrain_noise.instantiate();
@@ -3384,8 +3396,22 @@ void VoxelGenerator::generate_async() {
 	ensure_vertical_extent_for_biomes();
 	recalculate_voxel_scale();
 
-	// Ensure we have chunks to attach meshes/features to
-	if (chunks.empty()) {
+	// Calculate total chunks AFTER vertical extent expansion
+	total_chunks = world_size.x * world_size.y * world_size.z;
+	if (total_chunks == 0) {
+		log_message("No chunks to generate (world_size is zero)", 1);
+		generation_in_progress.store(false);
+		emit_signal("generation_complete");
+		return;
+	}
+
+	log_message(String("Starting async generation of {0} chunks").format(Array::make(total_chunks)), 2);
+
+	// Ensure chunk node list matches the expected total_chunks. Recreate when mismatched.
+	if (static_cast<int>(chunks.size()) != total_chunks) {
+		log_message(String("Chunk node count ({0}) does not match expected total_chunks ({1}), recreating chunk nodes")
+							.format(Array::make(static_cast<int>(chunks.size()), total_chunks)),
+				1);
 		create_chunks();
 	}
 
