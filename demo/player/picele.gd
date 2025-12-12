@@ -12,8 +12,8 @@ class_name Picele # Picture Element or Pixel
 
 # Walking properties
 @export_category("Walking")
-@export var walk_speed = 7.0
-@export var sprint_speed = 10.0
+@export var walk_speed = 25.0
+@export var sprint_speed = 12.0
 
 # Stamina system
 @export_category("Stamina")

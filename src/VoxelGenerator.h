@@ -90,7 +90,7 @@ private:
 	// Generation mode and LOD settings
 	GenerationMode generation_mode = HEIGHTMAP_FIRST;
 	float surface_band = 4.0f; // Vertical band around surface for heightmap mode
-	int lod_level = 0; // Global LOD level (0 = highest detail, 7 = lowest)
+	int lod_level = 7; // Global LOD level (0 = highest detail, 7 = lowest)
 	int heightmap_vertex_limit = voxel_engine::MAX_VERTICES_HEIGHTMAP; // Vertex limit for heightmap mode (8x standard)
 
 	// Distance-based LOD settings (per-chunk LOD)
@@ -385,6 +385,9 @@ private:
 	// Debug helpers
 	void create_debug_visualization();
 	void visualize_noise_field();
+
+	// Helper to rebuild debug visualizations after generation
+	void rebuild_debug_visualizations();
 
 	// Initialize default LOD distances based on chunk_size
 	void initialize_default_lod_distances();

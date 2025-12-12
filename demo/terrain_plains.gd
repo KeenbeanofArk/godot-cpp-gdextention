@@ -3,15 +3,9 @@ extends Node3D
 @onready var voxel_generator: VoxelGenerator = $VoxelGenerator
 @onready var picele: CharacterBody3D = $"../Picele"
 
-var custom_distances = PackedFloat64Array([10, 20, 40, 80, 160, 320, 640, 1280])
+var custom_distances = PackedFloat64Array([20, 40, 80, 160, 320, 640, 1280, 2560])
 
 func _ready() -> void:
-	# Get references after node is in tree
-	voxel_generator = get_node_or_null("../TerrainPlains/VoxelGenerator")
-	
-	if voxel_generator == null:
-		push_error("Terrain Plains: VoxelGenerator not found at ../TerrainPlains/VoxelGenerator")
-		
 	voxel_generator.cancel_generation()
 	voxel_generator.reset()
 	
@@ -22,12 +16,12 @@ func _ready() -> void:
 	voxel_generator.auto_generate = false # Make sure this is false before setting world_size
 	
 	# Configure plains generator
-	voxel_generator.world_size = Vector3i(6, 6, 6) # Immediately calls .generate() if .auto_generate is set to true
+	voxel_generator.world_size = Vector3i(7, 7, 7) # Immediately calls .generate() if .auto_generate is set to true
 	voxel_generator.chunk_size = 8
 	voxel_generator.resolution = 1
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
 
-	voxel_generator.surface_band = 2.0
+	voxel_generator.surface_band = 1.5
 	voxel_generator.max_chunks_per_frame = 4
 	voxel_generator.signal_every_n_chunks = 20
 	voxel_generator.lod_distances = custom_distances
@@ -137,4 +131,6 @@ func _print_biome_height_range(biome_gen: BiomeGenerator, samples: int = 8, spac
 			var h = biome_gen.get_blended_height_at(x, z)
 			min_h = min(min_h, h)
 			max_h = max(max_h, h)
-	print("[TerrainPlains] Sampled biome height range: ", min_h, max_h)
+			
+	print("[TerrainPlains] Biome Height Range: Min = %.2f, Max = %.2f" % [min_h, max_h])
+	print("[TerrainPlains] Biome Generator Details: ", biome_gen)
