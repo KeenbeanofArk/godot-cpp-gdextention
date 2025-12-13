@@ -1137,7 +1137,6 @@ void VoxelGenerator::generate() {
 
 					// Only process voxels within the surface band
 					for (int iy = iy_min; iy <= iy_max; ++iy) {
-		
 						if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
 							break;
 						}
@@ -1190,7 +1189,6 @@ void VoxelGenerator::generate() {
 			for (int ix = 0; ix < total_voxels_x; ++ix) {
 				for (int iy = 0; iy < total_voxels_y; ++iy) {
 					for (int iz = 0; iz < total_voxels_z; ++iz) {
-						
 						if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit) {
 							break;
 						}
@@ -1345,8 +1343,9 @@ void VoxelGenerator::generate() {
 		visualize_noise_field();
 	}
 
-	// Clear the density cache to free memory (optional: keep for incremental updates)
-	clear_density_cache();
+	// Mark cache as valid so it won't be rebuilt unnecessarily during play
+	// Cache will be cleared only when fundamental parameters change (resolution, LOD, mode, world size)
+	cache_is_valid = true;
 
 	// Mark generation complete
 	generation_in_progress.store(false);
@@ -2073,63 +2072,22 @@ Vector3 VoxelGenerator::get_chunk_world_origin(const Vector3i &chunk_coord) cons
 }
 
 void VoxelGenerator::ensure_vertical_extent_for_biomes() {
+	// DISABLED: Auto-expansion causes terrain to float above chunk grid
+	// because biome heights (e.g., 45-55) aren't centered around Y=0.
+	// User should manually set world_size.y to desired value.
+	// sample_base_height() already clamps heights to fit within world bounds.
+
 	if (!biome_generator.is_valid()) {
 		return;
 	}
 
-	const int samples_per_axis = 8;
-	const float extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
-	const float extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
-	if (extent_x <= 0.0f || extent_z <= 0.0f) {
-		return;
-	}
+	// Just finalize immediately without expansion
+	world_size_finalized = true;
+	world_size_locked = world_size;
 
-	float min_height = std::numeric_limits<float>::infinity();
-	float max_height = -std::numeric_limits<float>::infinity();
-
-	for (int sx = 0; sx < samples_per_axis; ++sx) {
-		float tx = samples_per_axis > 1 ? static_cast<float>(sx) / static_cast<float>(samples_per_axis - 1) : 0.5f;
-		float world_x = -extent_x * 0.5f + tx * extent_x;
-		for (int sz = 0; sz < samples_per_axis; ++sz) {
-			float tz = samples_per_axis > 1 ? static_cast<float>(sz) / static_cast<float>(samples_per_axis - 1) : 0.5f;
-			float world_z = -extent_z * 0.5f + tz * extent_z;
-			float height = sample_raw_base_height(world_x, world_z);
-			if (!std::isfinite(height)) {
-				continue;
-			}
-			min_height = std::min(min_height, height);
-			max_height = std::max(max_height, height);
-		}
-	}
-
-	if (!std::isfinite(min_height) || !std::isfinite(max_height)) {
-		return;
-	}
-
-	float half_extent_required = std::max(std::abs(min_height), std::abs(max_height));
-	const float margin = std::max(terrain_amplitude * 2.0f, static_cast<float>(chunk_size));
-	half_extent_required += margin;
-
-	const float required_extent = std::max(half_extent_required * 2.0f, static_cast<float>(chunk_size));
-	const float current_extent = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
-
-	if (required_extent <= current_extent + 0.5f) {
-		return;
-	}
-
-	int required_world_y = static_cast<int>(std::ceil(required_extent / static_cast<float>(std::max(1, chunk_size))));
-	required_world_y = std::max(required_world_y, 1);
-
-	if (required_world_y != world_size.y) {
-		const int previous_world_y = world_size.y;
-		world_size.y = required_world_y;
-		clear_density_cache();
-		clear_heightmap_cache();
-
-		log_message(String("Auto-expanded world Y from {0} to {1} chunks to fit biome heights (min={2}, max={3})")
-							.format(Array::make(previous_world_y, world_size.y, min_height, max_height)),
-				1);
-	}
+	log_message(String("World size locked at ({0}, {1}, {2}) - biome heights will be clamped to fit")
+						.format(Array::make(world_size.x, world_size.y, world_size.z)),
+			1);
 }
 
 TypedArray<int> VoxelGenerator::get_chunk_surface_heights(const Vector3i &chunk_coord) const {
@@ -2463,7 +2421,56 @@ float VoxelGenerator::get_cached_density(int ix, int iy, int iz) const {
 		return get_terrain_density(index_to_pos(ix, iy, iz));
 	}
 
-	return density_cache[density_cache_index(ix, iy, iz)];
+	// Get base density from cache (procedural terrain without edits)
+	float base_density = density_cache[density_cache_index(ix, iy, iz)];
+
+	// Release cache lock before acquiring edit locks to avoid deadlock
+	lock.unlock();
+
+	// Early out if no terrain edits exist (common case - no overhead)
+	bool has_terrain_edits = false;
+	bool has_feature_edits = false;
+	{
+		std::lock_guard<std::mutex> terrain_lock(terrain_edits_mutex);
+		has_terrain_edits = !terrain_edits.empty();
+	}
+	{
+		std::lock_guard<std::mutex> feature_lock(feature_edits_mutex);
+		has_feature_edits = !feature_density_edits.empty();
+	}
+
+	if (!has_terrain_edits && !has_feature_edits) {
+		return base_density;
+	}
+
+	// Convert cache index to world position for edit lookup
+	Vector3 pos = index_to_pos(ix, iy, iz);
+	int vx = static_cast<int>(std::floor(pos.x));
+	int vy = static_cast<int>(std::floor(pos.y));
+	int vz = static_cast<int>(std::floor(pos.z));
+	uint64_t key = pack_edit_key(vx, vy, vz);
+
+	// Apply terrain edits on top of base density
+	float edit_delta = 0.0f;
+
+	if (has_terrain_edits) {
+		std::lock_guard<std::mutex> terrain_lock(terrain_edits_mutex);
+		auto it = terrain_edits.find(key);
+		if (it != terrain_edits.end()) {
+			edit_delta += it->second;
+		}
+	}
+
+	if (has_feature_edits) {
+		std::lock_guard<std::mutex> feature_lock(feature_edits_mutex);
+		auto it = feature_density_edits.find(key);
+		if (it != feature_density_edits.end()) {
+			edit_delta += it->second;
+		}
+	}
+
+	// Apply edit delta (same formula as get_terrain_density)
+	return base_density - edit_delta;
 }
 
 std::vector<float> VoxelGenerator::get_cube_values_cached(int ix, int iy, int iz) const {
@@ -2620,14 +2627,11 @@ bool VoxelGenerator::is_chunk_dirty(const Vector3i &chunk_coord) const {
 }
 
 void VoxelGenerator::regenerate_dirty_chunks() {
-	if (generation_in_progress.load()) {
-		log_message("Generation already in progress, skipping regenerate_dirty_chunks", 1);
-		return;
-	}
+	// Note: We allow terraforming to proceed even during async generation
+	// The regeneration will use the existing cached density and apply terrain edits
+	// Do NOT set generation_in_progress = true here, as that's for full world generation
 
-	generation_in_progress.store(true);
-
-	log_message("Regenerating dirty chunks...", 3);
+	log_message("Regenerating dirty chunks...", 2);
 
 	// Only rebuild density cache if it's invalid or doesn't match current parameters
 	if (!cache_is_valid || cache_size_x == 0 || cache_size_y == 0 || cache_size_z == 0 ||
@@ -2663,9 +2667,7 @@ void VoxelGenerator::regenerate_dirty_chunks() {
 		}
 	}
 
-	log_message(String("Regenerated {0} dirty chunks").format(Array::make(regenerated_count)), 3);
-
-	generation_in_progress.store(false);
+	log_message(String("Regenerated {0} dirty chunks").format(Array::make(regenerated_count)), 2);
 }
 
 void VoxelGenerator::invalidate_density_region(const Vector3i &min_voxel, const Vector3i &max_voxel) {
@@ -2723,9 +2725,11 @@ void VoxelGenerator::invalidate_density_region(const Vector3i &min_voxel, const 
 		}
 	}
 
-	// Mark cache as invalid so it will be rebuilt on next regenerate_dirty_chunks()
-	cache_is_valid = false;
-	log_message("Density cache invalidated due to terrain edit", 3);
+	// Note: We do NOT invalidate the density cache here because:
+	// 1. The cache represents the procedural base terrain (which hasn't changed)
+	// 2. Terrain edits are applied via the terrain_edits map in get_terrain_density()
+	// 3. Keeping the cache valid avoids expensive full rebuilds during terraforming
+	log_message("Density region marked for regeneration; affected chunks marked dirty", 3);
 }
 
 // ==================== Terraforming Implementation ====================
@@ -2792,6 +2796,9 @@ void VoxelGenerator::modify_terrain(const Vector3 &center, float radius, float d
 	invalidate_density_region(Vector3i(min_x, min_y, min_z), Vector3i(max_x, max_y, max_z));
 
 	log_message(String("Terrain edits count: {0}").format(Array::make(static_cast<int>(terrain_edits.size()))), 2);
+
+	// Immediately regenerate affected chunks to show terrain edits
+	regenerate_dirty_chunks();
 }
 
 void VoxelGenerator::dig_sphere(const Vector3 &center, float radius, float strength) {
@@ -2879,7 +2886,7 @@ void VoxelGenerator::set_terrain_edits_data(const PackedFloat32Array &data) {
 	log_message(String("Loaded {0} terrain edits").format(Array::make(count)), 1);
 	// Mark all chunks dirty to apply loaded edits
 	mark_all_chunks_dirty();
-	clear_density_cache();
+	// Note: Cache remains valid; edits are applied via terrain_edits map in get_terrain_density()
 }
 
 // =====================================================================
@@ -3473,96 +3480,96 @@ void VoxelGenerator::cancel_generation() {
 }
 
 void VoxelGenerator::rebuild_debug_visualizations() {
-    // Remove old visualization nodes
-    for (int i = 0; i < get_child_count(); ++i) {
-        Node *child = get_child(i);
-        StringName child_name = child->get_name();
-        if (child_name == StringName("MeshInstanceCenters") ||
-            child_name == StringName("MeshInstanceVoxelGrid") ||
-            child_name == StringName("MeshInstanceChunkGrid")) {
-            child->queue_free();
-        }
-    }
+	// Remove old visualization nodes
+	for (int i = 0; i < get_child_count(); ++i) {
+		Node *child = get_child(i);
+		StringName child_name = child->get_name();
+		if (child_name == StringName("MeshInstanceCenters") ||
+				child_name == StringName("MeshInstanceVoxelGrid") ||
+				child_name == StringName("MeshInstanceChunkGrid")) {
+			child->queue_free();
+		}
+	}
 
-    // Physical extent for visualizations
-    float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
-    float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
-    float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
-    Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
+	// Physical extent for visualizations
+	float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float physical_extent_y = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+	Vector3 physical_extent = Vector3(physical_extent_x, physical_extent_y, physical_extent_z);
 
-    // Use effective resolution for voxel grid
-    int eff_resolution = get_effective_resolution();
-    Vector3 eff_voxel_size = Vector3(1.0f, 1.0f, 1.0f) / static_cast<float>(std::max(1, eff_resolution));
+	// Use effective resolution for voxel grid
+	int eff_resolution = get_effective_resolution();
+	Vector3 eff_voxel_size = Vector3(1.0f, 1.0f, 1.0f) / static_cast<float>(std::max(1, eff_resolution));
 
-    // Centers visualization (debug points) - empty for now
-    Ref<ImmediateMesh> mesh_centers;
-    mesh_centers.instantiate();
-    MeshInstance3D *mi_centers = memnew(MeshInstance3D);
-    mi_centers->set_name("MeshInstanceCenters");
-    mi_centers->set_visible(show_centers);
-    mi_centers->set_mesh(mesh_centers);
-    add_child(mi_centers);
+	// Centers visualization (debug points) - empty for now
+	Ref<ImmediateMesh> mesh_centers;
+	mesh_centers.instantiate();
+	MeshInstance3D *mi_centers = memnew(MeshInstance3D);
+	mi_centers->set_name("MeshInstanceCenters");
+	mi_centers->set_visible(show_centers);
+	mi_centers->set_mesh(mesh_centers);
+	add_child(mi_centers);
 
-    // Voxel grid visualization
-    Ref<ImmediateMesh> mesh_cubes;
-    mesh_cubes.instantiate();
+	// Voxel grid visualization
+	Ref<ImmediateMesh> mesh_cubes;
+	mesh_cubes.instantiate();
 
-    if (show_voxel_grid) {
-        mesh_cubes->surface_begin(Mesh::PRIMITIVE_LINES);
+	if (show_voxel_grid) {
+		mesh_cubes->surface_begin(Mesh::PRIMITIVE_LINES);
 
-        int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
-        int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
-        int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
+		int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
+		int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
+		int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
 
-        Color grid_color(0.5f, 0.5f, 0.5f, 1.0f);
-        int cubes_vertex_count = 0;
-        int skipped_voxels = 0;
-        float eff_surface_band = get_effective_surface_band();
+		Color grid_color(0.5f, 0.5f, 0.5f, 1.0f);
+		int cubes_vertex_count = 0;
+		int skipped_voxels = 0;
+		float eff_surface_band = get_effective_surface_band();
 
-        if (generation_mode == HEIGHTMAP_FIRST) {
-            for (int ix = 0; ix < total_voxels_x; ++ix) {
-                for (int iz = 0; iz < total_voxels_z; ++iz) {
-                    float terrain_height_at_xz = get_height_at(ix, iz);
-                    float world_y_center = terrain_height_at_xz;
-                    float y_min_world = world_y_center - eff_surface_band;
-                    float y_max_world = world_y_center + eff_surface_band;
+		if (generation_mode == HEIGHTMAP_FIRST) {
+			for (int ix = 0; ix < total_voxels_x; ++ix) {
+				for (int iz = 0; iz < total_voxels_z; ++iz) {
+					float terrain_height_at_xz = get_height_at(ix, iz);
+					float world_y_center = terrain_height_at_xz;
+					float y_min_world = world_y_center - eff_surface_band;
+					float y_max_world = world_y_center + eff_surface_band;
 
-                    int iy_min = std::max(0, static_cast<int>((y_min_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
-                    int iy_max = std::min(total_voxels_y - 1, static_cast<int>((y_max_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
+					int iy_min = std::max(0, static_cast<int>((y_min_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
+					int iy_max = std::min(total_voxels_y - 1, static_cast<int>((y_max_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
 
-                    for (int iy = iy_min; iy <= iy_max; ++iy) {
-                        if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
-                            break;
+					for (int iy = iy_min; iy <= iy_max; ++iy) {
+						if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
+							break;
 
-                        Vector3 center;
-                        center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
-                        center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
-                        center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
+						Vector3 center;
+						center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
+						center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
+						center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
 
-                        float center_value = get_terrain_density(center);
-                        if (center_value >= cutoff)
-                            continue;
+						float center_value = get_terrain_density(center);
+						if (center_value >= cutoff)
+							continue;
 
-                        Vector<Vector3> cube_vertices = create_cube_vertices(center);
-                        const int edges[12][2] = {
-                            { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
-                            { 0, 4 }, { 2, 6 }, { 5, 6 }, { 5, 4 },
-                            { 5, 1 }, { 6, 7 }, { 4, 7 }, { 3, 7 }
-                        };
-                        for (int e = 0; e < 12; ++e) {
-                            mesh_cubes->surface_set_color(grid_color);
-                            mesh_cubes->surface_add_vertex(cube_vertices[edges[e][0]]);
-                            mesh_cubes->surface_add_vertex(cube_vertices[edges[e][1]]);
-                        }
-                        cubes_vertex_count += 24;
-                    }
-                    skipped_voxels += (total_voxels_y - (iy_max - iy_min + 1));
-                    if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
-                        break;
-                }
-                if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
-                    break;
-            }
+						Vector<Vector3> cube_vertices = create_cube_vertices(center);
+						const int edges[12][2] = {
+							{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+							{ 0, 4 }, { 2, 6 }, { 5, 6 }, { 5, 4 },
+							{ 5, 1 }, { 6, 7 }, { 4, 7 }, { 3, 7 }
+						};
+						for (int e = 0; e < 12; ++e) {
+							mesh_cubes->surface_set_color(grid_color);
+							mesh_cubes->surface_add_vertex(cube_vertices[edges[e][0]]);
+							mesh_cubes->surface_add_vertex(cube_vertices[edges[e][1]]);
+						}
+						cubes_vertex_count += 24;
+					}
+					skipped_voxels += (total_voxels_y - (iy_max - iy_min + 1));
+					if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
+						break;
+				}
+				if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
+					break;
+			}
 
 			// Log efficiency stats
 			int total_possible = total_voxels_x * total_voxels_y * total_voxels_z;
@@ -3570,144 +3577,144 @@ void VoxelGenerator::rebuild_debug_visualizations() {
 			log_message(String("Voxel grid (HEIGHTMAP): {0} vertices, {1}% voxels skipped due to surface band")
 								.format(Array::make(cubes_vertex_count, int(efficiency))),
 					2);
-        } else {
-            for (int ix = 0; ix < total_voxels_x; ++ix) {
-                for (int iy = 0; iy < total_voxels_y; ++iy) {
-                    for (int iz = 0; iz < total_voxels_z; ++iz) {
-                        if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
-                            break;
+		} else {
+			for (int ix = 0; ix < total_voxels_x; ++ix) {
+				for (int iy = 0; iy < total_voxels_y; ++iy) {
+					for (int iz = 0; iz < total_voxels_z; ++iz) {
+						if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
+							break;
 
-                        Vector3 center;
-                        center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
-                        center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
-                        center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
+						Vector3 center;
+						center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
+						center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
+						center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
 
-                        float center_value = get_terrain_density(center);
-                        if (center_value >= cutoff)
-                            continue;
+						float center_value = get_terrain_density(center);
+						if (center_value >= cutoff)
+							continue;
 
-                        Vector<Vector3> cube_vertices = create_cube_vertices(center);
-                        const int edges[12][2] = {
-                            { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
-                            { 0, 4 }, { 2, 6 }, { 5, 6 }, { 5, 4 },
-                            { 5, 1 }, { 6, 7 }, { 4, 7 }, { 3, 7 }
-                        };
-                        for (int e = 0; e < 12; ++e) {
-                            mesh_cubes->surface_set_color(grid_color);
-                            mesh_cubes->surface_add_vertex(cube_vertices[edges[e][0]]);
-                            mesh_cubes->surface_add_vertex(cube_vertices[edges[e][1]]);
-                        }
-                        cubes_vertex_count += 24;
-                    }
-                    if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
-                        break;
-                }
-                if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
-                    break;
-            }
+						Vector<Vector3> cube_vertices = create_cube_vertices(center);
+						const int edges[12][2] = {
+							{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+							{ 0, 4 }, { 2, 6 }, { 5, 6 }, { 5, 4 },
+							{ 5, 1 }, { 6, 7 }, { 4, 7 }, { 3, 7 }
+						};
+						for (int e = 0; e < 12; ++e) {
+							mesh_cubes->surface_set_color(grid_color);
+							mesh_cubes->surface_add_vertex(cube_vertices[edges[e][0]]);
+							mesh_cubes->surface_add_vertex(cube_vertices[edges[e][1]]);
+						}
+						cubes_vertex_count += 24;
+					}
+					if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
+						break;
+				}
+				if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
+					break;
+			}
 			log_message(String("Voxel grid (VOXELS_FIRST): {0} vertices").format(Array::make(cubes_vertex_count)), 2);
-        }
+		}
 
-        if (cubes_vertex_count > 0) {
-            mesh_cubes->surface_end();
-            Ref<StandardMaterial3D> material_cubes;
-            material_cubes.instantiate();
-            material_cubes->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
-            material_cubes->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
-            mesh_cubes->surface_set_material(0, material_cubes);
-        }
-    }
+		if (cubes_vertex_count > 0) {
+			mesh_cubes->surface_end();
+			Ref<StandardMaterial3D> material_cubes;
+			material_cubes.instantiate();
+			material_cubes->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
+			material_cubes->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
+			mesh_cubes->surface_set_material(0, material_cubes);
+		}
+	}
 
-    MeshInstance3D *mi_cubes = memnew(MeshInstance3D);
-    mi_cubes->set_name("MeshInstanceVoxelGrid");
-    mi_cubes->set_visible(show_voxel_grid);
-    mi_cubes->set_mesh(mesh_cubes);
-    add_child(mi_cubes);
+	MeshInstance3D *mi_cubes = memnew(MeshInstance3D);
+	mi_cubes->set_name("MeshInstanceVoxelGrid");
+	mi_cubes->set_visible(show_voxel_grid);
+	mi_cubes->set_mesh(mesh_cubes);
+	add_child(mi_cubes);
 
-    // Chunk grid visualization
-    Ref<ImmediateMesh> mesh_chunk_grid;
-    mesh_chunk_grid.instantiate();
-    mesh_chunk_grid->surface_begin(Mesh::PRIMITIVE_TRIANGLES);
+	// Chunk grid visualization
+	Ref<ImmediateMesh> mesh_chunk_grid;
+	mesh_chunk_grid.instantiate();
+	mesh_chunk_grid->surface_begin(Mesh::PRIMITIVE_TRIANGLES);
 
-    int chunk_grid_vertex_count = 0;
-    float line_thickness = 0.1f;
-    Color chunk_grid_color(1.0f, 0.0f, 0.0f);
+	int chunk_grid_vertex_count = 0;
+	float line_thickness = 0.1f;
+	Color chunk_grid_color(1.0f, 0.0f, 0.0f);
 
-    float half_extent_x = physical_extent.x * 0.5f;
-    float half_extent_y = physical_extent.y * 0.5f;
-    float half_extent_z = physical_extent.z * 0.5f;
+	float half_extent_x = physical_extent.x * 0.5f;
+	float half_extent_y = physical_extent.y * 0.5f;
+	float half_extent_z = physical_extent.z * 0.5f;
 
-    auto draw_thick_line = [&](Vector3 start, Vector3 end, Vector3 up) {
-        Vector3 dir = (end - start).normalized();
-        Vector3 side = dir.cross(up).normalized() * line_thickness * 0.5f;
+	auto draw_thick_line = [&](Vector3 start, Vector3 end, Vector3 up) {
+		Vector3 dir = (end - start).normalized();
+		Vector3 side = dir.cross(up).normalized() * line_thickness * 0.5f;
 
-        Vector3 v0 = start - side;
-        Vector3 v1 = start + side;
-        Vector3 v2 = end + side;
-        Vector3 v3 = end - side;
+		Vector3 v0 = start - side;
+		Vector3 v1 = start + side;
+		Vector3 v2 = end + side;
+		Vector3 v3 = end - side;
 
-        mesh_chunk_grid->surface_set_color(chunk_grid_color);
-        mesh_chunk_grid->surface_add_vertex(v0);
-        mesh_chunk_grid->surface_add_vertex(v1);
-        mesh_chunk_grid->surface_add_vertex(v2);
+		mesh_chunk_grid->surface_set_color(chunk_grid_color);
+		mesh_chunk_grid->surface_add_vertex(v0);
+		mesh_chunk_grid->surface_add_vertex(v1);
+		mesh_chunk_grid->surface_add_vertex(v2);
 
-        mesh_chunk_grid->surface_set_color(chunk_grid_color);
-        mesh_chunk_grid->surface_add_vertex(v0);
-        mesh_chunk_grid->surface_add_vertex(v2);
-        mesh_chunk_grid->surface_add_vertex(v3);
+		mesh_chunk_grid->surface_set_color(chunk_grid_color);
+		mesh_chunk_grid->surface_add_vertex(v0);
+		mesh_chunk_grid->surface_add_vertex(v2);
+		mesh_chunk_grid->surface_add_vertex(v3);
 
-        chunk_grid_vertex_count += 6;
-    };
+		chunk_grid_vertex_count += 6;
+	};
 
-    for (int cx = 0; cx <= world_size.x; ++cx) {
-        for (int cy = 0; cy <= world_size.y; ++cy) {
-            for (int cz = 0; cz <= world_size.z; ++cz) {
-                float x = -half_extent_x + cx * chunk_size;
-                float y = -half_extent_y + cy * chunk_size;
-                float z = -half_extent_z + cz * chunk_size;
+	for (int cx = 0; cx <= world_size.x; ++cx) {
+		for (int cy = 0; cy <= world_size.y; ++cy) {
+			for (int cz = 0; cz <= world_size.z; ++cz) {
+				float x = -half_extent_x + cx * chunk_size;
+				float y = -half_extent_y + cy * chunk_size;
+				float z = -half_extent_z + cz * chunk_size;
 
-                if (cx < world_size.x) {
-                    Vector3 start(x, y, z);
-                    Vector3 end(x + chunk_size, y, z);
-                    draw_thick_line(start, end, Vector3(0, 1, 0));
-                }
+				if (cx < world_size.x) {
+					Vector3 start(x, y, z);
+					Vector3 end(x + chunk_size, y, z);
+					draw_thick_line(start, end, Vector3(0, 1, 0));
+				}
 
-                if (cy < world_size.y) {
-                    Vector3 start(x, y, z);
-                    Vector3 end(x, y + chunk_size, z);
-                    draw_thick_line(start, end, Vector3(1, 0, 0));
-                }
+				if (cy < world_size.y) {
+					Vector3 start(x, y, z);
+					Vector3 end(x, y + chunk_size, z);
+					draw_thick_line(start, end, Vector3(1, 0, 0));
+				}
 
-                if (cz < world_size.z) {
-                    Vector3 start(x, y, z);
-                    Vector3 end(x, y, z + chunk_size);
-                    draw_thick_line(start, end, Vector3(0, 1, 0));
-                }
-            }
-        }
-    }
+				if (cz < world_size.z) {
+					Vector3 start(x, y, z);
+					Vector3 end(x, y, z + chunk_size);
+					draw_thick_line(start, end, Vector3(0, 1, 0));
+				}
+			}
+		}
+	}
 
-    if (chunk_grid_vertex_count > 0) {
-        mesh_chunk_grid->surface_end();
+	if (chunk_grid_vertex_count > 0) {
+		mesh_chunk_grid->surface_end();
 
-        Ref<StandardMaterial3D> material_chunk_grid;
-        material_chunk_grid.instantiate();
-        material_chunk_grid->set_albedo(Color(1.0f, 0.0f, 0.0f));
-        material_chunk_grid->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
-        material_chunk_grid->set_flag(BaseMaterial3D::FLAG_DISABLE_DEPTH_TEST, false);
+		Ref<StandardMaterial3D> material_chunk_grid;
+		material_chunk_grid.instantiate();
+		material_chunk_grid->set_albedo(Color(1.0f, 0.0f, 0.0f));
+		material_chunk_grid->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
+		material_chunk_grid->set_flag(BaseMaterial3D::FLAG_DISABLE_DEPTH_TEST, false);
 
-        mesh_chunk_grid->surface_set_material(0, material_chunk_grid);
+		mesh_chunk_grid->surface_set_material(0, material_chunk_grid);
 
-        MeshInstance3D *mi_chunk_grid = memnew(MeshInstance3D);
-        mi_chunk_grid->set_name("MeshInstanceChunkGrid");
-        mi_chunk_grid->set_visible(show_chunk_grid);
-        mi_chunk_grid->set_mesh(mesh_chunk_grid);
-        add_child(mi_chunk_grid);
-    }
+		MeshInstance3D *mi_chunk_grid = memnew(MeshInstance3D);
+		mi_chunk_grid->set_name("MeshInstanceChunkGrid");
+		mi_chunk_grid->set_visible(show_chunk_grid);
+		mi_chunk_grid->set_mesh(mesh_chunk_grid);
+		add_child(mi_chunk_grid);
+	}
 
-    if (visualize_noise_values) {
-        visualize_noise_field();
-    }
+	if (visualize_noise_values) {
+		visualize_noise_field();
+	}
 }
 
 void VoxelGenerator::_process(double delta) {
@@ -3733,8 +3740,8 @@ void VoxelGenerator::_process(double delta) {
 				apply_pending_meshes();
 			}
 
-			// Clear density cache
-			clear_density_cache();
+			// Mark cache as valid for reuse (don't clear it)
+			cache_is_valid = true;
 
 			// Rebuild debug visualizations (voxel grid, chunk grid) after async generation completes
 			rebuild_debug_visualizations();

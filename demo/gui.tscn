@@ -37,13 +37,106 @@ corner_radius_bottom_left = 3
 [node name="GUI" type="CanvasLayer"]
 script = ExtResource("1_80edf")
 
-[node name="DebugDisplay" type="Control" parent="."]
+[node name="TerraformSettings" type="Control" parent="."]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+metadata/_edit_group_ = true
+
+[node name="TerraformPanel" type="Panel" parent="TerraformSettings"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -450.0
+offset_right = 300.0
+offset_bottom = 450.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_6lon5")
+
+[node name="TerraformContainer" type="VBoxContainer" parent="TerraformSettings/TerraformPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TerraformTitle" type="Label" parent="TerraformSettings/TerraformPanel/TerraformContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Terraform Settings"
+horizontal_alignment = 1
+
+[node name="SliderSettingsGrid" type="GridContainer" parent="TerraformSettings/TerraformPanel/TerraformContainer"]
+layout_mode = 2
+columns = 2
+
+[node name="DigSphereRadiusLabel" type="Label" parent="TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Dig Radius: 0"
+
+[node name="DigSphereRadiusSpinbox" type="SpinBox" parent="TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DigSphereStrengthLabel" type="Label" parent="TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Dig Strength: 0"
+
+[node name="DigSphereStrengthSpinbox" type="SpinBox" parent="TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BuildSphereRadiusLabel" type="Label" parent="TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Build Radius: 0"
+
+[node name="BuildSphereRadiusSpinbox" type="SpinBox" parent="TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BuildSphereStrengthLabel" type="Label" parent="TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Build Strength: 0"
+
+[node name="BuildSphereStrengthSpinbox" type="SpinBox" parent="TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid"]
+custom_minimum_size = Vector2(150, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ExitButton" type="Button" parent="TerraformSettings/TerraformPanel/TerraformContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Exit"
+
+[node name="DebugDisplay" type="Control" parent="."]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+metadata/_edit_group_ = true
 
 [node name="DebugPanel" type="Panel" parent="DebugDisplay"]
 layout_mode = 1
@@ -94,7 +187,7 @@ text = "Visualize Noise"
 [node name="AutoGenerate" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
-text = "Auto Regenerate"
+text = "Auto Generate (Calls .generate())"
 
 [node name="ShowVoxelGrids" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
@@ -278,10 +371,15 @@ size_flags_horizontal = 3
 max_value = 1.0
 step = 0.1
 
+[node name="GenerateAsyncButton" type="Button" parent="DebugDisplay/DebugPanel/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Call .generate_async()"
+
 [node name="GenerateButton" type="Button" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
-text = "Generate"
+text = "Call .generate()"
 
 [node name="PrintStateButton" type="Button" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
@@ -340,6 +438,7 @@ offset_bottom = 40.0
 grow_horizontal = 2
 grow_vertical = 2
 rotation = 0.7853982
+metadata/_edit_group_ = true
 
 [node name="ColorRect" type="ColorRect" parent="CrossHair"]
 layout_mode = 1
@@ -356,4 +455,5 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.8959682, 0, 0.012285085, 1)
 
+[connection signal="pressed" from="TerraformSettings/TerraformPanel/TerraformContainer/ExitButton" to="." method="_on_exit_button_pressed"]
 [connection signal="pressed" from="DebugDisplay/DebugPanel/DebugContainer/ExitButton" to="." method="_on_exit_button_pressed"]

@@ -32,8 +32,8 @@ func _ready() -> void:
 	voxel_generator.show_lod_colors = true # no verbose 
 	
 	# Enable debug visualization
-	voxel_generator.show_voxel_grid = true
-	voxel_generator.show_chunk_grid = true
+	voxel_generator.show_voxel_grid = false
+	voxel_generator.show_chunk_grid = false
 		
 	# Configure terrain
 	# Make mountains taller / more dramatic than plains
@@ -46,7 +46,7 @@ func _ready() -> void:
 	var biome_gen = BiomeGenerator.new()
 	biome_gen.seed = 12346
 	biome_gen.sea_level = 0.0
-	setup_biome(biome_gen)
+	setup_biomes(biome_gen)
 
 	# Connect to signals
 	voxel_generator.chunk_ready.connect(_on_chunk_ready)
@@ -78,7 +78,7 @@ func _on_complete():
 	pass
 	#print("Chunks complete")
 
-func setup_biome(biome_gen: BiomeGenerator):
+func setup_biomes(biome_gen: BiomeGenerator):
 	## Plains
 	#var grass: Array[int] = [Voxel.GRASS]
 	#var dirt: Array[int] = [Voxel.DIRT]
@@ -88,7 +88,7 @@ func setup_biome(biome_gen: BiomeGenerator):
 	var stone: Array[int] = [Voxel.STONE]
 	
 	# Mountains occupy higher normalized elevation range
-	biome_gen.add_biome(
+	biome_gen.add_biome_extended(
 		"Mountains", 
 		0.7, 
 		1.0, 
@@ -98,9 +98,9 @@ func setup_biome(biome_gen: BiomeGenerator):
 		0.8,
 		stone, 
 		stone, 
-		2
-		#Voxel.STONE, 
-		#Voxel.STONE
+		2,
+		Voxel.STONE, 
+		Voxel.STONE
 		)
 #
 	## Desert

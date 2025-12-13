@@ -12,7 +12,7 @@ class_name Picele # Picture Element or Pixel
 
 # Walking properties
 @export_category("Walking")
-@export var walk_speed = 25.0
+@export var walk_speed = 40.0
 @export var sprint_speed = 12.0
 
 # Stamina system
@@ -26,12 +26,20 @@ class_name Picele # Picture Element or Pixel
 @export var is_sprinting: bool = false
 @export var is_gravity: bool = false
 
+# Terraform Settings
+@export_category("Terraform Settings")
+@export var dig_radius: float = 1.0
+@export var dig_strength: float = 2.0
+@export var build_radius: float = 1.0
+@export var build_strength: float = 2.0
+
 # References
 @onready var picele_camera: Camera3D = $PiceleCamera
 @onready var picele_ray_cast: RayCast3D = $PiceleCamera/PiceleRayCast
 
 var terrain_manager: MultiTerrainManager = null
 var voxel_generator_plains: VoxelGenerator
+
 
 func _ready() -> void:
 	# Get references after node is in tree
@@ -49,7 +57,7 @@ func _ready() -> void:
 	# Lock mouse cursor to center of screen
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	add_to_group("player")
-	global_position = Vector3(0.0, 50.0, 0.0)
+	global_position = Vector3(0.0, 75.0, 0.0)
 	# Ensure the raycast can hit world geometry (layer 1) while keeping existing masks
 	picele_ray_cast.set_collision_mask_value(1, true)
 
@@ -88,7 +96,11 @@ func _physics_process(delta):
 
 	# Handle terraforming and voxel placement
 	if Input.is_action_just_pressed("primary_action"):
-		terraform()
+		terraform_dig()
+	
+	# Handle terraforming and voxel placement
+	if Input.is_action_just_pressed("secondary_action"):
+		terraform_build()
 	
 	# Add gravity
 	if is_gravity:
@@ -118,7 +130,7 @@ func _input(event):
 		else:
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
-func terraform():
+func terraform_dig():
 	if not terrain_manager:
 		push_error("Terraform: MultiTerrainManager not available")
 		return
@@ -134,8 +146,28 @@ func terraform():
 	
 	# Apply terraform to all terrain generators (each will handle collisions independently)
 	for voxel_gen in all_generators:
-		voxel_gen.dig_sphere(hit_position, 1.0, 3.0)
-		voxel_gen.regenerate_dirty_chunks()
+		voxel_gen.dig_sphere(hit_position, dig_radius, dig_strength)
+	
+	var distance = raycast_info["distance"]
+	print("Terraforming at: %s (distance: %.2f)" % [hit_position, distance])
+
+func terraform_build():
+	if not terrain_manager:
+		push_error("Terraform: MultiTerrainManager not available")
+		return
+	
+	var raycast_info = terrain_manager.get_raycast_info()
+	
+	if not raycast_info.get("hit", false):
+		print("Terraform called with no collision hit")
+		return
+	
+	var hit_position = raycast_info["position"]
+	var all_generators = terrain_manager.get_all_voxel_generators()
+	
+	# Apply terraform to all terrain generators (each will handle collisions independently)
+	for voxel_gen in all_generators:
+		voxel_gen.build_sphere(hit_position, build_radius, build_strength)
 	
 	var distance = raycast_info["distance"]
 	print("Terraforming at: %s (distance: %.2f)" % [hit_position, distance])

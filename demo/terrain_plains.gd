@@ -16,12 +16,12 @@ func _ready() -> void:
 	voxel_generator.auto_generate = false # Make sure this is false before setting world_size
 	
 	# Configure plains generator
-	voxel_generator.world_size = Vector3i(7, 7, 7) # Immediately calls .generate() if .auto_generate is set to true
+	voxel_generator.world_size = Vector3i(7, 20, 7) # Immediately calls .generate() if .auto_generate is set to true
 	voxel_generator.chunk_size = 8
 	voxel_generator.resolution = 1
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
 
-	voxel_generator.surface_band = 1.5
+	voxel_generator.surface_band = 1.0
 	voxel_generator.max_chunks_per_frame = 4
 	voxel_generator.signal_every_n_chunks = 20
 	voxel_generator.lod_distances = custom_distances
@@ -30,13 +30,14 @@ func _ready() -> void:
 	voxel_generator.lod_reference_position = picele.global_position # no verbose
 	voxel_generator.lod_distance_multiplier = 1.0
 	voxel_generator.show_lod_colors = true # no verbose 
+	voxel_generator.heightmap_vertex_limit = 534000000
 	
 	# Enable debug visualization
 	voxel_generator.show_voxel_grid = true
 	voxel_generator.show_chunk_grid = true
 		
 	# Configure terrain
-	voxel_generator.terrain_height = 0.0
+	voxel_generator.terrain_height = 0.1
 	voxel_generator.terrain_amplitude = 0.0
 	voxel_generator.rock_influence = 0.0
 	voxel_generator.cutoff = 0.1
@@ -45,7 +46,7 @@ func _ready() -> void:
 	var biome_gen = BiomeGenerator.new()
 	biome_gen.seed = 12345 # no verbose
 	biome_gen.sea_level = 0.0 # no verbose
-	setup_biome(biome_gen)
+	setup_biomes(biome_gen)
 	
 	# Connect to signals
 	voxel_generator.chunk_ready.connect(_on_chunk_ready)
@@ -77,13 +78,13 @@ func _on_complete():
 	pass
 	#print("Chunks complete")
 
-func setup_biome(biome_gen: BiomeGenerator):
+func setup_biomes(biome_gen: BiomeGenerator):
 	# Plains
 	var grass: Array[int] = [Voxel.GRASS]
 	var dirt: Array[int] = [Voxel.DIRT]
 	
 	# Use normalized height range (0.0 - 1.0) to match BiomeGenerator API
-	biome_gen.add_biome(
+	biome_gen.add_biome_extended(
 		"Plains",
 		0.0, # Min height
 		0.3, # Max height
@@ -93,24 +94,49 @@ func setup_biome(biome_gen: BiomeGenerator):
 		0.4, # Max humidity
 		grass, # Surface Blocks Array
 		dirt, # Sub-surface Blocks Array
-		3 # Depth
-		#Voxel.STONE, # Bedrock block
-		#Voxel.STONE # Filler Block
+		3, # Depth
+		Voxel.STONE, # Bedrock block
+		Voxel.STONE # Filler Block
 		)
 
 	## Mountains
 	#var stone: Array[int] = [Voxel.STONE]
-	#biome_gen.add_biome_extended("Mountains", 25, 50, 0.0, 0.5, 0.2, 0.8,
-								  #stone, stone, 2, Voxel.STONE, Voxel.STONE)
+	#biome_gen.add_biome_extended(
+		#"Mountains", 
+		#0.7, 
+		#1.0, 
+		#0.0, 
+		#0.5, 
+		#0.2, 
+		#0.8,
+		#stone, 
+		#stone, 
+		#2, 
+		#Voxel.STONE, 
+		#Voxel.STONE
+		#)
 #
 	## Desert
 	#var sand: Array[int] = [Voxel.SAND]
-	#biome_gen.add_biome_extended("Desert", 3, 10, 0.7, 1.0, 0.0, 0.3,
-								  #sand, sand, 2, Voxel.STONE, Voxel.SAND)
+	#biome_gen.add_biome_extended(
+		#"Desert", 
+		#0.2, 
+		#0.5, 
+		#0.7, 
+		#1.0, 
+		#0.0, 
+		#0.3,
+		#sand, 
+		#sand, 
+		#2, 
+		#Voxel.STONE, 
+		#Voxel.SAND
+		#)
+		
 	voxel_generator.biome_generator = biome_gen
 
 	# Print sampled biome height range for debugging (normalized units)
-	_print_biome_height_range(biome_gen, 20, 20.0)
+	_print_biome_height_range(biome_gen)
 
 func _process(_delta):
 	voxel_generator.lod_reference_position = picele.global_position

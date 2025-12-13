@@ -9,11 +9,27 @@ var current_terrain_name: String = ""
 # Prevent multiple repeated UI connections
 var ui_initialized: bool = false
 
+# Get the player
+var player: Picele = null
+
 # Color coding for terrains
 var terrain_colors: Dictionary = {
 	"TerrainPlains": Color(0.4, 0.8, 0.4), # Green
 	"TerrainMountains": Color(0.7, 0.5, 0.3) # Brown
 }
+@onready var terraform_settings: Control = $TerraformSettings
+@onready var terraform_panel: Panel = $TerraformSettings/TerraformPanel
+@onready var terraform_container: VBoxContainer = $TerraformSettings/TerraformPanel/TerraformContainer
+@onready var terraform_title: Label = $TerraformSettings/TerraformPanel/TerraformContainer/TerraformTitle
+@onready var slider_settings_grid: GridContainer = $TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid
+@onready var dig_sphere_radius_label: Label = $TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid/DigSphereRadiusLabel
+@onready var dig_sphere_radius_spinbox: SpinBox = $TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid/DigSphereRadiusSpinbox
+@onready var dig_sphere_strength_label: Label = $TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid/DigSphereStrengthLabel
+@onready var dig_sphere_strength_spinbox: SpinBox = $TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid/DigSphereStrengthSpinbox
+@onready var build_sphere_radius_label: Label = $TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid/BuildSphereRadiusLabel
+@onready var build_sphere_radius_spinbox: SpinBox = $TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid/BuildSphereRadiusSpinbox
+@onready var build_sphere_strength_label: Label = $TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid/BuildSphereStrengthLabel
+@onready var build_sphere_strength_spinbox: SpinBox = $TerraformSettings/TerraformPanel/TerraformContainer/SliderSettingsGrid/BuildSphereStrengthSpinbox
 
 @onready var debug_display: Control = $DebugDisplay
 @onready var debug_panel: Panel = $DebugDisplay/DebugPanel
@@ -51,23 +67,30 @@ var terrain_colors: Dictionary = {
 @onready var terrain_amplitude_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/TerrainAmplitudeSpinner
 @onready var rock_influence_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/RockInfluenceLabel
 @onready var rock_influence_spinner: SpinBox = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/RockInfluenceSpinner
+@onready var generate_async_button: Button = $DebugDisplay/DebugPanel/DebugContainer/GenerateAsyncButton
 @onready var generate_button: Button = $DebugDisplay/DebugPanel/DebugContainer/GenerateButton
 @onready var print_state_button: Button = $DebugDisplay/DebugPanel/DebugContainer/PrintStateButton
 @onready var exit_button: Button = $DebugDisplay/DebugPanel/DebugContainer/ExitButton
 @onready var fps_counter: Label = $FPSControl/FPS/FpsCounter
+@onready var cross_hair: Control = $CrossHair
 
 @export_category("Debug Settings")
 @export var debug_show: bool = false
+@export var terraform_settings_show: bool = false
 
 func _ready() -> void:
 	# Get terrain manager (from scene root)
 	var world = get_parent()
 	if world:
 		terrain_manager = world.get_node_or_null("MultiTerrainManager")
+		player = world.get_node_or_null("Picele")
 	if not terrain_manager:
 		push_error("GUI: MultiTerrainManager not found as a child of the scene root")
 		return
-	
+	if not player:
+		push_error("GUI: Player not found as a child of the scene root")
+		return
+		
 	# Connect to terrain selection signal
 	terrain_manager.connect("terrain_selected", Callable(self, "_on_terrain_selected"))
 	
@@ -77,7 +100,9 @@ func _ready() -> void:
 		current_voxel_generator = terrain_manager.current_voxel_generator
 	
 	debug_display.visible = debug_show
+	terraform_settings.visible = terraform_settings_show
 	create_debug_ui()
+	create_terraform_settings_ui()
 
 	# Initialize UI from current selected generator if already available
 	if current_voxel_generator:
@@ -117,7 +142,7 @@ func _on_terrain_selected(terrain_name: String, voxel_gen: VoxelGenerator) -> vo
 	current_voxel_generator = voxel_gen
 	print("[GUI] Switched to terrain: %s" % terrain_name)
 	update_ui_from_voxel_generator()
-
+	
 func update_ui_from_voxel_generator() -> void:
 	if not current_voxel_generator:
 		return
@@ -168,7 +193,70 @@ func update_ui_from_voxel_generator() -> void:
 
 func update_label(label: Label, prefix: String, value) -> void:
 	label.text = prefix + str(value)
-
+	
+func create_terraform_settings_ui():
+	# Debug Container - centered on screen
+	terraform_panel.anchor_left = 0.5
+	terraform_panel.anchor_right = 0.5
+	terraform_panel.anchor_top = 0.5
+	terraform_panel.anchor_bottom = 0.5
+	terraform_panel.offset_left = -300
+	terraform_panel.offset_right = 300
+	terraform_panel.offset_top = -450
+	terraform_panel.offset_bottom = 450
+	
+	# Debug Title
+	terraform_title.text = "Terraform Settings"
+	terraform_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	
+	# Dig sphere radius slider
+	update_label(dig_sphere_radius_label, "Dig Radius: ", player.dig_radius)
+	dig_sphere_radius_spinbox.min_value = 1.0
+	dig_sphere_radius_spinbox.max_value = 10.0
+	dig_sphere_radius_spinbox.step = 1.0
+	dig_sphere_radius_spinbox.value = player.dig_radius
+	dig_sphere_radius_spinbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dig_sphere_radius_spinbox.value_changed.connect(func(value):
+		player.dig_radius = value
+		update_label(dig_sphere_radius_label, "Dig Radius: ", value)
+	)
+	
+	# Dig strength slider
+	update_label(dig_sphere_strength_label, "Dig Strength: ", player.dig_strength)
+	dig_sphere_strength_spinbox.min_value = 1.0
+	dig_sphere_strength_spinbox.max_value = 10.0
+	dig_sphere_strength_spinbox.step = 1.0
+	dig_sphere_strength_spinbox.value = player.dig_strength
+	dig_sphere_strength_spinbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dig_sphere_strength_spinbox.value_changed.connect(func(value):
+		player.dig_strength = value
+		update_label(dig_sphere_strength_label, "Dig Strength: ", value)
+	)
+	
+	# Build sphere radius slider
+	update_label(build_sphere_radius_label, "Build Radius: ", player.build_radius)
+	build_sphere_radius_spinbox.min_value = 1.0
+	build_sphere_radius_spinbox.max_value = 10.0
+	build_sphere_radius_spinbox.step = 1.0
+	build_sphere_radius_spinbox.value = player.build_radius
+	build_sphere_radius_spinbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	build_sphere_radius_spinbox.value_changed.connect(func(value):
+		player.build_radius = value
+		update_label(build_sphere_radius_label, "Build Radius: ", value)
+	)
+	
+	# Build sphere strength slider
+	update_label(build_sphere_strength_label, "Build Strength: ", player.build_strength)
+	build_sphere_strength_spinbox.min_value = 1.0
+	build_sphere_strength_spinbox.max_value = 10.0
+	build_sphere_strength_spinbox.step = 1.0
+	build_sphere_strength_spinbox.value = player.build_strength
+	build_sphere_strength_spinbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	build_sphere_strength_spinbox.value_changed.connect(func(value):
+		player.build_strength = value
+		update_label(build_sphere_strength_label, "Build Strength: ", value)
+	)
+	
 func create_debug_ui():
 	# Debug Container - centered on screen
 	debug_panel.anchor_left = 0.5
@@ -184,8 +272,12 @@ func create_debug_ui():
 	title.text = "VoxelGenerator Debug"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	# Always connect Generate button to test interaction
-	generate_button.text = "Generate"
+	# Connect Generate Async button to test interaction
+	generate_async_button.text = "Call .generate_async()"
+	generate_async_button.pressed.connect(_on_generate_async_pressed)
+	
+	# Connect Generate button to test interaction
+	generate_button.text = "Call .generate()"
 	generate_button.pressed.connect(_on_generate_pressed)
 
 	# Print State button
@@ -373,10 +465,15 @@ func create_debug_ui():
 		# Voxel generator not available yet; UI will update when a terrain is selected
 		pass
 
-func _on_generate_pressed():
+func _on_generate_async_pressed():
 	if current_voxel_generator:
 		current_voxel_generator.mark_all_chunks_dirty()
 		current_voxel_generator.generate_async()
+		
+func _on_generate_pressed():
+	if current_voxel_generator:
+		current_voxel_generator.mark_all_chunks_dirty()
+		current_voxel_generator.generate()
 
 func _on_slice_pressed():
 	print("Slice button pressed!")
@@ -395,14 +492,40 @@ func _input(event: InputEvent) -> void:
 		var picele_node = root.find_child("Picele", true, false)
 		if picele_node:
 			picele_node.show()
-		
+			
+		if terraform_settings.visible == true:
+			terraform_settings.visible = false
+				
 		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 			debug_display.visible = true
+			cross_hair.visible = false
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		else:
 			debug_display.visible = false
+			cross_hair.visible = true
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-
+			
+	# Toggle mouse capture with F6 for terraform settings
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F6:
+		var root = get_tree().root.get_child(0)
+		var picele_node = root.find_child("Picele", true, false)
+		if picele_node:
+			picele_node.show()
+		
+		if debug_display.visible == true:
+			debug_display.visible = false
+			
+		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+			terraform_settings.visible = true
+			cross_hair.visible = false
+			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		else:
+			terraform_settings.visible = false
+			cross_hair.visible = true
+			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+			
 func _on_exit_button_pressed() -> void:
 	debug_display.visible = false
+	terraform_settings.visible = false
+	cross_hair.visible = true
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

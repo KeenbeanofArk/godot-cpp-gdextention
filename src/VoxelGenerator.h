@@ -119,6 +119,8 @@ private:
 	float world_vertical_center_offset = 0.0f;
 
 	Vector3i world_size = Vector3i(1, 1, 1);
+	Vector3i world_size_locked = Vector3i(1, 1, 1); // Locked size to prevent offset drift
+	bool world_size_finalized = false; // True after first generation (prevents size changes)
 	int resolution = 1;
 	float cutoff = 0.0f;
 	bool show_centers = false;
