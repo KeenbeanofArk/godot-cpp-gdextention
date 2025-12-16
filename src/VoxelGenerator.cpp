@@ -147,6 +147,9 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("debug_draw_noise_slice", "y_level"), &VoxelGenerator::debug_draw_noise_slice);
 	ClassDB::bind_method(D_METHOD("log_message", "message", "verbosity_level"), &VoxelGenerator::log_message, DEFVAL(1));
 
+	// Heightmap methods
+	ClassDB::bind_method(D_METHOD("get_height_at", "ix", "iz"), &VoxelGenerator::get_height_at);
+
 	ClassDB::bind_method(D_METHOD("reset"), &VoxelGenerator::reset);
 
 	// Bind dirty flag / incremental update methods
@@ -322,7 +325,7 @@ void VoxelGenerator::_notification(int p_what) {
 			set_physics_process(false);
 
 			remove_children();
-			randomize_seed();
+			//randomize_seed();
 
 			if (auto_generate) {
 				generate();

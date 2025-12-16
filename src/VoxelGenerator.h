@@ -473,6 +473,9 @@ private:
 	int get_effective_resolution() const;
 	// Get effective surface band considering LOD level
 	float get_effective_surface_band() const;
+
+	// Get cached height value at grid position
+	float get_height_at(int ix, int iz) const;
 	// =================================================================
 
 	// ==================== Heightmap Cache Methods ====================
@@ -480,8 +483,6 @@ private:
 	void build_heightmap_cache();
 	// Clear the heightmap cache
 	void clear_heightmap_cache();
-	// Get cached height value at grid position
-	float get_height_at(int ix, int iz) const;
 	// Convert 2D index to 1D cache index
 	inline int heightmap_cache_index(int ix, int iz) const {
 		return ix + iz * heightmap_size_x;
