@@ -42,6 +42,7 @@ var terrain_colors: Dictionary = {
 @onready var show_voxel_grids: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/ShowVoxelGrids
 @onready var show_chunk_grids: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/ShowChunkGrids
 @onready var show_centers: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/ShowCenters
+@onready var use_textures: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/UseTextures
 @onready var slider_grid: GridContainer = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid
 @onready var verbosity_label: Label = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/VerbosityLabel
 @onready var verbosity_slider: HSlider = $DebugDisplay/DebugPanel/DebugContainer/SliderGrid/VerbositySlider
@@ -154,6 +155,7 @@ func update_ui_from_voxel_generator() -> void:
 	show_voxel_grids.set_pressed(current_voxel_generator.show_voxel_grid)
 	show_chunk_grids.set_pressed(current_voxel_generator.show_chunk_grid)
 	show_centers.set_pressed(current_voxel_generator.show_centers)
+	use_textures.set_pressed(current_voxel_generator.use_textures)
 
 	update_label(verbosity_label, "Verbosity: ", current_voxel_generator.debug_verbosity)
 	verbosity_slider.value = current_voxel_generator.debug_verbosity
@@ -314,6 +316,11 @@ func create_debug_ui():
 		show_centers.text = "Show Centers"
 		show_centers.set_pressed(current_voxel_generator.show_centers)
 		show_centers.toggled.connect(func(pressed): current_voxel_generator.show_centers = pressed)
+
+		# Use Textures toggle
+		use_textures.text = "Use Textures"
+		use_textures.set_pressed(current_voxel_generator.use_textures)
+		use_textures.toggled.connect(func(pressed): current_voxel_generator.use_textures = pressed)
 		
 		# Verbosity slider and label
 		update_label(verbosity_label, "Verbosity: ", current_voxel_generator.debug_verbosity)

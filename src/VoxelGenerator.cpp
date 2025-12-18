@@ -95,6 +95,10 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_show_lod_colors"), &VoxelGenerator::get_show_lod_colors);
 	ClassDB::bind_method(D_METHOD("set_lod_distance_multiplier", "value"), &VoxelGenerator::set_lod_distance_multiplier);
 	ClassDB::bind_method(D_METHOD("get_lod_distance_multiplier"), &VoxelGenerator::get_lod_distance_multiplier);
+	ClassDB::bind_method(D_METHOD("set_use_textures", "value"), &VoxelGenerator::set_use_textures);
+	ClassDB::bind_method(D_METHOD("get_use_textures"), &VoxelGenerator::get_use_textures);
+	ClassDB::bind_method(D_METHOD("set_terrain_material", "material"), &VoxelGenerator::set_terrain_material);
+	ClassDB::bind_method(D_METHOD("get_terrain_material"), &VoxelGenerator::get_terrain_material);
 
 	// Terrain noise bindings
 	ClassDB::bind_method(D_METHOD("set_terrain_noise", "noise"), &VoxelGenerator::set_terrain_noise);
@@ -148,7 +152,7 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("log_message", "message", "verbosity_level"), &VoxelGenerator::log_message, DEFVAL(1));
 
 	// Heightmap methods
-	ClassDB::bind_method(D_METHOD("get_height_at", "ix", "iz"), &VoxelGenerator::get_height_at);
+	ClassDB::bind_method(D_METHOD("get_height_at", "fx", "fz"), &VoxelGenerator::get_height_at);
 
 	ClassDB::bind_method(D_METHOD("reset"), &VoxelGenerator::reset);
 
@@ -196,6 +200,10 @@ void VoxelGenerator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT64_ARRAY, "lod_distances"), "set_lod_distances", "get_lod_distances");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lod_distance_multiplier", PROPERTY_HINT_RANGE, "1.0,10.0,0.1"), "set_lod_distance_multiplier", "get_lod_distance_multiplier");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "show_lod_colors"), "set_show_lod_colors", "get_show_lod_colors");
+
+	ADD_GROUP("Rendering", "render_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_textures"), "set_use_textures", "get_use_textures");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "terrain_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_terrain_material", "get_terrain_material");
 
 	ADD_GROUP("Terrain Settings", "terrain_");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "terrain_noise", PROPERTY_HINT_RESOURCE_TYPE, "NoiseGenerator"), "set_terrain_noise", "get_terrain_noise");
@@ -666,6 +674,47 @@ void VoxelGenerator::set_show_lod_colors(bool value) {
 
 bool VoxelGenerator::get_show_lod_colors() const {
 	return show_lod_colors;
+}
+
+void VoxelGenerator::set_use_textures(bool value) {
+	if (use_textures == value) {
+		return;
+	}
+	use_textures = value;
+	log_message(String("Use textures set to: {0}").format(Array::make(use_textures)), 2);
+
+	Ref<ShaderMaterial> shader_material = terrain_material;
+	if (shader_material.is_valid()) {
+		shader_material->set_shader_parameter("use_textures", use_textures);
+	}
+}
+
+bool VoxelGenerator::get_use_textures() const {
+	return use_textures;
+}
+
+void VoxelGenerator::set_terrain_material(const Ref<Material> &value) {
+	terrain_material = value;
+	log_message(String("Terrain material set: {0}").format(Array::make(terrain_material.is_valid() ? "valid" : "null")), 2);
+
+	Ref<ShaderMaterial> shader_material = terrain_material;
+	if (shader_material.is_valid()) {
+		shader_material->set_shader_parameter("use_textures", use_textures);
+	}
+
+	// Propagate material to existing chunks (main thread only).
+	{
+		std::lock_guard<std::mutex> lock(chunks_mutex);
+		for (Chunk *chunk : chunks) {
+			if (chunk && is_instance_valid(chunk)) {
+				chunk->set_terrain_material(terrain_material);
+			}
+		}
+	}
+}
+
+Ref<Material> VoxelGenerator::get_terrain_material() const {
+	return terrain_material;
 }
 
 Color VoxelGenerator::get_lod_color(int lod) const {
@@ -2040,6 +2089,7 @@ void VoxelGenerator::create_chunks() {
 				// Chunk position is (0,0,0) because mesh vertices are in world-space
 				// The mesh data already contains world-space coordinates
 				chunk->set_position(Vector3(0, 0, 0));
+				chunk->set_terrain_material(terrain_material);
 
 				add_child(chunk); // Add to scene tree
 
@@ -2973,6 +3023,13 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 
 				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
 
+				// Biome id for texturing (<= 16 biomes supported; clamp to [0,15])
+				int biome_index_for_textures = 0;
+				if (biome_generator.is_valid()) {
+					biome_index_for_textures = CLAMP(biome_generator->get_biome_index_at(center.x, center.z), 0, 15);
+				}
+				Color custom0_color(static_cast<float>(biome_index_for_textures) / 255.0f, 0.0f, 0.0f, 0.0f);
+
 				// Calculate color based on position or LOD visualization
 				int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
 				int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
@@ -3029,6 +3086,10 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 					mesh_data.colors.push_back(color);
 					mesh_data.colors.push_back(color);
 					mesh_data.colors.push_back(color);
+
+					mesh_data.custom0.push_back(custom0_color);
+					mesh_data.custom0.push_back(custom0_color);
+					mesh_data.custom0.push_back(custom0_color);
 				}
 			}
 		}
@@ -3110,6 +3171,7 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 	PackedVector3Array vertices;
 	PackedVector3Array normals;
 	PackedColorArray colors;
+	PackedColorArray custom0;
 
 	// Generate mesh using marching cubes for this chunk
 	for (int local_ix = 0; local_ix < chunk_voxels_x; ++local_ix) {
@@ -3166,6 +3228,13 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 
 				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
 
+				// Biome id for texturing (<= 16 biomes supported; clamp to [0,15])
+				int biome_index_for_textures = 0;
+				if (biome_generator.is_valid()) {
+					biome_index_for_textures = CLAMP(biome_generator->get_biome_index_at(center.x, center.z), 0, 15);
+				}
+				Color custom0_color(static_cast<float>(biome_index_for_textures) / 255.0f, 0.0f, 0.0f, 0.0f);
+
 				// Calculate color based on biome or world position for visualization
 				Color color;
 				if (show_lod_colors) {
@@ -3220,6 +3289,10 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 					colors.push_back(color);
 					colors.push_back(color);
 					colors.push_back(color);
+
+					custom0.push_back(custom0_color);
+					custom0.push_back(custom0_color);
+					custom0.push_back(custom0_color);
 				}
 			}
 		}
@@ -3229,7 +3302,7 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 	if (chunk_index >= 0 && chunk_index < static_cast<int>(chunks.size())) {
 		Chunk *chunk = chunks[chunk_index];
 		if (chunk && is_instance_valid(chunk)) {
-			chunk->apply_mesh_data(vertices, normals, colors);
+			chunk->apply_mesh_data(vertices, normals, colors, custom0);
 		}
 	}
 
@@ -3299,19 +3372,19 @@ void VoxelGenerator::clear_heightmap_cache() {
 	log_message("Heightmap cache cleared", 2);
 }
 
-float VoxelGenerator::get_height_at(int ix, int iz) const {
+float VoxelGenerator::get_height_at(float fx, float fz) const {
 	// Bounds check
 	if (heightmap_cache.empty() ||
-			ix < 0 || ix >= heightmap_size_x ||
-			iz < 0 || iz >= heightmap_size_z) {
+			fx < 0 || fx >= heightmap_size_x ||
+			fz < 0 || fz >= heightmap_size_z) {
 		// Fallback to direct calculation
 		int eff_resolution = get_effective_resolution();
 		float eff_voxel_size = 1.0f / static_cast<float>(std::max(1, eff_resolution));
 		float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
 		float physical_extent_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
 
-		float world_x = -physical_extent_x * 0.5f + (ix + 0.5f) * eff_voxel_size;
-		float world_z = -physical_extent_z * 0.5f + (iz + 0.5f) * eff_voxel_size;
+		float world_x = -physical_extent_x * 0.5f + (fx + 0.5f) * eff_voxel_size;
+		float world_z = -physical_extent_z * 0.5f + (fz + 0.5f) * eff_voxel_size;
 
 		float height = terrain_height;
 		if (terrain_noise.is_valid()) {
@@ -3320,7 +3393,7 @@ float VoxelGenerator::get_height_at(int ix, int iz) const {
 		return height;
 	}
 
-	return heightmap_cache[heightmap_cache_index(ix, iz)];
+	return heightmap_cache[heightmap_cache_index(fx, fz)];
 }
 
 bool VoxelGenerator::heightmap_needs_rebuild() const {
@@ -3782,7 +3855,7 @@ void VoxelGenerator::apply_pending_meshes() {
 		if (mesh_data.chunk_index >= 0 && mesh_data.chunk_index < static_cast<int>(chunks.size())) {
 			Chunk *chunk = chunks[mesh_data.chunk_index];
 			if (chunk && is_instance_valid(chunk)) {
-				chunk->apply_mesh_data(mesh_data.vertices, mesh_data.normals, mesh_data.colors);
+				chunk->apply_mesh_data(mesh_data.vertices, mesh_data.normals, mesh_data.colors, mesh_data.custom0);
 
 				// Emit chunk_ready signal
 				emit_signal("chunk_ready", mesh_data.chunk_index, mesh_data.chunk_coord);

@@ -38,6 +38,7 @@ corner_radius_bottom_left = 3
 script = ExtResource("1_80edf")
 
 [node name="TerraformSettings" type="Control" parent="."]
+visible = false
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -129,7 +130,6 @@ theme_override_font_sizes/font_size = 20
 text = "Exit"
 
 [node name="DebugDisplay" type="Control" parent="."]
-visible = false
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -148,7 +148,7 @@ anchor_bottom = 0.5
 offset_left = -300.0
 offset_top = -450.0
 offset_right = 300.0
-offset_bottom = 450.0
+offset_bottom = 515.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_6lon5")
@@ -203,6 +203,11 @@ text = "Show Chunk Grids"
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Show Centers	"
+
+[node name="UseTextures" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Use Textures"
 
 [node name="SliderGrid" type="GridContainer" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2

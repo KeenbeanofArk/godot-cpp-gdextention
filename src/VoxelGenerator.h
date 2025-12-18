@@ -55,8 +55,10 @@
 
 #include <godot_cpp/classes/fast_noise_lite.hpp>
 #include <godot_cpp/classes/immediate_mesh.hpp>
+#include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/worker_thread_pool.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -75,6 +77,7 @@ struct ChunkMeshData {
 	PackedVector3Array vertices;
 	PackedVector3Array normals;
 	PackedColorArray colors;
+	PackedColorArray custom0; // Custom per-vertex data (e.g., biome id)
 };
 
 // Generation mode enum - determines how terrain is generated
@@ -100,6 +103,8 @@ private:
 	bool lod_distances_custom = false; // True if user has set custom LOD distances
 	float lod_distance_multiplier = 2.0f; // Multiplier for LOD distance formula (default 2.0 = double per LOD)
 	bool show_lod_colors = false; // Visualize LOD levels with color-coded chunks
+	bool use_textures = false; // Toggle textured shader vs vertex-color debug output
+	Ref<Material> terrain_material; // Optional shared terrain material applied to all chunks
 
 	// Heightmap cache for HEIGHTMAP_FIRST mode
 	std::vector<float> heightmap_cache;
@@ -299,6 +304,12 @@ public:
 	void set_show_lod_colors(bool value);
 	bool get_show_lod_colors() const;
 
+	void set_use_textures(bool value);
+	bool get_use_textures() const;
+
+	void set_terrain_material(const Ref<Material> &value);
+	Ref<Material> get_terrain_material() const;
+
 	// Get LOD color for visualization (green=LOD0 to red=LOD7)
 	Color get_lod_color(int lod_level) const;
 
@@ -475,7 +486,7 @@ private:
 	float get_effective_surface_band() const;
 
 	// Get cached height value at grid position
-	float get_height_at(int ix, int iz) const;
+	float get_height_at(float fx, float fz) const;
 	// =================================================================
 
 	// ==================== Heightmap Cache Methods ====================

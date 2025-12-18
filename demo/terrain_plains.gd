@@ -8,6 +8,13 @@ var custom_distances = PackedFloat64Array([20, 40, 80, 160, 320, 640, 1280, 2560
 func _ready() -> void:
 	voxel_generator.cancel_generation()
 	voxel_generator.reset()
+
+	# Shared terrain material (shader reads biome id from CUSTOM0)
+	voxel_generator.terrain_material = preload("res://scenes/shaders/TerrainBiomeTriplanar.tres")
+	var mat := voxel_generator.terrain_material
+	if mat is ShaderMaterial:
+		preload("res://scenes/shaders/terrain_texture_arrays.gd").new().ensure_default_arrays(mat)
+	voxel_generator.use_textures = false
 	
 	# Setup Debug
 	voxel_generator.debug_mode = true
@@ -29,8 +36,9 @@ func _ready() -> void:
 	voxel_generator.lod_level = 7
 	voxel_generator.lod_reference_position = picele.global_position # no verbose
 	voxel_generator.lod_distance_multiplier = 1.0
-	voxel_generator.show_lod_colors = true # no verbose 
+	voxel_generator.show_lod_colors = true # no verbose
 	voxel_generator.heightmap_vertex_limit = 534000000
+	voxel_generator.use_textures = true
 	
 	# Enable debug visualization
 	voxel_generator.show_voxel_grid = true

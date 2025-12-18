@@ -1,0 +1,10 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://scenes/shaders/TerrainBiomeTriplanar.gdshader" id="1_terrain_biome_triplanar"]
+
+[resource]
+shader = ExtResource("1_terrain_biome_triplanar")
+shader_parameter/use_textures = false
+shader_parameter/triplanar_scale = 0.25
+shader_parameter/slope_start = 0.4
+shader_parameter/slope_end = 0.75

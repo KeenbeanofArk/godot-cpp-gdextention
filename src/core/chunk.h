@@ -44,6 +44,7 @@
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/collision_shape3d.hpp>
 #include <godot_cpp/classes/concave_polygon_shape3d.hpp>
+#include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
@@ -99,7 +100,9 @@ public:
 	Vector3i get_chunk_coord() const;
 
 	// Mesh data application (called from main thread only)
-	void apply_mesh_data(const PackedVector3Array &vertices, const PackedVector3Array &normals, const PackedColorArray &colors);
+	void apply_mesh_data(const PackedVector3Array &vertices, const PackedVector3Array &normals, const PackedColorArray &colors, const PackedColorArray &custom0);
+	void set_terrain_material(const Ref<Material> &material);
+	Ref<Material> get_terrain_material() const;
 	void clear_mesh();
 	bool is_mesh_ready() const;
 	void update_collision_shape(const Ref<ArrayMesh> &mesh);
@@ -122,6 +125,7 @@ public:
 
 private:
 	Ref<voxel_engine::BiomeGenerator> biome_generator;
+	Ref<Material> terrain_material;
 
 	// Static default chunk size (class-wide default)
 	static int default_chunk_size;

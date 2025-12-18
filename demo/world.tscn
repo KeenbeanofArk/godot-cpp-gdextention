@@ -21,24 +21,24 @@ sky = SubResource("Sky_tlwt5")
 
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_036b0"]
 noise_type = 3
-seed = 847392426
+seed = 1240
 frequency = 0.02
 fractal_octaves = 4
 
 [sub_resource type="NoiseGenerator" id="NoiseGenerator_dwbse"]
-seed = 847392426
+seed = 1240
 noise = SubResource("FastNoiseLite_036b0")
 
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_pkg7o"]
 noise_type = 3
-seed = 847392427
+seed = 1241
 frequency = 0.1
 fractal_octaves = 3
 fractal_lacunarity = 2.5
 fractal_gain = 0.6
 
 [sub_resource type="NoiseGenerator" id="NoiseGenerator_gbfbk"]
-seed = 847392427
+seed = 1241
 noise = SubResource("FastNoiseLite_pkg7o")
 octaves = 3
 period = 10.0
@@ -63,9 +63,12 @@ directional_shadow_max_distance = 1.0
 script = ExtResource("2_036b0")
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="TerrainPlains"]
-seeder = 847392426
+auto_generate = true
+use_textures = true
 terrain_noise = SubResource("NoiseGenerator_dwbse")
 detail_noise = SubResource("NoiseGenerator_gbfbk")
+show_voxel_grid = true
+show_chunk_grid = true
 
 [node name="CentralDebugGUI" parent="." instance=ExtResource("3_tlwt5")]
 

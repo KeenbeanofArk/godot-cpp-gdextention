@@ -39,6 +39,7 @@
 #include <godot_cpp/classes/static_body3d.hpp>
 #include <godot_cpp/classes/surface_tool.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 
 namespace voxel_engine {
 
@@ -64,13 +65,27 @@ void Chunk::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_chunk_coord"), &Chunk::get_chunk_coord);
 
 	// Mesh methods
-	ClassDB::bind_method(D_METHOD("apply_mesh_data", "vertices", "normals", "colors"), &Chunk::apply_mesh_data);
+	ClassDB::bind_method(D_METHOD("apply_mesh_data", "vertices", "normals", "colors", "custom0"), &Chunk::apply_mesh_data);
+	ClassDB::bind_method(D_METHOD("set_terrain_material", "material"), &Chunk::set_terrain_material);
+	ClassDB::bind_method(D_METHOD("get_terrain_material"), &Chunk::get_terrain_material);
 	ClassDB::bind_method(D_METHOD("clear_mesh"), &Chunk::clear_mesh);
 	ClassDB::bind_method(D_METHOD("is_mesh_ready"), &Chunk::is_mesh_ready);
 
 	// Properties
 	ADD_GROUP("Chunk Info", "");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3I, "chunk_coord"), "set_chunk_coord", "get_chunk_coord");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "terrain_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_terrain_material", "get_terrain_material");
+}
+
+void Chunk::set_terrain_material(const Ref<Material> &material) {
+	terrain_material = material;
+	if (mesh_instance) {
+		mesh_instance->set_material_override(terrain_material);
+	}
+}
+
+Ref<Material> Chunk::get_terrain_material() const {
+	return terrain_material;
 }
 
 Chunk::Chunk() {
@@ -282,7 +297,7 @@ Vector3i Chunk::get_chunk_coord() const {
 // Mesh Application Methods (Main Thread Only)
 // ============================================================================
 
-void Chunk::apply_mesh_data(const PackedVector3Array &vertices, const PackedVector3Array &normals, const PackedColorArray &colors) {
+void Chunk::apply_mesh_data(const PackedVector3Array &vertices, const PackedVector3Array &normals, const PackedColorArray &colors, const PackedColorArray &custom0) {
 	// This must be called from the main thread only!
 
 	// Clear existing mesh if any
@@ -304,13 +319,32 @@ void Chunk::apply_mesh_data(const PackedVector3Array &vertices, const PackedVect
 	arrays[Mesh::ARRAY_NORMAL] = normals;
 	arrays[Mesh::ARRAY_COLOR] = colors;
 
-	array_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
+	// CUSTOM0 is uploaded as RGBA8_UNORM bytes for compatibility with Godot's custom attribute formats.
+	PackedByteArray custom0_bytes;
+	int vertex_count = vertices.size();
+	custom0_bytes.resize(vertex_count * 4);
+	for (int i = 0; i < vertex_count; ++i) {
+		Color c = (i < custom0.size()) ? custom0[i] : Color(0, 0, 0, 0);
+		int base = i * 4;
+		custom0_bytes[base + 0] = static_cast<uint8_t>(CLAMP(int(Math::round(c.r * 255.0f)), 0, 255));
+		custom0_bytes[base + 1] = static_cast<uint8_t>(CLAMP(int(Math::round(c.g * 255.0f)), 0, 255));
+		custom0_bytes[base + 2] = static_cast<uint8_t>(CLAMP(int(Math::round(c.b * 255.0f)), 0, 255));
+		custom0_bytes[base + 3] = static_cast<uint8_t>(CLAMP(int(Math::round(c.a * 255.0f)), 0, 255));
+	}
+	arrays[Mesh::ARRAY_CUSTOM0] = custom0_bytes;
 
-	// Create material with vertex colors
-	Ref<StandardMaterial3D> material;
-	material.instantiate();
-	material->set_flag(BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
-	array_mesh->surface_set_material(0, material);
+	uint64_t format = Mesh::ARRAY_FORMAT_VERTEX | Mesh::ARRAY_FORMAT_NORMAL | Mesh::ARRAY_FORMAT_COLOR | Mesh::ARRAY_FORMAT_CUSTOM0;
+	format |= (uint64_t)ArrayMesh::ARRAY_CUSTOM_RGBA8_UNORM << Mesh::ARRAY_FORMAT_CUSTOM0_SHIFT;
+
+	array_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays, Array(), Dictionary(), format);
+
+	// Default material (used only when no override material is assigned).
+	if (terrain_material.is_null()) {
+		Ref<StandardMaterial3D> material;
+		material.instantiate();
+		material->set_flag(BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
+		array_mesh->surface_set_material(0, material);
+	}
 
 	// Create MeshInstance3D if needed
 	if (!mesh_instance) {
@@ -320,6 +354,7 @@ void Chunk::apply_mesh_data(const PackedVector3Array &vertices, const PackedVect
 	}
 
 	mesh_instance->set_mesh(array_mesh);
+	mesh_instance->set_material_override(terrain_material);
 	update_collision_shape(array_mesh);
 	mesh_ready.store(true);
 }
