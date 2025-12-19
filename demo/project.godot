@@ -29,6 +29,18 @@ window/size/mode=3
 
 project/assembly_name="godot cpp template"
 
+[file_customization]
+
+folder_colors={
+"res://assets/textures/": "orange"
+}
+
+[importer_defaults]
+
+2d_array_texture={
+&"compress/channel_pack": 2
+}
+
 [input]
 
 move_left={

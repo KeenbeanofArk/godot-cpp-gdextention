@@ -187,6 +187,86 @@ func _on_reset_pressed():
 
 ---
 
+## Texturing & Shaders
+
+The demo includes a biome-aware triplanar shader that samples from **texture arrays** (`Texture2DArray`).
+Each biome index selects a layer (0..15) in the arrays, allowing you to use one material for the whole world.
+
+### Quick Start
+
+1. Use the provided ShaderMaterial:
+   - `res://scenes/shaders/TerrainBiomeTriplanar.tres`
+2. Assign it to the VoxelGenerator:
+   - Inspector → `render/terrain_material`
+3. Enable texturing:
+   - Inspector → `render/use_textures = true`
+4. Provide texture arrays:
+   - In the material/shader parameters, assign:
+     - `biome_base_textures: Texture2DArray`
+     - `biome_slope_textures: Texture2DArray`
+       - (Optional, recommended for PBR)
+         - `biome_base_normal_textures: Texture2DArray`
+         - `biome_slope_normal_textures: Texture2DArray`
+         - `biome_base_roughness_textures: Texture2DArray`
+         - `biome_slope_roughness_textures: Texture2DArray`
+
+If you want the demo to work without importing textures, the helper script
+`res://scenes/shaders/terrain_texture_arrays.gd` can auto-generate placeholder arrays:
+
+```gdscript
+var mat := preload("res://scenes/shaders/TerrainBiomeTriplanar.tres") as ShaderMaterial
+preload("res://scenes/shaders/terrain_texture_arrays.gd").new().ensure_default_arrays(mat, 16, 64)
+voxel_gen.terrain_material = mat
+voxel_gen.use_textures = true
+```
+
+### Shader Parameters
+
+These are the parameters exposed by `TerrainBiomeTriplanar.gdshader`:
+
+| Parameter                        | Type           | Description                                                                                                             |
+| -------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `use_textures`                   | bool           | If `false`, the shader uses vertex `COLOR` (debug). If `true`, it samples texture arrays using biome id from `CUSTOM0`. |
+| `triplanar_fast`                 | bool           | If `true`, uses a cheaper 2-axis blend (fewer texture fetches).                                                         |
+| `biome_base_textures`            | Texture2DArray | Base surface textures; **layer = biome index**.                                                                         |
+| `biome_slope_textures`           | Texture2DArray | Slope/rock textures; **layer = biome index**.                                                                           |
+| `use_normal_textures`            | bool           | Enables sampling `*_normal_textures`. Default is `false` to avoid sampling unassigned arrays.                           |
+| `use_roughness_textures`         | bool           | Enables sampling `*_roughness_textures`. Default is `false` to avoid sampling unassigned arrays.                        |
+| `biome_base_normal_textures`     | Texture2DArray | (Optional) Base normal maps; **layer = biome index**. If unset, normals fall back to the mesh normal.                   |
+| `biome_slope_normal_textures`    | Texture2DArray | (Optional) Slope normal maps; **layer = biome index**.                                                                  |
+| `biome_base_roughness_textures`  | Texture2DArray | (Optional) Base roughness; sampled from the **R channel**. If unset, roughness falls back to a constant.                |
+| `biome_slope_roughness_textures` | Texture2DArray | (Optional) Slope roughness; sampled from the **R channel**.                                                             |
+| `triplanar_scale`                | float          | World-units-to-texture scale. Higher values tile more densely.                                                          |
+| `slope_start`                    | float          | Slope blend start threshold (based on `1 - abs(world_normal.y)`).                                                       |
+| `slope_end`                      | float          | Slope blend end threshold (higher = only steep slopes become “rock”).                                                   |
+
+### Biome Index → Texture Layer Mapping
+
+- The engine writes the biome index into the mesh’s `CUSTOM0.r` channel.
+- The shader decodes `CUSTOM0.r * 255` and clamps it to **0..15**.
+- That value is used as the `Texture2DArray` layer index.
+
+This means:
+
+- You can use up to **16 biome layers** per array.
+- If your biome generator returns indices above 15, they will render using **layer 15**.
+- Your `Texture2DArray` layers must match the biome indices your BiomeGenerator produces.
+
+### Performance Tips
+
+1. Use `triplanar_fast = true` for large worlds (2 samples per array instead of 3).
+2. Keep `slope_start/slope_end` reasonably tight so most pixels sample only one array.
+3. Prefer `Texture2DArray` over many separate textures/materials (fewer state changes).
+
+### Troubleshooting
+
+- **Still seeing debug colors**: make sure both `voxel_gen.use_textures = true` and the material is a `ShaderMaterial` using `TerrainBiomeTriplanar.gdshader`.
+- **Pink/black terrain**: one or both required `Texture2DArray` parameters are missing; assign `biome_base_textures` and `biome_slope_textures`.
+- **Wrong biome textures**: your array layer ordering does not match biome indices.
+- **Shader compile error**: if you see an error mentioning an unknown type near `uv_z`, open `TerrainBiomeTriplanar.gdshader` and verify the `uv_z` declaration is a valid `vec2`.
+
+---
+
 ## Technical Details
 
 ### Smooth Falloff

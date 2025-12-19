@@ -43,6 +43,11 @@ scons -j12 target=template_debug debug_symbols=yes
 - Ensure you have a compatible C++ toolchain for your platform and the correct Godot headers (managed via `godot-cpp`).
 - If you run into linking or symbol issues, re-run the `godot-cpp` build step (CMake or SCons) to regenerate bindings for your compiler.
 
+**Docs**
+
+- Terraforming + runtime edits: `doc_classes/Terraforming.md`
+- Texture arrays + biome triplanar shader: `doc_classes/Terraforming.md#texturing--shaders`
+
 **CI / Releases**
 
 - This template includes a GitHub Actions workflow (`.github/workflows/builds.yml`) that builds cross-platform release artifacts when creating releases.

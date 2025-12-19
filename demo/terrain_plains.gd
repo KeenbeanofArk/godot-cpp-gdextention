@@ -3,7 +3,7 @@ extends Node3D
 @onready var voxel_generator: VoxelGenerator = $VoxelGenerator
 @onready var picele: CharacterBody3D = $"../Picele"
 
-var custom_distances = PackedFloat64Array([20, 40, 80, 160, 320, 640, 1280, 2560])
+var custom_distances = PackedFloat64Array([8, 16, 32, 64, 128, 256, 512, 1048])
 
 func _ready() -> void:
 	voxel_generator.cancel_generation()
@@ -11,10 +11,10 @@ func _ready() -> void:
 
 	# Shared terrain material (shader reads biome id from CUSTOM0)
 	voxel_generator.terrain_material = preload("res://scenes/shaders/TerrainBiomeTriplanar.tres")
-	var mat := voxel_generator.terrain_material
-	if mat is ShaderMaterial:
-		preload("res://scenes/shaders/terrain_texture_arrays.gd").new().ensure_default_arrays(mat)
-	voxel_generator.use_textures = false
+	#var mat := voxel_generator.terrain_material
+	#if mat is ShaderMaterial:
+		#preload("res://scenes/shaders/terrain_texture_arrays.gd").new().ensure_default_arrays(mat)
+	voxel_generator.use_textures = true
 	
 	# Setup Debug
 	voxel_generator.debug_mode = true
@@ -23,26 +23,25 @@ func _ready() -> void:
 	voxel_generator.auto_generate = false # Make sure this is false before setting world_size
 	
 	# Configure plains generator
-	voxel_generator.world_size = Vector3i(7, 20, 7) # Immediately calls .generate() if .auto_generate is set to true
+	voxel_generator.world_size = Vector3i(10, 20, 10) # Immediately calls .generate() if .auto_generate is set to true
 	voxel_generator.chunk_size = 8
-	voxel_generator.resolution = 1
+	voxel_generator.resolution = 5
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
 
 	voxel_generator.surface_band = 1.0
-	voxel_generator.max_chunks_per_frame = 4
+	voxel_generator.max_chunks_per_frame = 2
 	voxel_generator.signal_every_n_chunks = 20
 	voxel_generator.lod_distances = custom_distances
 	voxel_generator.enable_distance_lod = true
-	voxel_generator.lod_level = 7
+	voxel_generator.lod_level = 2
 	voxel_generator.lod_reference_position = picele.global_position # no verbose
 	voxel_generator.lod_distance_multiplier = 1.0
-	voxel_generator.show_lod_colors = true # no verbose
+	voxel_generator.show_lod_colors = false # no verbose
 	voxel_generator.heightmap_vertex_limit = 534000000
-	voxel_generator.use_textures = true
 	
 	# Enable debug visualization
-	voxel_generator.show_voxel_grid = true
-	voxel_generator.show_chunk_grid = true
+	voxel_generator.show_voxel_grid = false
+	voxel_generator.show_chunk_grid = false
 		
 	# Configure terrain
 	voxel_generator.terrain_height = 0.1

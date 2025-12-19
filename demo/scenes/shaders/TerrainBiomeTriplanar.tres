@@ -1,10 +1,32 @@
-[gd_resource type="ShaderMaterial" format=3]
+[gd_resource type="ShaderMaterial" load_steps=8 format=3 uid="uid://cy5t0vmiir08l"]
 
-[ext_resource type="Shader" path="res://scenes/shaders/TerrainBiomeTriplanar.gdshader" id="1_terrain_biome_triplanar"]
+[ext_resource type="Shader" uid="uid://cn1c5lkrs3b64" path="res://scenes/shaders/TerrainBiomeTriplanar.gdshader" id="1_terrain_biome_triplanar"]
+
+[sub_resource type="Texture2DArray" id="Texture2DArray_d362q"]
+
+[sub_resource type="Texture2DArray" id="Texture2DArray_twu77"]
+
+[sub_resource type="Texture2DArray" id="Texture2DArray_k8ut5"]
+
+[sub_resource type="Texture2DArray" id="Texture2DArray_0c5em"]
+
+[sub_resource type="Texture2DArray" id="Texture2DArray_2lpdw"]
+
+[sub_resource type="Texture2DArray" id="Texture2DArray_hqkvg"]
 
 [resource]
+render_priority = 0
 shader = ExtResource("1_terrain_biome_triplanar")
-shader_parameter/use_textures = false
+shader_parameter/use_textures = true
+shader_parameter/triplanar_fast = false
+shader_parameter/biome_base_textures = SubResource("Texture2DArray_k8ut5")
+shader_parameter/biome_slope_textures = SubResource("Texture2DArray_hqkvg")
+shader_parameter/biome_base_normal_textures = SubResource("Texture2DArray_d362q")
+shader_parameter/biome_slope_normal_textures = SubResource("Texture2DArray_0c5em")
+shader_parameter/biome_base_roughness_textures = SubResource("Texture2DArray_twu77")
+shader_parameter/biome_slope_roughness_textures = SubResource("Texture2DArray_2lpdw")
+shader_parameter/use_normal_textures = true
+shader_parameter/use_roughness_textures = true
 shader_parameter/triplanar_scale = 0.25
 shader_parameter/slope_start = 0.4
 shader_parameter/slope_end = 0.75

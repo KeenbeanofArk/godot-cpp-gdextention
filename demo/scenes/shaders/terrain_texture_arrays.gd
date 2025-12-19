@@ -8,17 +8,31 @@ func ensure_default_arrays(material: ShaderMaterial, biome_layers: int = 16, ima
 	if material == null:
 		return
 
-	# Only assign if not already set in the material.
-	var existing_base = material.get_shader_parameter("biome_base_textures")
-	var existing_slope = material.get_shader_parameter("biome_slope_textures")
-	if existing_base != null and existing_slope != null:
-		return
+	biome_layers = clampi(biome_layers, 1, 16)
+	image_size = max(8, image_size)
 
-	var base_array := _build_debug_texture_array(biome_layers, image_size, false)
-	var slope_array := _build_debug_texture_array(biome_layers, image_size, true)
+	# Albedo arrays (base + slope)
+	if material.get_shader_parameter("biome_base_textures") == null:
+		material.set_shader_parameter("biome_base_textures", _build_debug_texture_array(biome_layers, image_size, false))
+	if material.get_shader_parameter("biome_slope_textures") == null:
+		material.set_shader_parameter("biome_slope_textures", _build_debug_texture_array(biome_layers, image_size, true))
 
-	material.set_shader_parameter("biome_base_textures", base_array)
-	material.set_shader_parameter("biome_slope_textures", slope_array)
+	# Optional PBR extras (normal + roughness). These keep the demo looking sensible
+	# even if you haven't assigned real texture arrays yet.
+	if material.get_shader_parameter("biome_base_normal_textures") == null:
+		material.set_shader_parameter("biome_base_normal_textures", _build_flat_normal_texture_array(biome_layers, image_size))
+	if material.get_shader_parameter("biome_slope_normal_textures") == null:
+		material.set_shader_parameter("biome_slope_normal_textures", _build_flat_normal_texture_array(biome_layers, image_size))
+	if material.get_shader_parameter("biome_base_roughness_textures") == null:
+		material.set_shader_parameter("biome_base_roughness_textures", _build_constant_scalar_texture_array(biome_layers, image_size, 0.8))
+	if material.get_shader_parameter("biome_slope_roughness_textures") == null:
+		material.set_shader_parameter("biome_slope_roughness_textures", _build_constant_scalar_texture_array(biome_layers, image_size, 0.95))
+
+	# Enable PBR sampling by default (only if unset), since we just ensured arrays exist.
+	if material.get_shader_parameter("use_normal_textures") == null:
+		material.set_shader_parameter("use_normal_textures", true)
+	if material.get_shader_parameter("use_roughness_textures") == null:
+		material.set_shader_parameter("use_roughness_textures", true)
 
 	# Sensible defaults for immediate visual feedback.
 	if material.get_shader_parameter("triplanar_scale") == null:
@@ -46,6 +60,43 @@ func _build_debug_texture_array(biome_layers: int, image_size: int, slope_varian
 			c2 = c2.lerp(Color(0.35, 0.35, 0.35), 0.55)
 
 		images[i] = _make_checker_image(image_size, c1, c2)
+
+	var tex := Texture2DArray.new()
+	tex.create_from_images(images)
+	return tex
+
+
+func _build_flat_normal_texture_array(biome_layers: int, image_size: int) -> Texture2DArray:
+	biome_layers = clampi(biome_layers, 1, 16)
+	image_size = max(8, image_size)
+
+	var images: Array[Image] = []
+	images.resize(biome_layers)
+
+	for i in range(biome_layers):
+		var img := Image.create(image_size, image_size, false, Image.FORMAT_RGBA8)
+		# Flat normal in tangent space: (0.5, 0.5, 1.0)
+		img.fill(Color(0.5, 0.5, 1.0, 1.0))
+		images[i] = img
+
+	var tex := Texture2DArray.new()
+	tex.create_from_images(images)
+	return tex
+
+
+func _build_constant_scalar_texture_array(biome_layers: int, image_size: int, scalar: float) -> Texture2DArray:
+	biome_layers = clampi(biome_layers, 1, 16)
+	image_size = max(8, image_size)
+
+	var s: float = clampf(scalar, 0.0, 1.0)
+	var images: Array[Image] = []
+	images.resize(biome_layers)
+
+	for i in range(biome_layers):
+		var img := Image.create(image_size, image_size, false, Image.FORMAT_RGBA8)
+		# Use R channel for scalar (e.g., roughness).
+		img.fill(Color(s, 0.0, 0.0, 1.0))
+		images[i] = img
 
 	var tex := Texture2DArray.new()
 	tex.create_from_images(images)
