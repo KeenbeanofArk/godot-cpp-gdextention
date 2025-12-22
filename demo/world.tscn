@@ -24,7 +24,7 @@ sky_material = SubResource("ShaderMaterial_pkg7o")
 background_mode = 2
 sky = SubResource("Sky_tlwt5")
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wse8f"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ic0uy"]
 albedo_texture = ExtResource("4_ic0uy")
 roughness = 0.7
 roughness_texture = ExtResource("7_70uel")
@@ -75,22 +75,22 @@ light_color = Color(1, 1, 0.8392157, 1)
 shadow_enabled = true
 directional_shadow_max_distance = 1.0
 
-[node name="TerrainPlains" type="Node3D" parent="."]
+[node name="Plains" type="Node3D" parent="."]
 script = ExtResource("2_036b0")
 
-[node name="VoxelGenerator" type="VoxelGenerator" parent="TerrainPlains"]
-world_size = Vector3i(10, 10, 10)
+[node name="VoxelGenerator" type="VoxelGenerator" parent="Plains"]
+world_size = Vector3i(5, 5, 5)
 auto_generate = true
 resolution = 7
-lod_level = 1
+lod_level = 0
 use_textures = true
-terrain_material = SubResource("StandardMaterial3D_wse8f")
+terrain_material = SubResource("StandardMaterial3D_ic0uy")
 terrain_noise = SubResource("NoiseGenerator_dwbse")
 detail_noise = SubResource("NoiseGenerator_gbfbk")
 terrain_height = -2.0
 terrain_amplitude = 14.5
 
-[node name="TextureImporter" type="Node" parent="TerrainPlains"]
+[node name="TextureImporter" type="Node" parent="Plains"]
 script = ExtResource("8_ic0uy")
 
 [node name="CentralDebugGUI" parent="." instance=ExtResource("3_tlwt5")]

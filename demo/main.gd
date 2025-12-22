@@ -1,8 +1,8 @@
 extends Node3D
 class_name WorldManager
 
-@onready var terrain_plains: Node3D = $TerrainPlains
+@onready var plains: Node3D = $Plains
 
 func _ready():
-	terrain_plains.generate_plains()
+	plains.generate_plains()
 	

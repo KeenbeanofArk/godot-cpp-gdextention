@@ -78,15 +78,27 @@ func apply_material_to_generators(material: Material) -> void:
 		push_error("[TextureImporter] Cannot find scene root")
 		return
 	
+	print("[TextureImporter] Searching for VoxelGenerator nodes in scene...")
 	var generators = root.find_children("*", "VoxelGenerator", true, false)
+	
+	print("[TextureImporter] Found %d VoxelGenerator nodes" % generators.size())
 	
 	if generators.is_empty():
 		push_warning("[TextureImporter] No VoxelGenerator nodes found in scene")
 	else:
 		for generator in generators:
+			print("[TextureImporter] Found generator: %s (class: %s)" % [generator.name, generator.get_class()])
 			if generator.has_method("set_terrain_material"):
 				generator.set_terrain_material(material)
-				print("[TextureImporter] Applied material to generator: %s" % generator.name)
+				print("[TextureImporter] ✓ Applied material to generator: %s" % generator.name)
+				# Verify it was applied
+				var applied_mat = generator.get_terrain_material()
+				if applied_mat:
+					print("[TextureImporter] ✓ Material confirmed applied: %s" % applied_mat.resource_path)
+				else:
+					print("[TextureImporter] ✗ Material not confirmed applied to %s" % generator.name)
+			else:
+				print("[TextureImporter] ✗ Generator %s does not have set_terrain_material() method" % generator.name)
 
 ## Save material resource to disk for reuse
 func save_material(material: Material, path: String = "res://assets/textures/ground/terrain_material.tres") -> bool:
@@ -101,6 +113,7 @@ func load_material(path: String = "res://assets/textures/ground/terrain_material
 ## Main import function - call this from the editor
 func import_textures(apply_to_scene: bool = true, save_to_disk: bool = true) -> StandardMaterial3D:
 	print("[TextureImporter] Starting texture import...")
+	print("[TextureImporter] Texture path: %s" % TEXTURE_BASE_PATH)
 	
 	var textures = load_texture_set()
 	if not textures:
@@ -108,13 +121,19 @@ func import_textures(apply_to_scene: bool = true, save_to_disk: bool = true) -> 
 		return null
 	
 	var material = create_pbr_material(textures)
+	if not material:
+		push_error("[TextureImporter] Failed to create material")
+		return null
+	
+	print("[TextureImporter] Material created successfully")
 	
 	if save_to_disk:
 		var save_path = "res://assets/textures/ground/terrain_material.tres"
-		if save_material(material, save_path):
-			print("[TextureImporter] Material saved to: %s" % save_path)
+		var result = save_material(material, save_path)
+		if result:
+			print("[TextureImporter] ✓ Material saved to: %s" % save_path)
 		else:
-			push_error("[TextureImporter] Failed to save material")
+			push_error("[TextureImporter] ✗ Failed to save material to: %s" % save_path)
 	
 	if apply_to_scene:
 		apply_material_to_generators(material)
@@ -126,9 +145,16 @@ func import_textures(apply_to_scene: bool = true, save_to_disk: bool = true) -> 
 func _run() -> void:
 	import_textures(true, true)
 
-## Auto-run when added to scene in editor
+## Only remove itself in editor, not at runtime
+func _enter_tree() -> void:
+	if Engine.is_editor_hint():
+		# Will be freed after _ready completes
+		pass
+
 func _ready() -> void:
 	if Engine.is_editor_hint():
-		# Only run once
-		queue_free()
+		# Only run in editor
 		import_textures(true, true)
+		# Remove the node from the scene after running
+		queue_free()
+	# If not in editor (runtime), keep the node in the scene but do nothing

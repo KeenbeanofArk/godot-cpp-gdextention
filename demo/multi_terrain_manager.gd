@@ -45,7 +45,7 @@ func register_terrains() -> void:
 	if not world:
 		world = get_tree().get_root().get_child(0) if get_tree().get_root().get_child_count() > 0 else null
 
-	var terrain_names = ["TerrainPlains", "TerrainMountains"]
+	var terrain_names = ["Plains", "Mountains"]
 	for terrain_name in terrain_names:
 		var terrain_node = null
 		if world:

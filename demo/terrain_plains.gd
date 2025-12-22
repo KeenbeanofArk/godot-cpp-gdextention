@@ -10,7 +10,7 @@ func _ready() -> void:
 	voxel_generator.reset()
 
 	# Shared terrain material (shader reads biome id from CUSTOM0)
-	voxel_generator.terrain_material = preload("res://scenes/shaders/TerrainBiomeTriplanar.tres")
+	#voxel_generator.terrain_material = preload("res://scenes/shaders/TerrainBiomeTriplanar.tres")
 	#var mat := voxel_generator.terrain_material
 	#if mat is ShaderMaterial:
 		#preload("res://scenes/shaders/terrain_texture_arrays.gd").new().ensure_default_arrays(mat)
@@ -25,7 +25,7 @@ func _ready() -> void:
 	# Configure plains generator
 	voxel_generator.world_size = Vector3i(10, 20, 10) # Immediately calls .generate() if .auto_generate is set to true
 	voxel_generator.chunk_size = 8
-	voxel_generator.resolution = 5
+	voxel_generator.resolution = 3
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
 
 	voxel_generator.surface_band = 1.0
@@ -33,7 +33,7 @@ func _ready() -> void:
 	voxel_generator.signal_every_n_chunks = 20
 	voxel_generator.lod_distances = custom_distances
 	voxel_generator.enable_distance_lod = true
-	voxel_generator.lod_level = 2
+	voxel_generator.lod_level = 4
 	voxel_generator.lod_reference_position = picele.global_position # no verbose
 	voxel_generator.lod_distance_multiplier = 1.0
 	voxel_generator.show_lod_colors = false # no verbose
@@ -44,9 +44,9 @@ func _ready() -> void:
 	voxel_generator.show_chunk_grid = false
 		
 	# Configure terrain
-	voxel_generator.terrain_height = 0.1
-	voxel_generator.terrain_amplitude = 0.0
-	voxel_generator.rock_influence = 0.0
+	voxel_generator.terrain_height = 1.0
+	voxel_generator.terrain_amplitude = 1.2
+	voxel_generator.rock_influence = 0.1
 	voxel_generator.cutoff = 0.1
 	
 	## Confugure biome generator
