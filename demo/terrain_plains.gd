@@ -6,34 +6,42 @@ extends Node3D
 var custom_distances = PackedFloat64Array([8, 16, 32, 64, 128, 256, 512, 1048])
 
 func _ready() -> void:
+	
+	# Find WorldManager to get world size
+	var world_manager = get_tree().get_first_node_in_group("world")
+	if not world_manager:
+		push_error("ForcefieldBoundary: Cannot find WorldManager in group 'world'")
+		return
+		
 	voxel_generator.cancel_generation()
 	voxel_generator.reset()
-
-	# Shared terrain material (shader reads biome id from CUSTOM0)
-	#voxel_generator.terrain_material = preload("res://scenes/shaders/TerrainBiomeTriplanar.tres")
-	#var mat := voxel_generator.terrain_material
-	#if mat is ShaderMaterial:
-		#preload("res://scenes/shaders/terrain_texture_arrays.gd").new().ensure_default_arrays(mat)
-	voxel_generator.use_textures = true
 	
 	# Setup Debug
 	voxel_generator.debug_mode = true
 	voxel_generator.debug_verbosity = 2
-	voxel_generator.visualize_noise_values = true
+	voxel_generator.visualize_noise_values = false
 	voxel_generator.auto_generate = false # Make sure this is false before setting world_size
 	
 	# Configure plains generator
-	voxel_generator.world_size = Vector3i(10, 20, 10) # Immediately calls .generate() if .auto_generate is set to true
+	voxel_generator.world_size = Vector3i(world_manager.WORLD_SIZE, 4, world_manager.WORLD_SIZE) # Immediately calls .generate() if .auto_generate is set to true
+	
+	# Forcefield Settings
+	voxel_generator.forcefield_enabled = true
+	voxel_generator.forcefield_height = 25.0
+	voxel_generator.forcefield_collision_enabled = true
+	voxel_generator.forcefield_detection_enabled = true
+	voxel_generator.forcefield_buffer = 0.0
+	
 	voxel_generator.chunk_size = 8
-	voxel_generator.resolution = 3
+	voxel_generator.resolution = 4
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
-
+	voxel_generator.use_textures = true
 	voxel_generator.surface_band = 1.0
-	voxel_generator.max_chunks_per_frame = 2
+	voxel_generator.max_chunks_per_frame = 1
 	voxel_generator.signal_every_n_chunks = 20
 	voxel_generator.lod_distances = custom_distances
 	voxel_generator.enable_distance_lod = true
-	voxel_generator.lod_level = 4
+	voxel_generator.lod_level = 3
 	voxel_generator.lod_reference_position = picele.global_position # no verbose
 	voxel_generator.lod_distance_multiplier = 1.0
 	voxel_generator.show_lod_colors = false # no verbose
@@ -44,16 +52,16 @@ func _ready() -> void:
 	voxel_generator.show_chunk_grid = false
 		
 	# Configure terrain
-	voxel_generator.terrain_height = 1.0
-	voxel_generator.terrain_amplitude = 1.2
-	voxel_generator.rock_influence = 0.1
+	voxel_generator.terrain_height = 4.0
+	voxel_generator.terrain_amplitude = 4.5
+	voxel_generator.rock_influence = 0.3
 	voxel_generator.cutoff = 0.1
 	
-	## Confugure biome generator
-	var biome_gen = BiomeGenerator.new()
-	biome_gen.seed = 12345 # no verbose
-	biome_gen.sea_level = 0.0 # no verbose
-	setup_biomes(biome_gen)
+	### Confugure biome generator
+	#var biome_gen = BiomeGenerator.new()
+	#biome_gen.seed = 12345 # no verbose
+	#biome_gen.sea_level = 0.0 # no verbose
+	#setup_biomes(biome_gen)
 	
 	# Connect to signals
 	voxel_generator.chunk_ready.connect(_on_chunk_ready)

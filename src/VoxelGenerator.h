@@ -53,12 +53,15 @@
 #include <shared_mutex>
 #include <unordered_map>
 
+#include <godot_cpp/classes/area3d.hpp>
+#include <godot_cpp/classes/collision_shape3d.hpp>
 #include <godot_cpp/classes/fast_noise_lite.hpp>
 #include <godot_cpp/classes/immediate_mesh.hpp>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
+#include <godot_cpp/classes/static_body3d.hpp>
 #include <godot_cpp/classes/worker_thread_pool.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -382,6 +385,47 @@ public:
 	PackedFloat32Array get_terrain_edits_data() const;
 	void set_terrain_edits_data(const PackedFloat32Array &data);
 	// ===========================================================
+
+	// ==================== Forcefield (world boundary) ====================
+	// Managed as scene children under this Node3D (main-thread only)
+	bool forcefield_enabled = false;
+	bool forcefield_collision_enabled = true;
+	bool forcefield_detection_enabled = false;
+	float forcefield_height = 8.0f;
+	float forcefield_buffer = 0.5f; // inward buffer from exact world boundary
+
+	Node3D *forcefield_root = nullptr; // container for wall nodes
+	MeshInstance3D *forcefield_wall_meshes[4] = { nullptr, nullptr, nullptr, nullptr }; // 0=north,1=south,2=east,3=west
+	StaticBody3D *forcefield_bodies[4] = { nullptr, nullptr, nullptr, nullptr };
+	CollisionShape3D *forcefield_shapes[4] = { nullptr, nullptr, nullptr, nullptr };
+	Area3D *forcefield_areas[4] = { nullptr, nullptr, nullptr, nullptr };
+
+	// Forcefield API
+	void set_forcefield_enabled(bool enabled);
+	bool get_forcefield_enabled() const;
+
+	void set_forcefield_height(float h);
+	float get_forcefield_height() const;
+
+	void set_forcefield_collision_enabled(bool enabled);
+	bool get_forcefield_collision_enabled() const;
+
+	void set_forcefield_detection_enabled(bool enabled);
+	bool get_forcefield_detection_enabled() const;
+
+	void set_forcefield_buffer(float buf);
+	float get_forcefield_buffer() const;
+
+	// Create/destroy/update forcefield nodes (main thread)
+	void create_forcefield_nodes();
+	void update_forcefield_nodes();
+	void remove_forcefield_nodes();
+
+	// Detection callbacks invoked from Area signals (main thread)
+	void on_forcefield_body_entered(Object *body, int wall_index);
+	void on_forcefield_body_exited(Object *body, int wall_index);
+
+	// =====================================================================
 
 private:
 	void remove_children();

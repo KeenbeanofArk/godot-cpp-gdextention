@@ -405,12 +405,18 @@ void Chunk::update_collision_shape(const Ref<ArrayMesh> &mesh) {
 		collision_body->set_collision_layer(1); // World layer (bit 0)
 		collision_body->set_collision_mask(2 | 4); // Collide with players (bit 1) and creatures (bit 2)
 		add_child(collision_body);
+
+		// Ensure the physics body is centered relative to the chunk's mesh (world-space meshes use chunk as origin)
+		collision_body->set_position(Vector3(0, 0, 0));
 	}
 
 	if (!collision_shape) {
 		collision_shape = memnew(CollisionShape3D);
 		collision_shape->set_name("ChunkCollisionShape");
 		collision_body->add_child(collision_shape);
+
+		// Center the collision shape locally inside the StaticBody3D
+		collision_shape->set_position(Vector3(0, 0, 0));
 	}
 
 	if (concave_shape.is_null()) {

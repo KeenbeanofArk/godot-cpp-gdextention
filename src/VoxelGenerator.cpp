@@ -42,12 +42,18 @@
 #include <vector>
 
 // Godot includes
+#include <godot_cpp/classes/area3d.hpp>
+#include <godot_cpp/classes/box_mesh.hpp>
+#include <godot_cpp/classes/box_shape3d.hpp>
+#include <godot_cpp/classes/collision_shape3d.hpp>
 #include <godot_cpp/classes/fast_noise_lite.hpp>
 #include <godot_cpp/classes/immediate_mesh.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
+#include <godot_cpp/classes/static_body3d.hpp>
 #include <godot_cpp/classes/surface_tool.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
@@ -174,6 +180,30 @@ void VoxelGenerator::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("is_object_binding_set_by_parent_constructor"), &VoxelGenerator::is_object_binding_set_by_parent_constructor);
 
+	// Forcefield bindings
+	ClassDB::bind_method(D_METHOD("set_forcefield_enabled", "enabled"), &VoxelGenerator::set_forcefield_enabled);
+	ClassDB::bind_method(D_METHOD("get_forcefield_enabled"), &VoxelGenerator::get_forcefield_enabled);
+
+	ClassDB::bind_method(D_METHOD("set_forcefield_height", "h"), &VoxelGenerator::set_forcefield_height);
+	ClassDB::bind_method(D_METHOD("get_forcefield_height"), &VoxelGenerator::get_forcefield_height);
+
+	ClassDB::bind_method(D_METHOD("set_forcefield_collision_enabled", "enabled"), &VoxelGenerator::set_forcefield_collision_enabled);
+	ClassDB::bind_method(D_METHOD("get_forcefield_collision_enabled"), &VoxelGenerator::get_forcefield_collision_enabled);
+
+	ClassDB::bind_method(D_METHOD("set_forcefield_detection_enabled", "enabled"), &VoxelGenerator::set_forcefield_detection_enabled);
+	ClassDB::bind_method(D_METHOD("get_forcefield_detection_enabled"), &VoxelGenerator::get_forcefield_detection_enabled);
+
+	ClassDB::bind_method(D_METHOD("set_forcefield_buffer", "buf"), &VoxelGenerator::set_forcefield_buffer);
+	ClassDB::bind_method(D_METHOD("get_forcefield_buffer"), &VoxelGenerator::get_forcefield_buffer);
+
+	// Forcefield detection callbacks
+	ClassDB::bind_method(D_METHOD("on_forcefield_body_entered", "body", "wall_index"), &VoxelGenerator::on_forcefield_body_entered);
+	ClassDB::bind_method(D_METHOD("on_forcefield_body_exited", "body", "wall_index"), &VoxelGenerator::on_forcefield_body_exited);
+
+	// Forcefield signals
+	ADD_SIGNAL(MethodInfo("forcefield_body_entered", PropertyInfo(Variant::INT, "wall_index"), PropertyInfo(Variant::OBJECT, "body")));
+	ADD_SIGNAL(MethodInfo("forcefield_body_exited", PropertyInfo(Variant::INT, "wall_index"), PropertyInfo(Variant::OBJECT, "body")));
+
 	// Async generation signals
 	ADD_SIGNAL(MethodInfo("chunk_ready", PropertyInfo(Variant::INT, "chunk_index"), PropertyInfo(Variant::VECTOR3I, "chunk_coord")));
 	ADD_SIGNAL(MethodInfo("generation_progress", PropertyInfo(Variant::INT, "completed"), PropertyInfo(Variant::INT, "total")));
@@ -231,6 +261,14 @@ void VoxelGenerator::_bind_methods() {
 	ADD_GROUP("Async Generation", "async_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_chunks_per_frame", PROPERTY_HINT_RANGE, "1,32,1"), "set_max_chunks_per_frame", "get_max_chunks_per_frame");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "signal_every_n_chunks", PROPERTY_HINT_RANGE, "1,64,1"), "set_signal_every_n_chunks", "get_signal_every_n_chunks");
+
+	// Forcefield properties
+	ADD_GROUP("Forcefield", "forcefield_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "forcefield_enabled"), "set_forcefield_enabled", "get_forcefield_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "forcefield_height", PROPERTY_HINT_RANGE, "-100,100,0.1"), "set_forcefield_height", "get_forcefield_height");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "forcefield_collision_enabled"), "set_forcefield_collision_enabled", "get_forcefield_collision_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "forcefield_detection_enabled"), "set_forcefield_detection_enabled", "get_forcefield_detection_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "forcefield_buffer", PROPERTY_HINT_RANGE, "0,10,0.1"), "set_forcefield_buffer", "get_forcefield_buffer");
 }
 
 bool VoxelGenerator::has_object_instance_binding() const {
@@ -287,6 +325,9 @@ VoxelGenerator::~VoxelGenerator() {
 		}
 	}
 	chunks.clear();
+
+	// Remove forcefield nodes if present
+	remove_forcefield_nodes();
 	log_message("VoxelGenerator destroyed and chunks cleaned up.", 1);
 }
 
@@ -341,6 +382,12 @@ void VoxelGenerator::_notification(int p_what) {
 				create_chunks();
 			} else {
 				log_message("VoxelGenerator is ready, but auto generation is disabled. Call generate() to create the voxel grid.", 1);
+			}
+
+			// Create forcefield nodes if the flag is set
+			if (forcefield_enabled) {
+				create_forcefield_nodes();
+				update_forcefield_nodes();
 			}
 			break;
 		}
@@ -415,6 +462,10 @@ void VoxelGenerator::set_chunk_size(int value) {
 			if (auto_generate) {
 				create_chunks();
 				generate();
+			}
+			// Update forcefield nodes to match new chunk/world extents
+			if (forcefield_enabled) {
+				update_forcefield_nodes();
 			}
 		}
 	}
@@ -784,6 +835,10 @@ bool VoxelGenerator::get_auto_generate() const {
 void VoxelGenerator::set_world_size(const Vector3i &value) {
 	world_size = value;
 	log_message(String("World size set to: {0}").format(Array::make(world_size)), 2);
+	// Update forcefield nodes to reflect new world extents
+	if (forcefield_enabled) {
+		update_forcefield_nodes();
+	}
 	if (auto_generate)
 		generate();
 }
@@ -2100,6 +2155,188 @@ void VoxelGenerator::create_chunks() {
 	}
 }
 
+// ==================== Forcefield Implementation ====================
+void VoxelGenerator::create_forcefield_nodes() {
+	if (forcefield_root && forcefield_root->is_inside_tree()) {
+		return; // already created
+	}
+
+	// Create container
+	forcefield_root = memnew(Node3D);
+	forcefield_root->set_name(String("ForcefieldRoot"));
+	add_child(forcefield_root);
+
+	// Compute world extents
+	float world_width_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float world_width_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+
+	// Thickness for walls
+	float thickness = 0.2f * std::max(1, chunk_size);
+
+	for (int i = 0; i < 4; ++i) {
+		// Visual mesh
+		MeshInstance3D *mi = memnew(MeshInstance3D);
+		mi->set_name(String("ForcefieldWall_{0}").format(Array::make(i)));
+		forcefield_root->add_child(mi);
+		forcefield_wall_meshes[i] = mi;
+
+		Ref<BoxMesh> box_mesh;
+		box_mesh.instantiate();
+		// default size, will be updated in update_forcefield_nodes()
+		box_mesh->set_size(Vector3(world_width_x, forcefield_height, thickness));
+		mi->set_mesh(box_mesh);
+
+		// Collision body
+		StaticBody3D *body = memnew(StaticBody3D);
+		forcefield_root->add_child(body);
+		forcefield_bodies[i] = body;
+
+		CollisionShape3D *cs = memnew(CollisionShape3D);
+		body->add_child(cs);
+		forcefield_shapes[i] = cs;
+		Ref<BoxShape3D> box_shape;
+		box_shape.instantiate();
+		box_shape->set_size(Vector3(world_width_x, forcefield_height, thickness));
+		cs->set_shape(box_shape);
+		// Toggle collision by enabling/disabling the CollisionShape3D node
+		cs->set_disabled(!forcefield_collision_enabled);
+
+		// Detection area
+		Area3D *area = memnew(Area3D);
+		forcefield_root->add_child(area);
+		forcefield_areas[i] = area;
+		CollisionShape3D *acs = memnew(CollisionShape3D);
+		area->add_child(acs);
+		Ref<BoxShape3D> detect_shape;
+		detect_shape.instantiate();
+		detect_shape->set_size(Vector3(thickness * 3.0f, forcefield_height * 10.0f, world_width_x));
+		acs->set_shape(detect_shape);
+		area->set_monitoring(forcefield_detection_enabled);
+		// Name and connect signals with bound wall index
+		area->set_name(String("ForcefieldArea_{0}").format(Array::make(i)));
+		area->connect("body_entered", Callable(this, StringName("on_forcefield_body_entered")).bind(i));
+		area->connect("body_exited", Callable(this, StringName("on_forcefield_body_exited")).bind(i));
+	}
+}
+
+void VoxelGenerator::update_forcefield_nodes() {
+	if (!forcefield_root || !forcefield_root->is_inside_tree()) {
+		return;
+	}
+
+	float world_width_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
+	float world_width_z = static_cast<float>(std::max(1, world_size.z) * std::max(1, chunk_size));
+	float half_x = world_width_x * 0.5f;
+	float half_z = world_width_z * 0.5f;
+	float h = forcefield_height;
+	float buf = forcefield_buffer;
+	float thickness = 0.2f * std::max(1, chunk_size);
+
+	// Index mapping: 0=north(-Z),1=south(+Z),2=east(+X),3=west(-X)
+	for (int i = 0; i < 4; ++i) {
+		MeshInstance3D *mi = forcefield_wall_meshes[i];
+		StaticBody3D *body = forcefield_bodies[i];
+		CollisionShape3D *cs = forcefield_shapes[i];
+		Area3D *area = forcefield_areas[i];
+		if (!mi || !body || !cs || !area)
+			continue;
+
+		Vector3 pos = Vector3(0, h * 0.5f, 0);
+		Vector3 size = Vector3(1, h, thickness);
+
+		if (i == 0) { // north (-Z)
+			pos.z = -half_z + buf;
+			size.x = world_width_x;
+		} else if (i == 1) { // south (+Z)
+			pos.z = half_z - buf;
+			size.x = world_width_x;
+		} else if (i == 2) { // east (+X)
+			pos.x = half_x - buf;
+			size.z = world_width_z;
+			// swap dims for east/west
+			Vector3 tmp = size;
+			size = Vector3(thickness, h, world_width_z);
+		} else { // west (-X)
+			pos.x = -half_x + buf;
+			size.z = world_width_z;
+			Vector3 tmp = size;
+			size = Vector3(thickness, h, world_width_z);
+		}
+
+		// Update visual mesh
+		Ref<BoxMesh> bm = mi->get_mesh();
+		if (!bm.is_valid()) {
+			bm.instantiate();
+		}
+		bm->set_size(size);
+		mi->set_mesh(bm);
+		mi->set_position(pos);
+
+		// Ensure the physics body matches the visual position
+		body->set_position(pos);
+
+		// Update collision
+		Ref<BoxShape3D> bshape = cs->get_shape();
+		if (!bshape.is_valid()) {
+			bshape.instantiate();
+		}
+		bshape->set_size(size);
+		cs->set_shape(bshape);
+		// Toggle collision by enabling/disabling the CollisionShape3D node
+		cs->set_disabled(!forcefield_collision_enabled);
+
+		// Make sure the CollisionShape is centered on its parent StaticBody
+		cs->set_position(Vector3(0, 0, 0));
+
+		// Update detection area shape and position
+		if (area->get_child_count() > 0) {
+			Node *child = area->get_child(0);
+			CollisionShape3D *dcs = Object::cast_to<CollisionShape3D>(child);
+			if (dcs) {
+				Ref<BoxShape3D> dshape = dcs->get_shape();
+				if (!dshape.is_valid())
+					dshape.instantiate();
+				// detection box is slightly larger inward
+				if (i < 2) { // north/south
+					dshape->set_size(Vector3(size.x, h * 10.0f, thickness * 3.0f));
+				} else {
+					dshape->set_size(Vector3(thickness * 3.0f, h * 10.0f, size.z));
+				}
+				dcs->set_shape(dshape);
+			}
+		}
+		area->set_position(pos);
+		area->set_monitoring(forcefield_detection_enabled);
+	}
+}
+
+void VoxelGenerator::remove_forcefield_nodes() {
+	if (forcefield_root && forcefield_root->is_inside_tree()) {
+		remove_child(forcefield_root);
+		forcefield_root->queue_free();
+	}
+	forcefield_root = nullptr;
+	for (int i = 0; i < 4; ++i) {
+		forcefield_wall_meshes[i] = nullptr;
+		forcefield_bodies[i] = nullptr;
+		forcefield_shapes[i] = nullptr;
+		forcefield_areas[i] = nullptr;
+	}
+}
+
+void VoxelGenerator::on_forcefield_body_entered(Object *body, int wall_index) {
+	// Emit a high-level signal for scripts to listen to
+	emit_signal("forcefield_body_entered", wall_index, body);
+	log_message(String("Forcefield area {0} body entered").format(Array::make(wall_index)), 2);
+}
+
+void VoxelGenerator::on_forcefield_body_exited(Object *body, int wall_index) {
+	emit_signal("forcefield_body_exited", wall_index, body);
+	log_message(String("Forcefield area {0} body exited").format(Array::make(wall_index)), 2);
+}
+
+// ==================== End Forcefield Implementation ====================
+
 void VoxelGenerator::fill_chunk_with_voxels(Chunk *chunk) {
 	for (int x = 0; x < chunk->get_chunk_size(); ++x) {
 		for (int y = 0; y < chunk->get_chunk_size(); ++y) {
@@ -2684,7 +2921,7 @@ void VoxelGenerator::regenerate_dirty_chunks() {
 	// The regeneration will use the existing cached density and apply terrain edits
 	// Do NOT set generation_in_progress = true here, as that's for full world generation
 
-	log_message("Regenerating dirty chunks...", 2);
+	log_message("Regenerating dirty chunks...", 3);
 
 	// Only rebuild density cache if it's invalid or doesn't match current parameters
 	if (!cache_is_valid || cache_size_x == 0 || cache_size_y == 0 || cache_size_z == 0 ||
@@ -2720,7 +2957,7 @@ void VoxelGenerator::regenerate_dirty_chunks() {
 		}
 	}
 
-	log_message(String("Regenerated {0} dirty chunks").format(Array::make(regenerated_count)), 2);
+	log_message(String("Regenerated {0} dirty chunks").format(Array::make(regenerated_count)), 3);
 }
 
 void VoxelGenerator::invalidate_density_region(const Vector3i &min_voxel, const Vector3i &max_voxel) {
@@ -3791,6 +4028,72 @@ void VoxelGenerator::rebuild_debug_visualizations() {
 	if (visualize_noise_values) {
 		visualize_noise_field();
 	}
+}
+
+// ==================== Forcefield Property Setters/Getters ====================
+void VoxelGenerator::set_forcefield_enabled(bool enabled) {
+	if (forcefield_enabled == enabled)
+		return;
+	forcefield_enabled = enabled;
+	log_message(String("Forcefield enabled set to: {0}").format(Array::make(forcefield_enabled)), 2);
+	if (forcefield_enabled) {
+		create_forcefield_nodes();
+		update_forcefield_nodes();
+	} else {
+		remove_forcefield_nodes();
+	}
+}
+
+bool VoxelGenerator::get_forcefield_enabled() const {
+	return forcefield_enabled;
+}
+
+void VoxelGenerator::set_forcefield_height(float h) {
+	forcefield_height = h;
+	log_message(String("Forcefield height set to: {0}").format(Array::make(forcefield_height)), 2);
+	if (forcefield_root && forcefield_root->is_inside_tree()) {
+		update_forcefield_nodes();
+	}
+}
+
+float VoxelGenerator::get_forcefield_height() const {
+	return forcefield_height;
+}
+
+void VoxelGenerator::set_forcefield_collision_enabled(bool enabled) {
+	forcefield_collision_enabled = enabled;
+	log_message(String("Forcefield collision {0}").format(Array::make(forcefield_collision_enabled ? "enabled" : "disabled")), 2);
+	if (forcefield_root && forcefield_root->is_inside_tree()) {
+		update_forcefield_nodes();
+	}
+}
+
+bool VoxelGenerator::get_forcefield_collision_enabled() const {
+	return forcefield_collision_enabled;
+}
+
+void VoxelGenerator::set_forcefield_detection_enabled(bool enabled) {
+	forcefield_detection_enabled = enabled;
+	log_message(String("Forcefield detection {0}").format(Array::make(forcefield_detection_enabled ? "enabled" : "disabled")), 2);
+	if (forcefield_root && forcefield_root->is_inside_tree()) {
+		update_forcefield_nodes();
+	}
+}
+
+bool VoxelGenerator::get_forcefield_detection_enabled() const {
+	return forcefield_detection_enabled;
+}
+
+void VoxelGenerator::set_forcefield_buffer(float buf) {
+	forcefield_buffer = buf;
+	log_message(String("Forcefield buffer set to: {0}").format(Array::make(forcefield_buffer)), 2);
+	if (forcefield_root && forcefield_root->is_inside_tree()) {
+		update_forcefield_nodes();
+	}
+}
+
+float VoxelGenerator::get_forcefield_buffer() const {
+	return forcefield_buffer;
 }
 
 void VoxelGenerator::_process(double delta) {
