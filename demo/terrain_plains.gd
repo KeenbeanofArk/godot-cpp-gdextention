@@ -4,18 +4,49 @@ extends Node3D
 @onready var picele: CharacterBody3D = $"../Picele"
 
 var custom_distances = PackedFloat64Array([8, 16, 32, 64, 128, 256, 512, 1048])
+var t := 100.0
 
 func _ready() -> void:
 	
 	# Find WorldManager to get world size
 	var world_manager = get_tree().get_first_node_in_group("world")
-	if not world_manager:
-		push_error("ForcefieldBoundary: Cannot find WorldManager in group 'world'")
-		return
-		
+	
 	voxel_generator.cancel_generation()
 	voxel_generator.reset()
 	
+	# Enable the forcefield (if not already)
+	voxel_generator.forcefield_enabled = true
+	voxel_generator.forcefield_height = 300.0
+	voxel_generator.forcefield_collision_enabled = true
+	voxel_generator.forcefield_detection_enabled = true
+	voxel_generator.forcefield_buffer = -1.0
+	
+	# Load shader resource and wrap in ShaderMaterial
+	var shader_res = load("res://scenes/shaders/forcefield.gdshader")
+	if not shader_res:
+		push_error("Could not load forcefield shader: res://scenes/shaders/forcefield.gdshader")
+		return
+
+	var mat := ShaderMaterial.new()
+	mat.shader = shader_res
+
+	# Assign the ShaderMaterial to the VoxelGenerator forcefield (C++ binding)
+	# This calls `VoxelGenerator::set_forcefield_shader_material(Ref<ShaderMaterial>)` exposed in C++
+	voxel_generator.set_forcefield_shader_material(mat)
+	
+	# Set some shader parameters (example names; adjust to your shader's uniforms)
+	# You can either set via the generator helper or directly on the material:
+	# generator helper (calls into C++):
+	voxel_generator.set_forcefield_shader_param("u_color", Color(0.0, 0.8, 1.0))
+	voxel_generator.set_forcefield_shader_param("u_time_scale", 1.5)
+	voxel_generator.set_forcefield_shader_param("base_alpha", 0.0)
+	
+	# Or directly on the ShaderMaterial (if you hold a reference):
+	# mat.set_shader_parameter("u_color", Color(1,0,0))
+
+	# Example: animate a parameter over time
+	set_process(true)
+		
 	# Setup Debug
 	voxel_generator.debug_mode = true
 	voxel_generator.debug_verbosity = 2
@@ -23,20 +54,13 @@ func _ready() -> void:
 	voxel_generator.auto_generate = false # Make sure this is false before setting world_size
 	
 	# Configure plains generator
-	voxel_generator.world_size = Vector3i(world_manager.WORLD_SIZE, 4, world_manager.WORLD_SIZE) # Immediately calls .generate() if .auto_generate is set to true
-	
-	# Forcefield Settings
-	voxel_generator.forcefield_enabled = true
-	voxel_generator.forcefield_height = 25.0
-	voxel_generator.forcefield_collision_enabled = true
-	voxel_generator.forcefield_detection_enabled = true
-	voxel_generator.forcefield_buffer = 0.0
+	voxel_generator.world_size = Vector3i(world_manager.WORLD_SIZE, world_manager.WORLD_DEPTH, world_manager.WORLD_SIZE) # Immediately calls .generate() if .auto_generate is set to true
 	
 	voxel_generator.chunk_size = 8
 	voxel_generator.resolution = 4
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
 	voxel_generator.use_textures = true
-	voxel_generator.surface_band = 1.0
+	voxel_generator.surface_band = 1.5
 	voxel_generator.max_chunks_per_frame = 1
 	voxel_generator.signal_every_n_chunks = 20
 	voxel_generator.lod_distances = custom_distances
@@ -52,7 +76,7 @@ func _ready() -> void:
 	voxel_generator.show_chunk_grid = false
 		
 	# Configure terrain
-	voxel_generator.terrain_height = 4.0
+	voxel_generator.terrain_height = 3.0
 	voxel_generator.terrain_amplitude = 4.5
 	voxel_generator.rock_influence = 0.3
 	voxel_generator.cutoff = 0.1
@@ -153,11 +177,19 @@ func setup_biomes(biome_gen: BiomeGenerator):
 	# Print sampled biome height range for debugging (normalized units)
 	_print_biome_height_range(biome_gen)
 
-func _process(_delta):
+func _process(delta):
 	voxel_generator.lod_reference_position = picele.global_position
 	var changed_count = voxel_generator.update_chunks_lod()
 	if changed_count > 0:
 		voxel_generator.regenerate_dirty_chunks()
+	
+	if not voxel_generator:
+		return
+	t += delta
+	
+	# Oscillate brightness uniform if shader exposes one
+	var brightness = 0.5 + 0.5 * sin(t * 2.0)
+	voxel_generator.set_forcefield_shader_param("u_brightness", brightness)
 
 func _print_biome_height_range(biome_gen: BiomeGenerator, samples: int = 8, spacing: float = 10.0) -> void:
 	if not biome_gen:

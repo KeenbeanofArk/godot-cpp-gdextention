@@ -55,6 +55,7 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
 namespace voxel_engine {
@@ -196,6 +197,15 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_forcefield_buffer", "buf"), &VoxelGenerator::set_forcefield_buffer);
 	ClassDB::bind_method(D_METHOD("get_forcefield_buffer"), &VoxelGenerator::get_forcefield_buffer);
 
+	// Forcefield shader bindings (assign shader material and tweak params at runtime)
+	ClassDB::bind_method(D_METHOD("set_forcefield_shader_material", "material"), &VoxelGenerator::set_forcefield_shader_material);
+	ClassDB::bind_method(D_METHOD("get_forcefield_shader_material"), &VoxelGenerator::get_forcefield_shader_material);
+
+	ClassDB::bind_method(D_METHOD("set_forcefield_detection_voxels", "voxels"), &VoxelGenerator::set_forcefield_detection_voxels);
+	ClassDB::bind_method(D_METHOD("get_forcefield_detection_voxels"), &VoxelGenerator::get_forcefield_detection_voxels);
+	ClassDB::bind_method(D_METHOD("get_forcefield_material_info"), &VoxelGenerator::get_forcefield_material_info);
+	ClassDB::bind_method(D_METHOD("set_forcefield_shader_param", "param", "value"), &VoxelGenerator::set_forcefield_shader_param);
+
 	// Forcefield detection callbacks
 	ClassDB::bind_method(D_METHOD("on_forcefield_body_entered", "body", "wall_index"), &VoxelGenerator::on_forcefield_body_entered);
 	ClassDB::bind_method(D_METHOD("on_forcefield_body_exited", "body", "wall_index"), &VoxelGenerator::on_forcefield_body_exited);
@@ -264,11 +274,13 @@ void VoxelGenerator::_bind_methods() {
 
 	// Forcefield properties
 	ADD_GROUP("Forcefield", "forcefield_");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "forcefield_detection_voxels", PROPERTY_HINT_RANGE, "0,100,1.0"), "set_forcefield_detection_voxels", "get_forcefield_detection_voxels");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "forcefield_enabled"), "set_forcefield_enabled", "get_forcefield_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "forcefield_height", PROPERTY_HINT_RANGE, "-100,100,0.1"), "set_forcefield_height", "get_forcefield_height");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "forcefield_height", PROPERTY_HINT_RANGE, "-300,300,1.0"), "set_forcefield_height", "get_forcefield_height");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "forcefield_collision_enabled"), "set_forcefield_collision_enabled", "get_forcefield_collision_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "forcefield_detection_enabled"), "set_forcefield_detection_enabled", "get_forcefield_detection_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "forcefield_buffer", PROPERTY_HINT_RANGE, "0,10,0.1"), "set_forcefield_buffer", "get_forcefield_buffer");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "forcefield_shader_material", PROPERTY_HINT_RESOURCE_TYPE, "ShaderMaterial"), "set_forcefield_shader_material", "get_forcefield_shader_material");
 }
 
 bool VoxelGenerator::has_object_instance_binding() const {
@@ -2172,6 +2184,8 @@ void VoxelGenerator::create_forcefield_nodes() {
 
 	// Thickness for walls
 	float thickness = 0.2f * std::max(1, chunk_size);
+	// Detection thickness in world units computed from voxel count setting
+	float det_thickness = forcefield_detection_voxels * (effective_voxel_size.x > 0.0f ? effective_voxel_size.x : 1.0f);
 
 	for (int i = 0; i < 4; ++i) {
 		// Visual mesh
@@ -2185,6 +2199,11 @@ void VoxelGenerator::create_forcefield_nodes() {
 		// default size, will be updated in update_forcefield_nodes()
 		box_mesh->set_size(Vector3(world_width_x, forcefield_height, thickness));
 		mi->set_mesh(box_mesh);
+
+		// Assign forcefield shader material if set
+		if (forcefield_shader_material.is_valid()) {
+			mi->set_material_override(forcefield_shader_material);
+		}
 
 		// Collision body
 		StaticBody3D *body = memnew(StaticBody3D);
@@ -2209,7 +2228,8 @@ void VoxelGenerator::create_forcefield_nodes() {
 		area->add_child(acs);
 		Ref<BoxShape3D> detect_shape;
 		detect_shape.instantiate();
-		detect_shape->set_size(Vector3(thickness * 3.0f, forcefield_height * 10.0f, world_width_x));
+		float det_thickness = forcefield_detection_voxels * (effective_voxel_size.x > 0.0f ? effective_voxel_size.x : 1.0f);
+		detect_shape->set_size(Vector3(det_thickness, forcefield_height, world_width_x));
 		acs->set_shape(detect_shape);
 		area->set_monitoring(forcefield_detection_enabled);
 		// Name and connect signals with bound wall index
@@ -2217,6 +2237,58 @@ void VoxelGenerator::create_forcefield_nodes() {
 		area->connect("body_entered", Callable(this, StringName("on_forcefield_body_entered")).bind(i));
 		area->connect("body_exited", Callable(this, StringName("on_forcefield_body_exited")).bind(i));
 	}
+}
+
+// Forcefield shader material property
+void VoxelGenerator::set_forcefield_shader_material(const Ref<ShaderMaterial> &material) {
+	forcefield_shader_material = material;
+	// Apply to all existing forcefield walls
+	for (int i = 0; i < 4; ++i) {
+		if (forcefield_wall_meshes[i]) {
+			forcefield_wall_meshes[i]->set_material_override(forcefield_shader_material);
+		}
+	}
+}
+
+Ref<ShaderMaterial> VoxelGenerator::get_forcefield_shader_material() const {
+	return forcefield_shader_material;
+}
+
+PackedStringArray VoxelGenerator::get_forcefield_material_info() const {
+	PackedStringArray info;
+	for (int i = 0; i < 4; ++i) {
+		MeshInstance3D *mi = forcefield_wall_meshes[i];
+		if (!mi) {
+			info.push_back(String("wall_") + String::num(i) + ":null_node");
+			continue;
+		}
+		Ref<Material> m = mi->get_material_override();
+		if (!m.is_valid()) {
+			info.push_back(String("wall_") + String::num(i) + ":no_material");
+		} else {
+			info.push_back(String("wall_") + String::num(i) + ":" + m->get_class());
+		}
+	}
+	return info;
+}
+
+// Set a parameter on the forcefield shader at runtime
+void VoxelGenerator::set_forcefield_shader_param(const String &param, const Variant &value) {
+	if (forcefield_shader_material.is_valid()) {
+		forcefield_shader_material->set_shader_parameter(param, value);
+	}
+}
+
+void VoxelGenerator::set_forcefield_detection_voxels(float voxels) {
+	forcefield_detection_voxels = std::max(0.0f, voxels);
+	// Update shapes to reflect new detection thickness
+	if (forcefield_root && forcefield_root->is_inside_tree()) {
+		update_forcefield_nodes();
+	}
+}
+
+float VoxelGenerator::get_forcefield_detection_voxels() const {
+	return forcefield_detection_voxels;
 }
 
 void VoxelGenerator::update_forcefield_nodes() {
@@ -2231,6 +2303,8 @@ void VoxelGenerator::update_forcefield_nodes() {
 	float h = forcefield_height;
 	float buf = forcefield_buffer;
 	float thickness = 0.2f * std::max(1, chunk_size);
+	// Detection thickness in world units (match create_forcefield_nodes)
+	float det_thickness = forcefield_detection_voxels * (effective_voxel_size.x > 0.0f ? effective_voxel_size.x : 1.0f);
 
 	// Index mapping: 0=north(-Z),1=south(+Z),2=east(+X),3=west(-X)
 	for (int i = 0; i < 4; ++i) {
@@ -2298,9 +2372,9 @@ void VoxelGenerator::update_forcefield_nodes() {
 					dshape.instantiate();
 				// detection box is slightly larger inward
 				if (i < 2) { // north/south
-					dshape->set_size(Vector3(size.x, h * 10.0f, thickness * 3.0f));
+					dshape->set_size(Vector3(size.x, h * 10.0f, det_thickness));
 				} else {
-					dshape->set_size(Vector3(thickness * 3.0f, h * 10.0f, size.z));
+					dshape->set_size(Vector3(det_thickness, h * 10.0f, size.z));
 				}
 				dcs->set_shape(dshape);
 			}
@@ -2325,12 +2399,34 @@ void VoxelGenerator::remove_forcefield_nodes() {
 }
 
 void VoxelGenerator::on_forcefield_body_entered(Object *body, int wall_index) {
+	// Increment body counter for this wall and make the visual wall visible.
+	if (wall_index >= 0 && wall_index < 4) {
+		forcefield_body_counts[wall_index]++;
+		MeshInstance3D *mi = forcefield_wall_meshes[wall_index];
+		if (mi) {
+			mi->set_visible(true);
+		}
+	}
+
 	// Emit a high-level signal for scripts to listen to
 	emit_signal("forcefield_body_entered", wall_index, body);
 	log_message(String("Forcefield area {0} body entered").format(Array::make(wall_index)), 2);
 }
 
 void VoxelGenerator::on_forcefield_body_exited(Object *body, int wall_index) {
+	// Decrement body counter and hide visual wall only when no bodies remain.
+	if (wall_index >= 0 && wall_index < 4) {
+		if (forcefield_body_counts[wall_index] > 0) {
+			forcefield_body_counts[wall_index]--;
+		}
+		if (forcefield_body_counts[wall_index] == 0) {
+			MeshInstance3D *mi = forcefield_wall_meshes[wall_index];
+			if (mi) {
+				mi->set_visible(false);
+			}
+		}
+	}
+
 	emit_signal("forcefield_body_exited", wall_index, body);
 	log_message(String("Forcefield area {0} body exited").format(Array::make(wall_index)), 2);
 }
@@ -4032,14 +4128,27 @@ void VoxelGenerator::rebuild_debug_visualizations() {
 
 // ==================== Forcefield Property Setters/Getters ====================
 void VoxelGenerator::set_forcefield_enabled(bool enabled) {
-	if (forcefield_enabled == enabled)
-		return;
+	// Always apply the desired state. If enabling and the nodes are missing
+	// or not inside the scene tree (they may have been removed during _ready()),
+	// recreate/update them. This prevents the case where the property is true
+	// in the inspector but the visual/collision nodes were removed and never
+	// recreated because the setter early-returned.
+	bool previously_enabled = forcefield_enabled;
 	forcefield_enabled = enabled;
 	log_message(String("Forcefield enabled set to: {0}").format(Array::make(forcefield_enabled)), 2);
+
 	if (forcefield_enabled) {
-		create_forcefield_nodes();
+		// If root doesn't exist or isn't in the tree, create it.
+		if (!forcefield_root || !forcefield_root->is_inside_tree()) {
+			// Ensure any stale pointers are cleared before creating new nodes
+			remove_forcefield_nodes();
+			create_forcefield_nodes();
+		}
+
+		// Always update properties (visibility, collision, detection shapes)
 		update_forcefield_nodes();
 	} else {
+		// If disabling, remove whatever exists regardless of previous state
 		remove_forcefield_nodes();
 	}
 }

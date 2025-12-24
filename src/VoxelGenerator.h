@@ -66,6 +66,7 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/packed_color_array.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
@@ -390,15 +391,24 @@ public:
 	// Managed as scene children under this Node3D (main-thread only)
 	bool forcefield_enabled = false;
 	bool forcefield_collision_enabled = true;
-	bool forcefield_detection_enabled = false;
-	float forcefield_height = 8.0f;
+	bool forcefield_detection_enabled = true;
+	float forcefield_height = 300.0f;
 	float forcefield_buffer = 0.5f; // inward buffer from exact world boundary
 
 	Node3D *forcefield_root = nullptr; // container for wall nodes
+	// Forcefield shader material (assignable in Inspector)
+	Ref<ShaderMaterial> forcefield_shader_material;
+
+	// Detection zone size expressed in voxels (controls detection area thickness)
+	float forcefield_detection_voxels = 3.0f;
 	MeshInstance3D *forcefield_wall_meshes[4] = { nullptr, nullptr, nullptr, nullptr }; // 0=north,1=south,2=east,3=west
 	StaticBody3D *forcefield_bodies[4] = { nullptr, nullptr, nullptr, nullptr };
 	CollisionShape3D *forcefield_shapes[4] = { nullptr, nullptr, nullptr, nullptr };
 	Area3D *forcefield_areas[4] = { nullptr, nullptr, nullptr, nullptr };
+
+	// Keep track of how many bodies are inside each forcefield area so we
+	// only hide the visual wall when the last body exits.
+	int forcefield_body_counts[4] = { 0, 0, 0, 0 };
 
 	// Forcefield API
 	void set_forcefield_enabled(bool enabled);
@@ -415,6 +425,20 @@ public:
 
 	void set_forcefield_buffer(float buf);
 	float get_forcefield_buffer() const;
+
+	// Forcefield shader material (assignable in Inspector)
+	void set_forcefield_shader_material(const Ref<ShaderMaterial> &material);
+	Ref<ShaderMaterial> get_forcefield_shader_material() const;
+
+	// Detection zone size (voxels)
+	void set_forcefield_detection_voxels(float voxels);
+	float get_forcefield_detection_voxels() const;
+
+	// Debug helper: returns material info for the four forcefield walls
+	PackedStringArray get_forcefield_material_info() const;
+
+	// Set a parameter on the forcefield shader at runtime
+	void set_forcefield_shader_param(const String &param, const Variant &value);
 
 	// Create/destroy/update forcefield nodes (main thread)
 	void create_forcefield_nodes();

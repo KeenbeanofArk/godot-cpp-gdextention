@@ -12,7 +12,7 @@ class_name Picele # Picture Element or Pixel
 
 # Walking properties
 @export_category("Walking")
-@export var walk_speed = 40.0
+@export var walk_speed = 75.0
 @export var sprint_speed = 12.0
 
 # Stamina system
@@ -46,22 +46,22 @@ func _ready() -> void:
 	var world = get_parent()
 	if world:
 		terrain_manager = world.get_node_or_null("MultiTerrainManager")
-	voxel_generator_plains = get_node_or_null("../TerrainPlains/VoxelGenerator")
+	voxel_generator_plains = get_node_or_null("../Plains/VoxelGenerator")
 	
 	if terrain_manager == null:
-		push_error("Picele: MultiTerrainManager not found as autoload")
+		push_error("[Picele] MultiTerrainManager not found as autoload")
 	
 	if voxel_generator_plains == null:
-		push_error("Picele: VoxelGenPlains not found at ../TerrainPlains/VoxelGenerator")
+		push_error("[Picele] VoxelGenPlains not found at ../TerrainPlains/VoxelGenerator")
 		
 	# Lock mouse cursor to center of screen
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	add_to_group("player")
-	global_position = Vector3(0.0, 75.0, 0.0)
+	global_position = Vector3(0.0, 10.0, 0.0)
 	# Ensure the raycast can hit world geometry (layer 1) while keeping existing masks
 	picele_ray_cast.set_collision_mask_value(1, true)
 
-	print("Picele initial position set in _ready: ", global_position)
+	print("[Picele] Picele initial position set in _ready: ", global_position)
 
 func _physics_process(delta):
 	# Get input direction
@@ -132,13 +132,13 @@ func _input(event):
 
 func terraform_dig():
 	if not terrain_manager:
-		push_error("Terraform: MultiTerrainManager not available")
+		push_error("[Picele] Terraform - MultiTerrainManager not available")
 		return
 	
 	var raycast_info = terrain_manager.get_raycast_info()
 	
 	if not raycast_info.get("hit", false):
-		print("Terraform called with no collision hit")
+		print("[Picele] Terraform called with no collision hit")
 		return
 	
 	var hit_position = raycast_info["position"]
@@ -149,17 +149,17 @@ func terraform_dig():
 		voxel_gen.dig_sphere(hit_position, dig_radius, dig_strength)
 	
 	var distance = raycast_info["distance"]
-	print("Terraforming at: %s (distance: %.2f)" % [hit_position, distance])
+	print("[Picele] Terraforming at: %s (distance: %.2f)" % [hit_position, distance])
 
 func terraform_build():
 	if not terrain_manager:
-		push_error("Terraform: MultiTerrainManager not available")
+		push_error("[Picele] Terraform - MultiTerrainManager not available")
 		return
 	
 	var raycast_info = terrain_manager.get_raycast_info()
 	
 	if not raycast_info.get("hit", false):
-		print("Terraform called with no collision hit")
+		print("[Picele] Terraform called with no collision hit")
 		return
 	
 	var hit_position = raycast_info["position"]
@@ -170,4 +170,4 @@ func terraform_build():
 		voxel_gen.build_sphere(hit_position, build_radius, build_strength)
 	
 	var distance = raycast_info["distance"]
-	print("Terraforming at: %s (distance: %.2f)" % [hit_position, distance])
+	print("[Picele] Terraforming at: %s (distance: %.2f)" % [hit_position, distance])

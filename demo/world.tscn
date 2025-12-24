@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3 uid="uid://etd11wxpmror"]
+[gd_scene load_steps=21 format=3 uid="uid://etd11wxpmror"]
 
 [ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://world_manager.gd" id="1_fj7yv"]
 [ext_resource type="Script" uid="uid://gdi5e7som4a" path="res://terrain_plains.gd" id="2_036b0"]
@@ -10,6 +10,7 @@
 [ext_resource type="Texture2D" uid="uid://brbwwurkp5xi2" path="res://assets/textures/ground/Ground079S_1K-PNG_AmbientOcclusion.png" id="5_k3n1d"]
 [ext_resource type="Texture2D" uid="uid://bxmejoqatee88" path="res://assets/textures/ground/Ground079S_1K-PNG_NormalGL.png" id="6_2o6r5"]
 [ext_resource type="Texture2D" uid="uid://dgj4lt1f6bbsy" path="res://assets/textures/ground/Ground079S_1K-PNG_Roughness.png" id="7_70uel"]
+[ext_resource type="Shader" uid="uid://cawq4do1cgwq1" path="res://scenes/shaders/forcefield.gdshader" id="8_ic0uy"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_pkg7o"]
 shader = ExtResource("2_dwbse")
@@ -60,6 +61,21 @@ period = 10.0
 persistence = 0.6
 lacunarity = 2.5
 
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_k3n1d"]
+render_priority = 0
+shader = ExtResource("8_ic0uy")
+shader_parameter/forcefield_color = Color(0.3, 0.6, 1, 1)
+shader_parameter/edge_intensity = 2.0
+shader_parameter/scan_speed = 0.5
+shader_parameter/scan_scale = 10.0
+shader_parameter/base_alpha = 0.25
+shader_parameter/ripple_pos_1 = Vector3(100, 0, 0)
+shader_parameter/ripple_pos_2 = Vector3(0, 100, 0)
+shader_parameter/ripple_pos_3 = Vector3(0, 0, 100)
+shader_parameter/ripple_time_1 = 1.0000000475
+shader_parameter/ripple_time_2 = 1.250000059375
+shader_parameter/ripple_time_3 = 1.50000007125
+
 [node name="World" type="Node3D" groups=["world"]]
 script = ExtResource("1_fj7yv")
 
@@ -79,10 +95,16 @@ script = ExtResource("2_036b0")
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="Plains"]
 world_size = Vector3i(5, 5, 5)
+auto_generate = true
 use_textures = true
 terrain_material = SubResource("StandardMaterial3D_wse8f")
 terrain_noise = SubResource("NoiseGenerator_dwbse")
 detail_noise = SubResource("NoiseGenerator_gbfbk")
+show_voxel_grid = true
+show_chunk_grid = true
+forcefield_detection_voxels = 12.0
+forcefield_enabled = true
+forcefield_shader_material = SubResource("ShaderMaterial_k3n1d")
 
 [node name="CentralDebugGUI" parent="." instance=ExtResource("3_tlwt5")]
 
@@ -94,3 +116,6 @@ script = ExtResource("4_multi")
 [node name="WorldCamera" type="Camera3D" parent="."]
 transform = Transform3D(-0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, -0.70710677, -40, 0, -40)
 fov = 26.8
+
+[connection signal="forcefield_body_entered" from="Plains/VoxelGenerator" to="." method="_on_voxel_generator_forcefield_body_entered"]
+[connection signal="forcefield_body_exited" from="Plains/VoxelGenerator" to="." method="_on_voxel_generator_forcefield_body_exited"]
