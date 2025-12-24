@@ -350,6 +350,12 @@ public:
 
 	bool is_object_binding_set_by_parent_constructor() const;
 
+	// Sampling API exposed for external callers (e.g., VoxelEngine facade)
+	// Returns the procedural+edited density at a world position (negative = solid).
+	float sample_density_at(const Vector3 &world_pos) const;
+	// Get voxel type at integer world voxel coordinates. Returns VoxelType (0 = AIR).
+	int get_voxel_at(const Vector3i &voxel_pos) const;
+
 	// ==================== Chunk Dirty Flag API ====================
 	// Mark a specific chunk as needing regeneration
 	void mark_chunk_dirty(const Vector3i &chunk_coord);

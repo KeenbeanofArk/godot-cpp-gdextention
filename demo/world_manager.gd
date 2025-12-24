@@ -2,11 +2,14 @@ extends Node3D
 class_name WorldManager
 
 @onready var plains: Node3D = $Plains
-@onready var voxel_generator: VoxelGenerator = $Plains/VoxelGenerator
+@onready var voxel_generator: VoxelGenerator = $Plains/VoxelEngine/VoxelGenerator
+
+@onready var voxel_engine: VoxelEngine = $Plains/VoxelEngine
+# NOTE: $VoxelEngine.set_voxel_generator_node($Plains/VoxelEngine/VoxelGenerator)
 
 # World settings
-const WORLD_SIZE: int = 80 # In Chunks
-const WORLD_DEPTH: int = 4 # In Chunks
+const WORLD_SIZE: int = 25 # In Chunks
+const WORLD_DEPTH: int = 2 # In Chunks
 
 func _ready():
 	plains.generate_plains()

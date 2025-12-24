@@ -31,70 +31,39 @@
 #ifndef VOXEL_ENGINE_H
 #define VOXEL_ENGINE_H
 
-// We don't need windows.h in this example plugin but many others do, and it can
-// lead to annoying situations due to the ton of macros it defines.
-// So we include it and make sure CI warns us if we use something that conflicts
-// with a Windows define.
-#ifdef WIN32
-#include <windows.h>
-#endif
-
-// Godot includes
-#include <godot_cpp/classes/node3d.hpp>
-#include <godot_cpp/classes/ref_counted.hpp>
+#include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/godot.hpp>
-#include <godot_cpp/templates/hash_map.hpp>
-#include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/vector3i.hpp>
 
 using namespace godot;
 
 namespace voxel_engine {
-class Chunk;
-class Voxel;
-class VoxelGenerator;
-class BiomeGenerator;
 
-class VoxelEngine : public Node3D {
-	GDCLASS(VoxelEngine, Node3D);
+class VoxelGenerator;
+
+class VoxelEngine : public Node {
+	GDCLASS(VoxelEngine, Node);
+
+private:
+	VoxelGenerator *voxel_generator = nullptr; // non-owning
 
 protected:
 	static void _bind_methods();
 
 public:
 	VoxelEngine();
-	~VoxelEngine();
+	~VoxelEngine() override;
 
-	void _init(); // Called when the object is instantiated
+	void _init();
 
-	// Core engine methods
-	void initialize();
-	void generate_voxel_world();
-	void update_voxel_world();
+	// Bind a VoxelGenerator node (non-owning)
+	void set_voxel_generator_node(Node *node);
+	VoxelGenerator *get_voxel_generator() const;
 
-	// Voxel manipulation methods
+	// Simple proxies
 	void set_voxel(const Vector3i &position, int type);
-	int get_voxel(const Vector3i &position);
-
-	// Property getters
-	VoxelGenerator *get_voxel_generator() const { return voxel_generator; }
-	Ref<voxel_engine::BiomeGenerator> biome_generator;
-
-	// Voxel count calculation
+	int get_voxel(const Vector3i &position) const;
 	int64_t get_total_voxel_count() const;
-
-	// Chunk management methods
-	Chunk *get_chunk(const Vector3i &position);
-	Chunk *create_chunk(const Vector3i &position);
-	void destroy_chunk(const Vector3i &position);
-
-private:
-	// Components
-	VoxelGenerator *voxel_generator;
-
-	// Chunk storage
-	HashMap<Vector3i, Chunk *> chunks;
 };
 
 } // namespace voxel_engine

@@ -46,13 +46,13 @@ func _ready() -> void:
 	var world = get_parent()
 	if world:
 		terrain_manager = world.get_node_or_null("MultiTerrainManager")
-	voxel_generator_plains = get_node_or_null("../Plains/VoxelGenerator")
+	voxel_generator_plains = get_node_or_null("../Plains/VoxelEngine/VoxelGenerator")
 	
 	if terrain_manager == null:
 		push_error("[Picele] MultiTerrainManager not found as autoload")
 	
 	if voxel_generator_plains == null:
-		push_error("[Picele] VoxelGenPlains not found at ../TerrainPlains/VoxelGenerator")
+		push_error("[Picele] VoxelGenPlains not found at ../Plains/VoxelEngine/VoxelGenerator")
 		
 	# Lock mouse cursor to center of screen
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

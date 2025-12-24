@@ -5,6 +5,7 @@
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
 
+#include "VoxelEngine.h"
 #include "VoxelGenerator.h"
 #include "core/chunk.h"
 #include "core/voxel.h"
@@ -28,6 +29,8 @@ void initialize_voxel_engine_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(Chunk);
 	// Register the VoxelGenerator class
 	GDREGISTER_CLASS(VoxelGenerator);
+	// Register the VoxelEngine facade class
+	GDREGISTER_CLASS(VoxelEngine);
 	// Register the NoiseGenerator class
 	GDREGISTER_CLASS(NoiseGenerator);
 	// Register the BiomeGenerator class

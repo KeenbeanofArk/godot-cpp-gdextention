@@ -93,7 +93,9 @@ directional_shadow_max_distance = 1.0
 [node name="Plains" type="Node3D" parent="."]
 script = ExtResource("2_036b0")
 
-[node name="VoxelGenerator" type="VoxelGenerator" parent="Plains"]
+[node name="VoxelEngine" type="VoxelEngine" parent="Plains"]
+
+[node name="VoxelGenerator" type="VoxelGenerator" parent="Plains/VoxelEngine"]
 world_size = Vector3i(5, 5, 5)
 auto_generate = true
 use_textures = true
@@ -117,5 +119,5 @@ script = ExtResource("4_multi")
 transform = Transform3D(-0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, -0.70710677, -40, 0, -40)
 fov = 26.8
 
-[connection signal="forcefield_body_entered" from="Plains/VoxelGenerator" to="." method="_on_voxel_generator_forcefield_body_entered"]
-[connection signal="forcefield_body_exited" from="Plains/VoxelGenerator" to="." method="_on_voxel_generator_forcefield_body_exited"]
+[connection signal="forcefield_body_entered" from="Plains/VoxelEngine/VoxelGenerator" to="." method="_on_voxel_generator_forcefield_body_entered"]
+[connection signal="forcefield_body_exited" from="Plains/VoxelEngine/VoxelGenerator" to="." method="_on_voxel_generator_forcefield_body_exited"]

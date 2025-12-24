@@ -1,6 +1,6 @@
 extends Node3D
 
-@onready var voxel_generator: VoxelGenerator = $VoxelGenerator
+@onready var voxel_generator: VoxelGenerator = $VoxelEngine/VoxelGenerator
 @onready var picele: CharacterBody3D = $"../Picele"
 
 var custom_distances = PackedFloat64Array([8, 16, 32, 64, 128, 256, 512, 1048])

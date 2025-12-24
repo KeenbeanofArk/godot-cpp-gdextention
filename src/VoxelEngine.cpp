@@ -29,186 +29,81 @@
 /**************************************************************************/
 
 #include "VoxelEngine.h"
-#include "Constants.h"
 #include "VoxelGenerator.h"
-#include "core/chunk.h"
-#include "core/voxel.h"
-#include "register_types.h"
 
 // Godot includes
 #include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/variant/vector3i.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
+
+using namespace godot;
+using namespace voxel_engine;
 
 namespace voxel_engine {
 
 void VoxelEngine::_bind_methods() {
-	// Using the Godot 4 GDExtension approach for registering methods
-	ClassDB::bind_method(D_METHOD("initialize"), &VoxelEngine::initialize);
-	ClassDB::bind_method(D_METHOD("generate_voxel_world"), &VoxelEngine::generate_voxel_world);
-	ClassDB::bind_method(D_METHOD("update_voxel_world"), &VoxelEngine::update_voxel_world);
+	ClassDB::bind_method(D_METHOD("set_voxel_generator_node", "node"), &VoxelEngine::set_voxel_generator_node);
+	ClassDB::bind_method(D_METHOD("get_voxel_generator"), &VoxelEngine::get_voxel_generator);
 	ClassDB::bind_method(D_METHOD("set_voxel", "position", "type"), &VoxelEngine::set_voxel);
 	ClassDB::bind_method(D_METHOD("get_voxel", "position"), &VoxelEngine::get_voxel);
 	ClassDB::bind_method(D_METHOD("get_total_voxel_count"), &VoxelEngine::get_total_voxel_count);
-	ClassDB::bind_method(D_METHOD("create_chunk", "position"), &VoxelEngine::create_chunk);
-	ClassDB::bind_method(D_METHOD("destroy_chunk", "position"), &VoxelEngine::destroy_chunk);
-
-	// Bind property getters
-	ClassDB::bind_method(D_METHOD("get_voxel_generator"), &VoxelEngine::get_voxel_generator);
-
-	// Add properties
-	ClassDB::add_property("VoxelEngine", PropertyInfo(Variant::OBJECT, "voxel_generator", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "VoxelGenerator"), "", "get_voxel_generator");
 }
 
-VoxelEngine::VoxelEngine() {
-	// Initialize components
-	voxel_generator = memnew(VoxelGenerator);
-}
+VoxelEngine::VoxelEngine() = default;
 
 VoxelEngine::~VoxelEngine() {
-	// Clean up components
-	if (voxel_generator) {
-		memdelete(voxel_generator);
-		voxel_generator = nullptr;
-	}
-
-	// Clean up chunks
-	for (HashMap<Vector3i, Chunk *>::Iterator it = chunks.begin(); it != chunks.end(); ++it) {
-		memdelete(it->value);
-	}
-	chunks.clear();
+	voxel_generator = nullptr; // non-owning
 }
 
 void VoxelEngine::_init() {
-	// Called when the object is first created
+	// no-op
 }
 
-void VoxelEngine::initialize() {
-	// Initialize the voxel engine
-	UtilityFunctions::print("NativeVoxelEngine: Initializing Voxel Engine");
-
-	// In VoxelEngine constructor or initialization
-	biome_generator.instantiate();
-}
-
-void VoxelEngine::generate_voxel_world() {
-	// Generate the initial voxel world
-	UtilityFunctions::print("NativeVoxelEngine: Generating Voxel World");
-
-	// Example: Generate a few chunks around the origin
-	for (int x = -2; x <= 2; x++) {
-		for (int z = -2; z <= 2; z++) {
-			Vector3i chunk_pos(x, 0, z);
-			create_chunk(chunk_pos);
-		}
+void VoxelEngine::set_voxel_generator_node(Node *node) {
+	if (!node) {
+		voxel_generator = nullptr;
+		UtilityFunctions::print("VoxelEngine: cleared voxel_generator reference");
+		return;
 	}
+	VoxelGenerator *vg = Object::cast_to<VoxelGenerator>(node);
+	if (!vg) {
+		UtilityFunctions::push_error("VoxelEngine: provided node is not a VoxelGenerator");
+		return;
+	}
+	voxel_generator = vg;
+	UtilityFunctions::print("VoxelEngine: bound to VoxelGenerator node");
 }
 
-void VoxelEngine::update_voxel_world() {
-	// Update the voxel world state
-	// This would typically be called each frame
+VoxelGenerator *VoxelEngine::get_voxel_generator() const {
+	return voxel_generator;
 }
 
 void VoxelEngine::set_voxel(const Vector3i &position, int type) {
-	// Convert world position to chunk position and local position
-	Vector3i chunk_pos = Vector3i(
-			floor(position.x / (float)Chunk::get_default_chunk_size()),
-			floor(position.y / (float)Chunk::get_default_chunk_size()),
-			floor(position.z / (float)Chunk::get_default_chunk_size()));
-
-	Vector3i local_pos = Vector3i(
-			position.x - chunk_pos.x * Chunk::get_default_chunk_size(),
-			position.y - chunk_pos.y * Chunk::get_default_chunk_size(),
-			position.z - chunk_pos.z * Chunk::get_default_chunk_size());
-
-	// Get the chunk
-	Chunk *chunk = get_chunk(chunk_pos);
-	if (!chunk) {
-		// Create the chunk if it doesn't exist
-		chunk = create_chunk(chunk_pos);
+	if (!voxel_generator) {
+		UtilityFunctions::push_error("VoxelEngine::set_voxel: no VoxelGenerator bound");
+		return;
 	}
-
-	// Set the voxel
-	chunk->set_voxel(local_pos, static_cast<VoxelType>(type));
+	// Best-effort: use build/dig to approximate per-voxel change
+	voxel_generator->build_sphere(Vector3(static_cast<float>(position.x), static_cast<float>(position.y), static_cast<float>(position.z)), 0.5f, (type == 0 ? -1.0f : 1.0f));
 }
 
-int VoxelEngine::get_voxel(const Vector3i &position) {
-	// Convert world position to chunk position and local position
-	Vector3i chunk_pos = Vector3i(
-			floor(position.x / (float)Chunk::get_default_chunk_size()),
-			floor(position.y / (float)Chunk::get_default_chunk_size()),
-			floor(position.z / (float)Chunk::get_default_chunk_size()));
-
-	Vector3i local_pos = Vector3i(
-			position.x - chunk_pos.x * Chunk::get_default_chunk_size(),
-			position.y - chunk_pos.y * Chunk::get_default_chunk_size(),
-			position.z - chunk_pos.z * Chunk::get_default_chunk_size());
-
-	// Get the chunk
-	Chunk *chunk = get_chunk(chunk_pos);
-	if (!chunk) {
-		return static_cast<int>(VoxelType::AIR);
+int VoxelEngine::get_voxel(const Vector3i &position) const {
+	if (!voxel_generator) {
+		UtilityFunctions::push_error("VoxelEngine::get_voxel: no VoxelGenerator bound");
+		return 0; // AIR
 	}
-
-	// Get the voxel - now returns Ref<Voxel> instead of Voxel
-	Ref<Voxel> voxel = chunk->get_voxel(local_pos);
-	if (voxel.is_valid()) {
-		return static_cast<int>(voxel->get_type());
-	} else {
-		return static_cast<int>(VoxelType::AIR);
-	}
+	// Use VoxelGenerator sampling API if available
+	return voxel_generator->get_voxel_at(position);
 }
 
 int64_t VoxelEngine::get_total_voxel_count() const {
-	// Total voxels = (world_size.x * chunk_size) * (world_size.y * chunk_size) * (world_size.z * chunk_size)
-	if (!voxel_generator) {
+	if (!voxel_generator)
 		return 0;
-	}
-
 	Vector3i world_size = voxel_generator->get_world_size();
-	int chunk_size = Chunk::get_default_chunk_size();
-
-	int64_t total_x = (int64_t)world_size.x * chunk_size;
-	int64_t total_y = (int64_t)world_size.y * chunk_size;
-	int64_t total_z = (int64_t)world_size.z * chunk_size;
-
+	int chunk_size = voxel_generator->get_chunk_size();
+	int64_t total_x = static_cast<int64_t>(world_size.x) * chunk_size;
+	int64_t total_y = static_cast<int64_t>(world_size.y) * chunk_size;
+	int64_t total_z = static_cast<int64_t>(world_size.z) * chunk_size;
 	return total_x * total_y * total_z;
-}
-
-Chunk *VoxelEngine::get_chunk(const Vector3i &position) {
-	if (chunks.has(position)) {
-		return chunks[position];
-	}
-	return nullptr;
-}
-
-Chunk *VoxelEngine::create_chunk(const Vector3i &position) {
-	// Check if the chunk already exists
-	if (chunks.has(position)) {
-		return chunks[position];
-	}
-
-	// Create a new chunk
-	Chunk *chunk = memnew(Chunk);
-	chunk->position = Vector3(position);
-	chunk->set_biome_generator(biome_generator); // Set the biome generator for the chunk
-	chunk->chunk_id = position.x + position.y * 1000 + position.z * 1000000; // Unique ID based on position
-
-	// Generate the chunk
-	chunk->generate();
-
-	// Add the chunk to the map
-	chunks[position] = chunk;
-
-	return chunk;
-}
-
-void VoxelEngine::destroy_chunk(const Vector3i &position) {
-	// Check if the chunk exists
-	if (chunks.has(position)) {
-		// Delete the chunk
-		memdelete(chunks[position]);
-		chunks.erase(position);
-	}
 }
 
 } // namespace voxel_engine

@@ -2930,6 +2930,70 @@ float VoxelGenerator::get_density_at_world_position(const Vector3 &world_pos) co
 	return c0 * (1.0f - tz) + c1 * tz;
 }
 
+// Public sampling API
+float VoxelGenerator::sample_density_at(const Vector3 &world_pos) const {
+	// Reuse existing density evaluation which includes terrain, noise and edits
+	return get_terrain_density(world_pos);
+}
+
+int VoxelGenerator::get_voxel_at(const Vector3i &voxel_pos) const {
+	// Convert integer voxel world coords to chunk coordinates using same logic as invalidate_density_region
+	Vector3 world_extent(
+			static_cast<float>(std::max(1, world_size.x) * chunk_size),
+			static_cast<float>(std::max(1, world_size.y) * chunk_size),
+			static_cast<float>(std::max(1, world_size.z) * chunk_size));
+	Vector3 half_extent = world_extent * 0.5f;
+
+	auto voxel_to_chunk = [&](int voxel_coord, float half_axis_extent, int axis_chunks) {
+		if (axis_chunks <= 0)
+			return 0;
+		float shifted = static_cast<float>(voxel_coord) + half_axis_extent;
+		int chunk = static_cast<int>(std::floor(shifted / static_cast<float>(chunk_size)));
+		if (chunk < 0)
+			chunk = 0;
+		if (chunk >= axis_chunks)
+			chunk = axis_chunks - 1;
+		return chunk;
+	};
+
+	int cx = voxel_to_chunk(voxel_pos.x, half_extent.x, world_size.x);
+	int cy = voxel_to_chunk(voxel_pos.y, half_extent.y, world_size.y);
+	int cz = voxel_to_chunk(voxel_pos.z, half_extent.z, world_size.z);
+
+	Vector3i chunk_coord(cx, cy, cz);
+	int idx = chunk_coord_to_index(chunk_coord);
+	if (idx < 0 || idx >= static_cast<int>(chunks.size())) {
+		return static_cast<int>(VoxelType::AIR);
+	}
+
+	Chunk *chunk = chunks[idx];
+	if (!chunk || !is_instance_valid(chunk)) {
+		return static_cast<int>(VoxelType::AIR);
+	}
+
+	// Compute chunk world origin (float) and convert to integer base for voxel indexing
+	Vector3 origin = get_chunk_world_origin(chunk_coord);
+	int origin_x = static_cast<int>(std::floor(origin.x));
+	int origin_y = static_cast<int>(std::floor(origin.y));
+	int origin_z = static_cast<int>(std::floor(origin.z));
+
+	int local_x = voxel_pos.x - origin_x;
+	int local_y = voxel_pos.y - origin_y;
+	int local_z = voxel_pos.z - origin_z;
+
+	// Clamp local coordinates to chunk bounds
+	if (local_x < 0 || local_x >= chunk->get_chunk_size() ||
+			local_y < 0 || local_y >= chunk->get_chunk_size() ||
+			local_z < 0 || local_z >= chunk->get_chunk_size()) {
+		return static_cast<int>(VoxelType::AIR);
+	}
+
+	Ref<Voxel> v = chunk->get_voxel(Vector3i(local_x, local_y, local_z));
+	if (!v.is_valid())
+		return static_cast<int>(VoxelType::AIR);
+	return v->get_type();
+}
+
 std::vector<float> VoxelGenerator::get_cube_values_at_world_position(const Vector3 &center, const Vector3 &half_size) const {
 	std::vector<float> values(8);
 
