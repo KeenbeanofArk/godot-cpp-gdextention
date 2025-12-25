@@ -3,8 +3,8 @@ extends Node3D
 @onready var voxel_generator: VoxelGenerator = $VoxelEngine/VoxelGenerator
 @onready var picele: CharacterBody3D = $"../Picele"
 
-var custom_distances = PackedFloat64Array([8, 16, 32, 64, 128, 256, 512, 1048])
-var t := 100.0
+var custom_distances = PackedFloat64Array([16, 32, 64, 128, 256, 512, 1024, 2048])
+var t := 1.0
 
 func _ready() -> void:
 	
@@ -16,7 +16,7 @@ func _ready() -> void:
 	
 	# Enable the forcefield (if not already)
 	voxel_generator.forcefield_enabled = true
-	voxel_generator.forcefield_height = 300.0
+	voxel_generator.forcefield_height = world_manager.WALL_HEIGHT
 	voxel_generator.forcefield_collision_enabled = true
 	voxel_generator.forcefield_detection_enabled = true
 	voxel_generator.forcefield_buffer = -1.0
@@ -57,7 +57,7 @@ func _ready() -> void:
 	voxel_generator.world_size = Vector3i(world_manager.WORLD_SIZE, world_manager.WORLD_DEPTH, world_manager.WORLD_SIZE) # Immediately calls .generate() if .auto_generate is set to true
 	
 	voxel_generator.chunk_size = 8
-	voxel_generator.resolution = 4
+	voxel_generator.resolution = 2
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
 	voxel_generator.use_textures = true
 	voxel_generator.surface_band = 1.5
@@ -65,7 +65,7 @@ func _ready() -> void:
 	voxel_generator.signal_every_n_chunks = 20
 	voxel_generator.lod_distances = custom_distances
 	voxel_generator.enable_distance_lod = true
-	voxel_generator.lod_level = 3
+	voxel_generator.lod_level = 6
 	voxel_generator.lod_reference_position = picele.global_position # no verbose
 	voxel_generator.lod_distance_multiplier = 1.0
 	voxel_generator.show_lod_colors = false # no verbose
@@ -76,16 +76,16 @@ func _ready() -> void:
 	voxel_generator.show_chunk_grid = false
 		
 	# Configure terrain
-	voxel_generator.terrain_height = 3.0
-	voxel_generator.terrain_amplitude = 4.5
-	voxel_generator.rock_influence = 0.3
+	voxel_generator.terrain_height = 0.0
+	voxel_generator.terrain_amplitude = 0.0
+	voxel_generator.rock_influence = 0.0
 	voxel_generator.cutoff = 0.1
 	
-	### Confugure biome generator
-	#var biome_gen = BiomeGenerator.new()
-	#biome_gen.seed = 12345 # no verbose
-	#biome_gen.sea_level = 0.0 # no verbose
-	#setup_biomes(biome_gen)
+	# Confugure biome generator
+	var biome_gen = BiomeGenerator.new()
+	biome_gen.seed = 12345 # no verbose
+	biome_gen.sea_level = 0.0 # no verbose
+	setup_biomes(biome_gen)
 	
 	# Connect to signals
 	voxel_generator.chunk_ready.connect(_on_chunk_ready)
@@ -188,6 +188,7 @@ func _process(delta):
 	t += delta
 	
 	# Oscillate brightness uniform if shader exposes one
+	# NOTE: There is no brightness in the shader
 	var brightness = 0.5 + 0.5 * sin(t * 2.0)
 	voxel_generator.set_forcefield_shader_param("u_brightness", brightness)
 

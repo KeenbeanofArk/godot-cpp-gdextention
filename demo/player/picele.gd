@@ -57,7 +57,7 @@ func _ready() -> void:
 	# Lock mouse cursor to center of screen
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	add_to_group("player")
-	global_position = Vector3(0.0, 10.0, 0.0)
+	global_position = Vector3(0.0, 40.0, 0.0)
 	# Ensure the raycast can hit world geometry (layer 1) while keeping existing masks
 	picele_ray_cast.set_collision_mask_value(1, true)
 

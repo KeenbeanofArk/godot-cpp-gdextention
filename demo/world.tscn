@@ -1,15 +1,12 @@
-[gd_scene load_steps=21 format=3 uid="uid://etd11wxpmror"]
+[gd_scene load_steps=17 format=3 uid="uid://etd11wxpmror"]
 
 [ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://world_manager.gd" id="1_fj7yv"]
 [ext_resource type="Script" uid="uid://gdi5e7som4a" path="res://terrain_plains.gd" id="2_036b0"]
 [ext_resource type="Shader" uid="uid://cs7uas2ia6gjd" path="res://scenes/shaders/SkyShader.gdshader" id="2_dwbse"]
 [ext_resource type="PackedScene" uid="uid://cp6m8e8v6rkjm" path="res://player/picele.tscn" id="2_tlwt5"]
 [ext_resource type="PackedScene" uid="uid://deg7mq7jukfdi" path="res://gui.tscn" id="3_tlwt5"]
-[ext_resource type="Texture2D" uid="uid://7ov1ocn8s6b3" path="res://assets/textures/ground/Ground079S_1K-PNG_Color.png" id="4_ic0uy"]
+[ext_resource type="Material" uid="uid://ykdewajhlxx2" path="res://assets/textures/ground/terrain_material.tres" id="4_gbfbk"]
 [ext_resource type="Script" uid="uid://ddngrcvi0p60i" path="res://multi_terrain_manager.gd" id="4_multi"]
-[ext_resource type="Texture2D" uid="uid://brbwwurkp5xi2" path="res://assets/textures/ground/Ground079S_1K-PNG_AmbientOcclusion.png" id="5_k3n1d"]
-[ext_resource type="Texture2D" uid="uid://bxmejoqatee88" path="res://assets/textures/ground/Ground079S_1K-PNG_NormalGL.png" id="6_2o6r5"]
-[ext_resource type="Texture2D" uid="uid://dgj4lt1f6bbsy" path="res://assets/textures/ground/Ground079S_1K-PNG_Roughness.png" id="7_70uel"]
 [ext_resource type="Shader" uid="uid://cawq4do1cgwq1" path="res://scenes/shaders/forcefield.gdshader" id="8_ic0uy"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_pkg7o"]
@@ -23,17 +20,6 @@ sky_material = SubResource("ShaderMaterial_pkg7o")
 [sub_resource type="Environment" id="Environment_aqk2v"]
 background_mode = 2
 sky = SubResource("Sky_tlwt5")
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wse8f"]
-albedo_texture = ExtResource("4_ic0uy")
-roughness = 0.7
-roughness_texture = ExtResource("7_70uel")
-normal_texture = ExtResource("6_2o6r5")
-ao_light_affect = 0.5
-ao_texture = ExtResource("5_k3n1d")
-uv1_scale = Vector3(4, 4, 4)
-uv1_triplanar = true
-uv1_triplanar_sharpness = 2.0
 
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_036b0"]
 noise_type = 3
@@ -69,12 +55,12 @@ shader_parameter/edge_intensity = 2.0
 shader_parameter/scan_speed = 0.5
 shader_parameter/scan_scale = 10.0
 shader_parameter/base_alpha = 0.25
-shader_parameter/ripple_pos_1 = Vector3(100, 0, 0)
-shader_parameter/ripple_pos_2 = Vector3(0, 100, 0)
-shader_parameter/ripple_pos_3 = Vector3(0, 0, 100)
+shader_parameter/ripple_pos_1 = Vector3(0, 0, 0)
+shader_parameter/ripple_pos_2 = Vector3(90, 90, 90)
+shader_parameter/ripple_pos_3 = Vector3(180, 180, 180)
 shader_parameter/ripple_time_1 = 1.0000000475
-shader_parameter/ripple_time_2 = 1.250000059375
-shader_parameter/ripple_time_3 = 1.50000007125
+shader_parameter/ripple_time_2 = 5.0000002375
+shader_parameter/ripple_time_3 = 10.0
 
 [node name="World" type="Node3D" groups=["world"]]
 script = ExtResource("1_fj7yv")
@@ -96,16 +82,17 @@ script = ExtResource("2_036b0")
 [node name="VoxelEngine" type="VoxelEngine" parent="Plains"]
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="Plains/VoxelEngine"]
-world_size = Vector3i(5, 5, 5)
+world_size = Vector3i(6, 5, 6)
 auto_generate = true
 use_textures = true
-terrain_material = SubResource("StandardMaterial3D_wse8f")
+terrain_material = ExtResource("4_gbfbk")
 terrain_noise = SubResource("NoiseGenerator_dwbse")
 detail_noise = SubResource("NoiseGenerator_gbfbk")
 show_voxel_grid = true
 show_chunk_grid = true
 forcefield_detection_voxels = 12.0
 forcefield_enabled = true
+forcefield_height = 50.0
 forcefield_shader_material = SubResource("ShaderMaterial_k3n1d")
 
 [node name="CentralDebugGUI" parent="." instance=ExtResource("3_tlwt5")]

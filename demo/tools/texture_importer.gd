@@ -6,7 +6,8 @@ class_name TextureImporter
 ## Add this to any Node in your scene and call import_textures() from the Output console
 
 const TEXTURE_BASE_PATH = "res://assets/textures/ground/"
-const TEXTURE_NAME = "Ground079S_1K-PNG"
+#const TEXTURE_NAME = "Ground079S_1K-PNG"
+const TEXTURE_NAME = "Ground071_4K-PNG"
 
 class TextureSet:
 	var color: Texture2D
@@ -66,7 +67,7 @@ func create_pbr_material(textures: TextureSet) -> StandardMaterial3D:
 	# Use triplanar mapping for better voxel terrain coverage
 	material.uv1_triplanar = true
 	material.uv1_triplanar_sharpness = 2.0
-	material.uv1_scale = Vector3(4.0, 4.0, 4.0) # Adjust UV scale to fit voxels
+	material.uv1_scale = Vector3(1.0, 1.0, 1.0) # Adjust UV scale to fit voxels
 	
 	print("[TextureImporter] Created PBR material")
 	return material

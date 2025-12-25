@@ -10,7 +10,7 @@ var player_raycast: RayCast3D = null
 
 # Signals
 signal terrain_selected(terrain_name: String, voxel_generator: VoxelGenerator)
-signal terrain_raycast_changed(terrain_name: String)
+# signal terrain_raycast_changed(terrain_name: String)
 
 func _ready() -> void:
 	# Get player and raycast (search relative to this manager's parent / scene root)

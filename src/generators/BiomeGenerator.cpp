@@ -334,13 +334,51 @@ float BiomeGenerator::get_blended_height_at(float x, float z) const {
 	// Get biome weights for blending
 	Array weights = get_blended_biome_weights(x, z);
 
+	// Fallback to default height when no biome weights are available
 	if (weights.size() == 0) {
 		return get_height_at(x, z);
 	}
 
-	// For now, just use standard height - biome-specific height modifiers
-	// could be added here in the future
-	return get_height_at(x, z);
+	// Sample normalized height noise (0..1) to drive per-biome interpolation
+	float n = 0.5f;
+	if (height_noise.is_valid()) {
+		float nv = height_noise->get_noise_2d(x, z);
+		n = (nv + 1.0f) * 0.5f;
+	}
+
+	// Blend per-biome heights using each biome's min/max height range.
+	// BiomeData stores heights in normalized form (0..1), while
+	// get_height_at() uses a 0..100 range. To keep compatibility we
+	// map biome min/max -> 0..100 here.
+	float blended = 0.0f;
+	float total_weight = 0.0f;
+
+	for (int i = 0; i < weights.size(); ++i) {
+		Dictionary bw = weights[i];
+		int biome_index = static_cast<int>(bw["biome_index"]);
+		float weight = static_cast<float>(bw["weight"]);
+		if (biome_index < 0 || biome_index >= biomes.size())
+			continue;
+
+		const BiomeData &bd = biomes[biome_index];
+
+		// Map biome min/max (assumed 0..1) to 0..100 world height range
+		float min_h = bd.min_height * 100.0f;
+		float max_h = bd.max_height * 100.0f;
+		float local_h = min_h + (max_h - min_h) * n;
+
+		blended += local_h * weight;
+		total_weight += weight;
+	}
+
+	if (total_weight > 0.0f) {
+		blended /= total_weight;
+	} else {
+		// Fallback: use procedural height
+		blended = get_height_at(x, z);
+	}
+
+	return blended > sea_level ? blended : sea_level;
 }
 
 Array BiomeGenerator::get_blended_biome_weights(float x, float z) const {

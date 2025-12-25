@@ -407,14 +407,27 @@ public:
 
 	// Detection zone size expressed in voxels (controls detection area thickness)
 	float forcefield_detection_voxels = 3.0f;
-	MeshInstance3D *forcefield_wall_meshes[4] = { nullptr, nullptr, nullptr, nullptr }; // 0=north,1=south,2=east,3=west
-	StaticBody3D *forcefield_bodies[4] = { nullptr, nullptr, nullptr, nullptr };
-	CollisionShape3D *forcefield_shapes[4] = { nullptr, nullptr, nullptr, nullptr };
-	Area3D *forcefield_areas[4] = { nullptr, nullptr, nullptr, nullptr };
+	// Extended to support 6 walls: north, south, east, west, top, bottom
+	enum ForcefieldWall {
+		FF_NORTH = 0,
+		FF_SOUTH = 1,
+		FF_EAST = 2,
+		FF_WEST = 3,
+		FF_TOP = 4,
+		FF_BOTTOM = 5,
+		FF_COUNT = 6
+	};
+	MeshInstance3D *forcefield_wall_meshes[FF_COUNT] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr }; // 0=north,1=south,2=east,3=west,4=top,5=bottom
+	StaticBody3D *forcefield_bodies[FF_COUNT] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+	CollisionShape3D *forcefield_shapes[FF_COUNT] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+	Area3D *forcefield_areas[FF_COUNT] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 
 	// Keep track of how many bodies are inside each forcefield area so we
 	// only hide the visual wall when the last body exits.
-	int forcefield_body_counts[4] = { 0, 0, 0, 0 };
+	int forcefield_body_counts[FF_COUNT] = { 0, 0, 0, 0, 0, 0 };
+
+	// Per-wall enabled flags (Inspector-exposed wrappers will map to these)
+	bool forcefield_wall_enabled[FF_COUNT] = { true, true, true, true, true, true };
 
 	// Forcefield API
 	void set_forcefield_enabled(bool enabled);
@@ -435,6 +448,30 @@ public:
 	// Forcefield shader material (assignable in Inspector)
 	void set_forcefield_shader_material(const Ref<ShaderMaterial> &material);
 	Ref<ShaderMaterial> get_forcefield_shader_material() const;
+
+	// Indexed per-wall API (0..FF_COUNT-1). Validates index.
+	void set_forcefield_wall_enabled(int wall_index, bool enabled);
+	bool get_forcefield_wall_enabled(int wall_index) const;
+
+	void set_forcefield_wall_collision_enabled(int wall_index, bool enabled);
+	bool get_forcefield_wall_collision_enabled(int wall_index) const;
+
+	void set_forcefield_wall_detection_enabled(int wall_index, bool enabled);
+	bool get_forcefield_wall_detection_enabled(int wall_index) const;
+
+	// Named convenience wrappers for Inspector exposure
+	void set_forcefield_north_enabled(bool enabled);
+	bool get_forcefield_north_enabled() const;
+	void set_forcefield_south_enabled(bool enabled);
+	bool get_forcefield_south_enabled() const;
+	void set_forcefield_east_enabled(bool enabled);
+	bool get_forcefield_east_enabled() const;
+	void set_forcefield_west_enabled(bool enabled);
+	bool get_forcefield_west_enabled() const;
+	void set_forcefield_top_enabled(bool enabled);
+	bool get_forcefield_top_enabled() const;
+	void set_forcefield_bottom_enabled(bool enabled);
+	bool get_forcefield_bottom_enabled() const;
 
 	// Detection zone size (voxels)
 	void set_forcefield_detection_voxels(float voxels);

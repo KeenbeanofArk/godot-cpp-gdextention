@@ -9,7 +9,8 @@ class_name WorldManager
 
 # World settings
 const WORLD_SIZE: int = 25 # In Chunks
-const WORLD_DEPTH: int = 2 # In Chunks
+const WORLD_DEPTH: int = 20 # In Chunks
+const WALL_HEIGHT: float = 200.0 
 
 func _ready():
 	plains.generate_plains()
