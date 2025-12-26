@@ -58,6 +58,14 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
+#include <condition_variable>
+#include <filesystem>
+#include <fstream>
+#include <godot_cpp/classes/json.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
+#include <sstream>
+#include <thread>
+
 namespace voxel_engine {
 
 void VoxelGenerator::_bind_methods() {
@@ -160,6 +168,8 @@ void VoxelGenerator::_bind_methods() {
 
 	// Heightmap methods
 	ClassDB::bind_method(D_METHOD("get_height_at", "fx", "fz"), &VoxelGenerator::get_height_at);
+	ClassDB::bind_method(D_METHOD("save_map", "dir", "map_name"), &VoxelGenerator::save_map);
+	ClassDB::bind_method(D_METHOD("load_map", "dir", "map_name", "strict_match"), &VoxelGenerator::load_map, DEFVAL(true));
 
 	ClassDB::bind_method(D_METHOD("reset"), &VoxelGenerator::reset);
 
@@ -372,7 +382,496 @@ VoxelGenerator::~VoxelGenerator() {
 
 	// Remove forcefield nodes if present
 	remove_forcefield_nodes();
+
+	// Ensure background writer is stopped
+	stop_background_writer();
+
 	log_message("VoxelGenerator destroyed and chunks cleaned up.", 1);
+}
+
+// ---------------- Background writer implementation ----------------
+void VoxelGenerator::start_background_writer() {
+	std::lock_guard<std::mutex> lk(writer_mutex);
+	if (writer_running.load())
+		return;
+	writer_running.store(true);
+	background_writer = std::thread([this]() {
+		while (writer_running.load()) {
+			MeshWriteJob job;
+			{
+				std::unique_lock<std::mutex> lk(writer_mutex);
+				if (writer_queue.empty()) {
+					writer_cv.wait_for(lk, std::chrono::milliseconds(200));
+					if (writer_queue.empty()) {
+						if (!writer_running.load())
+							break;
+						continue;
+					}
+				}
+				job = std::move(writer_queue.front());
+				writer_queue.pop_front();
+			}
+
+			// Build platform path using std::filesystem
+			std::string out_dir = writer_out_dir.utf8().get_data();
+			std::filesystem::path p = std::filesystem::path(out_dir) / std::string(job.filename.utf8().get_data());
+			std::ofstream os(p.string(), std::ios::binary);
+			if (!os)
+				continue;
+
+			// simple header
+			os.write("VCHN", 4);
+			int32_t ver = 1;
+			os.write(reinterpret_cast<const char *>(&ver), sizeof(ver));
+
+			int32_t vcount = static_cast<int32_t>(job.vertices.size() / 3);
+			os.write(reinterpret_cast<const char *>(&vcount), sizeof(vcount));
+			// write positions
+			os.write(reinterpret_cast<const char *>(job.vertices.data()), job.vertices.size() * sizeof(float));
+			// write normals
+			int32_t ncount = static_cast<int32_t>(job.normals.size());
+			os.write(reinterpret_cast<const char *>(&ncount), sizeof(ncount));
+			if (ncount > 0)
+				os.write(reinterpret_cast<const char *>(job.normals.data()), job.normals.size() * sizeof(float));
+			// colors
+			int32_t cbytes = static_cast<int32_t>(job.colors.size());
+			os.write(reinterpret_cast<const char *>(&cbytes), sizeof(cbytes));
+			if (cbytes > 0)
+				os.write(reinterpret_cast<const char *>(job.colors.data()), job.colors.size());
+			// custom0
+			int32_t cb0 = static_cast<int32_t>(job.custom0.size());
+			os.write(reinterpret_cast<const char *>(&cb0), sizeof(cb0));
+			if (cb0 > 0)
+				os.write(reinterpret_cast<const char *>(job.custom0.data()), job.custom0.size());
+
+			os.close();
+		}
+	});
+}
+
+void VoxelGenerator::stop_background_writer() {
+	{
+		std::lock_guard<std::mutex> lk(writer_mutex);
+		if (!writer_running.load())
+			return;
+		writer_running.store(false);
+	}
+	writer_cv.notify_all();
+	if (background_writer.joinable())
+		background_writer.join();
+}
+
+// ---------------- Save / Load minimal implementation ----------------
+void VoxelGenerator::save_map(const String &dir, const String &map_name) {
+	// Resolve Godot virtual paths (user://, res://) to real filesystem paths
+	String resolved_dir = dir;
+	if (dir.begins_with("user://") || dir.begins_with("res://")) {
+		resolved_dir = ProjectSettings::get_singleton()->globalize_path(dir);
+	}
+
+	// Build output dir using std::filesystem
+	std::string dir_s = std::string(resolved_dir.utf8().get_data());
+	std::string name_s = std::string(map_name.utf8().get_data());
+	std::filesystem::path out_path = std::filesystem::path(dir_s) / name_s;
+	std::error_code ec;
+	std::filesystem::create_directories(out_path, ec);
+	writer_out_dir = String(out_path.string().c_str());
+
+	// Build generator params JSON
+	std::ostringstream meta_ss;
+	meta_ss << "{\"version\":1,";
+	meta_ss << "\"map_name\":\"" << name_s << "\",";
+	meta_ss << "\"timestamp\":\"now\",";
+
+	meta_ss << "\"generator_params\":{";
+	meta_ss << "\"world_size\": [" << world_size.x << "," << world_size.y << "," << world_size.z << "],";
+	meta_ss << "\"chunk_size\": " << chunk_size << ",";
+	meta_ss << "\"resolution\": " << resolution << ",";
+	meta_ss << "\"cutoff\": " << cutoff << ",";
+	meta_ss << "\"seeder\": " << seeder << ",";
+	meta_ss << "\"generation_mode\": " << static_cast<int>(generation_mode) << ",";
+	meta_ss << "\"surface_band\": " << surface_band << ",";
+	meta_ss << "\"lod_level\": " << lod_level;
+	meta_ss << "},";
+
+	// Serialize terrain_edits and feature_edits under lock into JSON arrays
+	meta_ss << "\"terrain_edits\": [";
+	{
+		bool first = true;
+		std::lock_guard<std::mutex> lock(terrain_edits_mutex);
+		for (const auto &p : terrain_edits) {
+			uint64_t key = p.first;
+			int x = static_cast<int>((key >> 40) & 0xFFFFF) - 524288;
+			int y = static_cast<int>((key >> 20) & 0xFFFFF) - 524288;
+			int z = static_cast<int>(key & 0xFFFFF) - 524288;
+			if (!first)
+				meta_ss << ",";
+			meta_ss << "{\"x\": " << x << ", \"y\": " << y << ", \"z\": " << z << ", \"delta\": " << p.second << "}";
+			first = false;
+		}
+	}
+	meta_ss << "],";
+
+	meta_ss << "\"feature_edits\": [";
+	{
+		bool first = true;
+		std::lock_guard<std::mutex> lock(feature_edits_mutex);
+		for (const auto &p : feature_density_edits) {
+			uint64_t key = p.first;
+			int x = static_cast<int>((key >> 40) & 0xFFFFF) - 524288;
+			int y = static_cast<int>((key >> 20) & 0xFFFFF) - 524288;
+			int z = static_cast<int>(key & 0xFFFFF) - 524288;
+			if (!first)
+				meta_ss << ",";
+			meta_ss << "{\"x\": " << x << ", \"y\": " << y << ", \"z\": " << z << ", \"delta\": " << p.second << "}";
+			first = false;
+		}
+	}
+	meta_ss << "],";
+
+	// Prepare background writer
+	{
+		std::lock_guard<std::mutex> lk(writer_mutex);
+		writer_queue.clear();
+	}
+	start_background_writer();
+
+	// Prepare chunks metadata list for metadata.json (we will append JSON entries)
+	std::vector<std::string> chunks_entries;
+
+	// Enqueue chunk mesh jobs (snapshot arrays on main thread)
+	for (int i = 0; i < static_cast<int>(chunks.size()); ++i) {
+		Chunk *chunk = chunks[i];
+		if (!chunk || !is_instance_valid(chunk) || !chunk->mesh_instance)
+			continue;
+		Ref<Mesh> mesh = chunk->mesh_instance->get_mesh();
+		if (!mesh.is_valid())
+			continue;
+
+		// Get first surface arrays (main-thread only)
+		Array arrays = mesh->surface_get_arrays(0);
+		PackedVector3Array pv = arrays[Mesh::ARRAY_VERTEX];
+		PackedVector3Array pn = arrays[Mesh::ARRAY_NORMAL];
+		PackedColorArray pc = arrays[Mesh::ARRAY_COLOR];
+		PackedColorArray pc0 = arrays[Mesh::ARRAY_CUSTOM0];
+
+		MeshWriteJob job;
+		job.chunk_index = i;
+		job.chunk_coord = chunk->chunk_coord;
+		String fname = String("chunk_%d_%d_%d.meshbin").format(Array::make(chunk->chunk_coord.x, chunk->chunk_coord.y, chunk->chunk_coord.z));
+		job.filename = fname;
+
+		// Add entry to chunks metadata for loader (as JSON string)
+		std::ostringstream chunk_js;
+		chunk_js << "{\"coord\": [" << chunk->chunk_coord.x << ", " << chunk->chunk_coord.y << ", " << chunk->chunk_coord.z << "], \"file\": \"" << std::string(fname.utf8().get_data()) << "\"}";
+		chunks_entries.push_back(chunk_js.str());
+
+		job.vertices.reserve(pv.size() * 3);
+		for (int vi = 0; vi < pv.size(); ++vi) {
+			Vector3 v = pv[vi];
+			job.vertices.push_back(v.x);
+			job.vertices.push_back(v.y);
+			job.vertices.push_back(v.z);
+		}
+		job.normals.reserve(pn.size() * 3);
+		for (int ni = 0; ni < pn.size(); ++ni) {
+			Vector3 n = pn[ni];
+			job.normals.push_back(n.x);
+			job.normals.push_back(n.y);
+			job.normals.push_back(n.z);
+		}
+
+		job.colors.reserve(pc.size() * 4);
+		for (int ci = 0; ci < pc.size(); ++ci) {
+			Color c = pc[ci];
+			uint8_t r = static_cast<uint8_t>(CLAMP(int(c.r * 255.0f), 0, 255));
+			uint8_t g = static_cast<uint8_t>(CLAMP(int(c.g * 255.0f), 0, 255));
+			uint8_t b = static_cast<uint8_t>(CLAMP(int(c.b * 255.0f), 0, 255));
+			uint8_t a = static_cast<uint8_t>(CLAMP(int(c.a * 255.0f), 0, 255));
+			job.colors.push_back(r);
+			job.colors.push_back(g);
+			job.colors.push_back(b);
+			job.colors.push_back(a);
+		}
+
+		job.custom0.reserve(pc0.size() * 4);
+		for (int ci = 0; ci < pc0.size(); ++ci) {
+			Color c = pc0[ci];
+			uint8_t r = static_cast<uint8_t>(CLAMP(int(c.r * 255.0f), 0, 255));
+			uint8_t g = static_cast<uint8_t>(CLAMP(int(c.g * 255.0f), 0, 255));
+			uint8_t b = static_cast<uint8_t>(CLAMP(int(c.b * 255.0f), 0, 255));
+			uint8_t a = static_cast<uint8_t>(CLAMP(int(c.a * 255.0f), 0, 255));
+			job.custom0.push_back(r);
+			job.custom0.push_back(g);
+			job.custom0.push_back(b);
+			job.custom0.push_back(a);
+		}
+
+		// enqueue
+		{
+			std::lock_guard<std::mutex> lk(writer_mutex);
+			writer_queue.push_back(std::move(job));
+		}
+		writer_cv.notify_one();
+	}
+
+	// Wait for writer to finish queued jobs
+	while (true) {
+		{
+			std::lock_guard<std::mutex> lk(writer_mutex);
+			if (writer_queue.empty())
+				break;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+
+	// Stop writer
+	stop_background_writer();
+
+	// Attach chunks metadata to main metadata JSON
+	meta_ss << "\"chunks\": [";
+	for (size_t i = 0; i < chunks_entries.size(); ++i) {
+		if (i > 0)
+			meta_ss << ",";
+		meta_ss << chunks_entries[i];
+	}
+	meta_ss << "]}";
+
+	// Write metadata.json using std::ofstream
+	std::filesystem::path meta_file = out_path / std::string("metadata.json");
+	std::ofstream mf(meta_file.string(), std::ios::binary);
+	if (mf) {
+		std::string meta_str = meta_ss.str();
+		mf.write(meta_str.c_str(), static_cast<std::streamsize>(meta_str.size()));
+		mf.close();
+	}
+
+	log_message(String("Saved map to: {0}").format(Array::make(writer_out_dir)), 1);
+}
+
+void VoxelGenerator::load_map(const String &dir, const String &map_name, bool strict_match) {
+	// Resolve Godot virtual paths (user://, res://) to real filesystem paths
+	String resolved_dir = dir;
+	if (dir.begins_with("user://") || dir.begins_with("res://")) {
+		resolved_dir = ProjectSettings::get_singleton()->globalize_path(dir);
+	}
+
+	std::string dir_s = std::string(resolved_dir.utf8().get_data());
+	std::string name_s = std::string(map_name.utf8().get_data());
+	std::filesystem::path in_dir = std::filesystem::path(dir_s) / name_s;
+	std::filesystem::path meta_file = in_dir / std::string("metadata.json");
+
+	if (!std::filesystem::exists(meta_file)) {
+		log_message(String("Failed to open metadata: {0}").format(Array::make(String(meta_file.string().c_str()))), 1);
+		return;
+	}
+
+	// Read metadata.json into string
+	std::ifstream mif(meta_file.string(), std::ios::binary);
+	if (!mif) {
+		log_message(String("Failed to open metadata: {0}").format(Array::make(String(meta_file.string().c_str()))), 1);
+		return;
+	}
+	std::stringstream buffer;
+	buffer << mif.rdbuf();
+	std::string s = buffer.str();
+	mif.close();
+
+	Variant parsed = JSON::parse_string(String(s.c_str()));
+	if (parsed.get_type() != Variant::DICTIONARY) {
+		log_message("Invalid metadata JSON", 1);
+		return;
+	}
+	Dictionary meta = parsed;
+
+	// If the saved map contains generator parameters, apply them BEFORE
+	// loading terrain edits and chunk mesh files so that chunk layout
+	// matches the saved map (avoid triggering heavy generation).
+	if (meta.has("generator_params")) {
+		Dictionary gp = meta["generator_params"];
+		// Temporarily disable auto-generation so setters do not call generate()
+		bool prev_auto = auto_generate;
+		auto_generate = false;
+		log_message("Applying generator_params from metadata.json", 2);
+
+		if (gp.has("world_size")) {
+			Variant ws_var = gp["world_size"];
+			if (ws_var.get_type() == Variant::ARRAY) {
+				Array ws = ws_var;
+				if (ws.size() >= 3) {
+					Vector3i w;
+					w.x = static_cast<int>(ws[0]);
+					w.y = static_cast<int>(ws[1]);
+					w.z = static_cast<int>(ws[2]);
+					set_world_size(w);
+				}
+			}
+		}
+		if (gp.has("chunk_size")) {
+			set_chunk_size(static_cast<int>(gp["chunk_size"]));
+		}
+		if (gp.has("resolution")) {
+			set_resolution(static_cast<int>(gp["resolution"]));
+		}
+		if (gp.has("cutoff")) {
+			set_cutoff(static_cast<float>(gp["cutoff"]));
+		}
+		if (gp.has("seeder")) {
+			set_seeder(static_cast<int>(gp["seeder"]));
+		}
+		if (gp.has("generation_mode")) {
+			set_generation_mode(static_cast<int>(gp["generation_mode"]));
+		}
+		if (gp.has("surface_band")) {
+			set_surface_band(static_cast<float>(gp["surface_band"]));
+		}
+		if (gp.has("lod_level")) {
+			set_lod_level(static_cast<int>(gp["lod_level"]));
+		}
+
+		// Ensure voxel scales and chunk array reflect applied parameters.
+		recalculate_voxel_scale();
+		create_chunks();
+
+		// Restore auto_generate flag directly (do not call setter to avoid generate())
+		auto_generate = prev_auto;
+		log_message("generator_params applied; chunks recreated to match saved layout", 1);
+	}
+
+	// Load terrain edits
+	if (meta.has("terrain_edits")) {
+		Array edits = meta["terrain_edits"];
+		std::lock_guard<std::mutex> lock(terrain_edits_mutex);
+		terrain_edits.clear();
+		for (int i = 0; i < edits.size(); ++i) {
+			Dictionary e = edits[i];
+			int x = static_cast<int>(e["x"]);
+			int y = static_cast<int>(e["y"]);
+			int z = static_cast<int>(e["z"]);
+			float delta = static_cast<float>(e["delta"]);
+			uint64_t key = pack_edit_key(x, y, z);
+			terrain_edits[key] = delta;
+		}
+	}
+
+	if (meta.has("feature_edits")) {
+		Array edits = meta["feature_edits"];
+		std::lock_guard<std::mutex> lock(feature_edits_mutex);
+		feature_density_edits.clear();
+		for (int i = 0; i < edits.size(); ++i) {
+			Dictionary e = edits[i];
+			int x = static_cast<int>(e["x"]);
+			int y = static_cast<int>(e["y"]);
+			int z = static_cast<int>(e["z"]);
+			float delta = static_cast<float>(e["delta"]);
+			uint64_t key = pack_edit_key(x, y, z);
+			feature_density_edits[key] = delta;
+		}
+	}
+
+	// Load chunk files and apply (synchronously, streaming)
+	if (meta.has("chunks")) {
+		Array chunks_meta = meta["chunks"];
+		for (int i = 0; i < chunks_meta.size(); ++i) {
+			Dictionary c = chunks_meta[i];
+			String fname = c["file"];
+			std::filesystem::path full = in_dir / std::string(fname.utf8().get_data());
+
+			// read binary file
+			std::string path = full.string();
+			std::ifstream is(path, std::ios::binary);
+			if (!is)
+				continue;
+			char magic[4];
+			is.read(magic, 4);
+			int32_t ver = 0;
+			is.read(reinterpret_cast<char *>(&ver), sizeof(ver));
+			int32_t vcount = 0;
+			is.read(reinterpret_cast<char *>(&vcount), sizeof(vcount));
+			std::vector<float> vertices(vcount * 3);
+			is.read(reinterpret_cast<char *>(vertices.data()), vertices.size() * sizeof(float));
+			int32_t ncount = 0;
+			is.read(reinterpret_cast<char *>(&ncount), sizeof(ncount));
+			std::vector<float> normals;
+			if (ncount > 0) {
+				normals.resize(ncount);
+				is.read(reinterpret_cast<char *>(normals.data()), normals.size() * sizeof(float));
+			}
+			int32_t cbytes = 0;
+			is.read(reinterpret_cast<char *>(&cbytes), sizeof(cbytes));
+			std::vector<uint8_t> colors;
+			if (cbytes > 0) {
+				colors.resize(cbytes);
+				is.read(reinterpret_cast<char *>(colors.data()), colors.size());
+			}
+			int32_t cb0 = 0;
+			is.read(reinterpret_cast<char *>(&cb0), sizeof(cb0));
+			std::vector<uint8_t> custom0;
+			if (cb0 > 0) {
+				custom0.resize(cb0);
+				is.read(reinterpret_cast<char *>(custom0.data()), custom0.size());
+			}
+			is.close();
+
+			// Reconstruct Packed arrays (main-thread) and apply
+			PackedVector3Array pv;
+			pv.resize(vcount);
+			for (int vi = 0; vi < vcount; ++vi) {
+				float x = vertices[vi * 3 + 0];
+				float y = vertices[vi * 3 + 1];
+				float z = vertices[vi * 3 + 2];
+				pv[vi] = Vector3(x, y, z);
+			}
+			PackedVector3Array pn;
+			pn.resize(ncount / 3);
+			for (int ni = 0; ni < (int)pn.size(); ++ni) {
+				float x = normals[ni * 3 + 0];
+				float y = normals[ni * 3 + 1];
+				float z = normals[ni * 3 + 2];
+				pn[ni] = Vector3(x, y, z);
+			}
+			PackedColorArray pc;
+			pc.resize(colors.size() / 4);
+			for (int ci = 0; ci < (int)pc.size(); ++ci) {
+				uint8_t r = colors[ci * 4 + 0];
+				uint8_t g = colors[ci * 4 + 1];
+				uint8_t b = colors[ci * 4 + 2];
+				uint8_t a = colors[ci * 4 + 3];
+				pc[ci] = Color(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
+			}
+			PackedColorArray pc0;
+			pc0.resize(custom0.size() / 4);
+			for (int ci = 0; ci < (int)pc0.size(); ++ci) {
+				uint8_t r = custom0[ci * 4 + 0];
+				uint8_t g = custom0[ci * 4 + 1];
+				uint8_t b = custom0[ci * 4 + 2];
+				uint8_t a = custom0[ci * 4 + 3];
+				pc0[ci] = Color(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
+			}
+
+			// find chunk index by coord
+			Variant coord_var = c["coord"];
+			Array coord_arr = coord_var;
+			int coord_x = 0;
+			int coord_y = 0;
+			int coord_z = 0;
+			if (coord_arr.size() >= 3) {
+				coord_x = static_cast<int>(coord_arr[0]);
+				coord_y = static_cast<int>(coord_arr[1]);
+				coord_z = static_cast<int>(coord_arr[2]);
+			}
+			Vector3i coord = Vector3i(coord_x, coord_y, coord_z);
+			int idx = chunk_coord_to_index(coord);
+			if (idx >= 0 && idx < static_cast<int>(chunks.size())) {
+				Chunk *chunk = chunks[idx];
+				if (chunk && is_instance_valid(chunk)) {
+					chunk->set_mesh_from_arrays(pv, pn, pc, pc0);
+				}
+			}
+		}
+	}
+
+	log_message(String("Loaded map from: {0}").format(Array::make(String(in_dir.string().c_str()))), 1);
 }
 
 void VoxelGenerator::calculate_world_size() {
@@ -643,7 +1142,7 @@ void VoxelGenerator::set_lod_reference_position(const Vector3 &value) {
 	log_message(String("LOD reference position set to: ({0}, {1}, {2})")
 						.format(Array::make(value.x, value.y, value.z)),
 			3);
-	
+
 	if (auto_generate && generation_mode == HEIGHTMAP_FIRST)
 		generate();
 }
@@ -827,7 +1326,7 @@ void VoxelGenerator::set_terrain_material(const Ref<Material> &value) {
 		}
 	}
 	if (auto_generate && generation_mode == HEIGHTMAP_FIRST)
-		generate();	
+		generate();
 }
 
 Ref<Material> VoxelGenerator::get_terrain_material() const {
@@ -1090,7 +1589,7 @@ void VoxelGenerator::set_show_voxel_grid(bool value) {
 		}
 	}
 
-	if (auto_generate && generation_mode == HEIGHTMAP_FIRST)	
+	if (auto_generate && generation_mode == HEIGHTMAP_FIRST)
 		generate();
 }
 
@@ -1104,7 +1603,7 @@ void VoxelGenerator::set_show_chunk_grid(bool value) {
 		}
 	}
 
-	if (auto_generate && generation_mode == HEIGHTMAP_FIRST)	
+	if (auto_generate && generation_mode == HEIGHTMAP_FIRST)
 		generate();
 }
 
@@ -1542,7 +2041,7 @@ void VoxelGenerator::generate_voxels_first(Ref<ImmediateMesh> mesh_centers, Ref<
 		Ref<ImmediateMesh> mesh_triangles, int &centers_vertex_count, int &cubes_vertex_count, int &vertex_count) {
 	log_message("Starting VOXELS_FIRST generation mode", 2);
 
-	// Use effective resolution (accounts for LOD)
+	// Use global effective resolution for full VOXELS_FIRST generation
 	int eff_resolution = get_effective_resolution();
 
 	// Compute total marching cubes samples per axis
@@ -3729,7 +4228,7 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 				// Calculate the center position of the voxel (world-space coordinates)
 				Vector3 center;
 				center.x = -physical_extent.x * 0.5f + (chunk_coord.x * chunk_size + (local_ix + 0.5f) / static_cast<float>(eff_resolution));
-				center.y = -physical_extent.y * 0.5f + (chunk_coord.y * chunk_size + static_cast<float>(local_iy) / static_cast<float>(eff_resolution));
+				center.y = -physical_extent.y * 0.5f + (chunk_coord.y * chunk_size + (local_iy + 0.5f) / static_cast<float>(eff_resolution));
 				center.z = -physical_extent.z * 0.5f + (chunk_coord.z * chunk_size + (local_iz + 0.5f) / static_cast<float>(eff_resolution));
 
 				// Create marching cube vertices using chunk's voxel size
@@ -4046,9 +4545,9 @@ void VoxelGenerator::generate_async() {
 
 	// Bake procedural features ahead of density sampling
 	prepare_procedural_features();
-	
+
 	log_message("Starting per-chunk mesh generation", 2);
-	
+
 	// Build density cache before chunk generation
 	if (generation_mode == VOXELS_FIRST) {
 		build_density_cache();

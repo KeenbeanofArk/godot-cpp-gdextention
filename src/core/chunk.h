@@ -108,6 +108,11 @@ public:
 	void update_collision_shape(const Ref<ArrayMesh> &mesh);
 	void clear_collision_shape();
 
+	// Helper to apply arrays (used by loader to set mesh data on main thread)
+	void set_mesh_from_arrays(const PackedVector3Array &vertices, const PackedVector3Array &normals, const PackedColorArray &colors, const PackedColorArray &custom0) {
+		apply_mesh_data(vertices, normals, colors, custom0);
+	}
+
 	void set_chunk_size(int p_chunk_size);
 	int get_chunk_size() const;
 	static int get_default_chunk_size();

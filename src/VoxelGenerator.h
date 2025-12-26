@@ -48,10 +48,14 @@
 
 // Threading support
 #include <atomic>
+#include <condition_variable>
+#include <deque>
 #include <mutex>
 #include <queue>
 #include <shared_mutex>
+#include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include <godot_cpp/classes/area3d.hpp>
 #include <godot_cpp/classes/collision_shape3d.hpp>
@@ -492,9 +496,36 @@ public:
 	void on_forcefield_body_entered(Object *body, int wall_index);
 	void on_forcefield_body_exited(Object *body, int wall_index);
 
+	// Save / Load map API
+	// dir: base directory (e.g. "user://saved_maps"), map_name: subfolder name
+	void save_map(const String &dir, const String &map_name);
+	void load_map(const String &dir, const String &map_name, bool strict_match = true);
+
+	// Background writer control (internal)
+	void start_background_writer();
+	void stop_background_writer();
+
 	// =====================================================================
 
 private:
+	// ---------------- Background writer / save queue ----------------
+	struct MeshWriteJob {
+		int chunk_index = -1;
+		Vector3i chunk_coord = Vector3i(-1, -1, -1);
+		String filename; // relative filename to write
+		std::vector<float> vertices;
+		std::vector<float> normals;
+		std::vector<uint8_t> colors; // RGBA bytes
+		std::vector<uint8_t> custom0; // custom per-vertex data (packed)
+	};
+
+	std::thread background_writer;
+	std::deque<MeshWriteJob> writer_queue;
+	std::mutex writer_mutex;
+	std::condition_variable writer_cv;
+	std::atomic<bool> writer_running{ false };
+	String writer_out_dir;
+	// -----------------------------------------------------------------
 	void remove_children();
 	void randomize_seed();
 	Vector<Vector3> create_cube_vertices(const Vector3 &pos);

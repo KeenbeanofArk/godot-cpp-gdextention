@@ -1,18 +1,22 @@
-[gd_scene load_steps=17 format=3 uid="uid://etd11wxpmror"]
+[gd_scene load_steps=19 format=3 uid="uid://etd11wxpmror"]
 
 [ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://world_manager.gd" id="1_fj7yv"]
 [ext_resource type="Script" uid="uid://gdi5e7som4a" path="res://terrain_plains.gd" id="2_036b0"]
-[ext_resource type="Shader" uid="uid://cs7uas2ia6gjd" path="res://scenes/shaders/SkyShader.gdshader" id="2_dwbse"]
+[ext_resource type="Shader" uid="uid://cg66uhbbmrxru" path="res://world.gdshader" id="2_gbfbk"]
 [ext_resource type="PackedScene" uid="uid://cp6m8e8v6rkjm" path="res://player/picele.tscn" id="2_tlwt5"]
+[ext_resource type="Texture2D" uid="uid://te7ikjhfdhwf" path="res://assets/textures/sky/NightSkyHDRI014_4K_TONEMAPPED.jpg" id="3_ioo17"]
 [ext_resource type="PackedScene" uid="uid://deg7mq7jukfdi" path="res://gui.tscn" id="3_tlwt5"]
+[ext_resource type="Texture2D" uid="uid://7ov1ocn8s6b3" path="res://assets/textures/ground/Ground079S_1K-PNG_Color.png" id="3_wse8f"]
 [ext_resource type="Material" uid="uid://ykdewajhlxx2" path="res://assets/textures/ground/terrain_material.tres" id="4_gbfbk"]
 [ext_resource type="Script" uid="uid://ddngrcvi0p60i" path="res://multi_terrain_manager.gd" id="4_multi"]
 [ext_resource type="Shader" uid="uid://cawq4do1cgwq1" path="res://scenes/shaders/forcefield.gdshader" id="8_ic0uy"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_pkg7o"]
-shader = ExtResource("2_dwbse")
-shader_parameter/skyColor = Color(0.67058825, 0.85882354, 1, 1)
-shader_parameter/horizonColor = Color(0.5686275, 0.7607843, 0.9843137, 1)
+shader = ExtResource("2_gbfbk")
+shader_parameter/sky_tex = ExtResource("3_ioo17")
+shader_parameter/sun_pos = Vector3(-10000, 10000, -10000)
+shader_parameter/planet_tex = ExtResource("3_wse8f")
+shader_parameter/planet_radius = 500.0
 
 [sub_resource type="Sky" id="Sky_tlwt5"]
 sky_material = SubResource("ShaderMaterial_pkg7o")
@@ -71,10 +75,8 @@ script = ExtResource("1_fj7yv")
 environment = SubResource("Environment_aqk2v")
 
 [node name="Sun" type="DirectionalLight3D" parent="Lighting"]
-transform = Transform3D(-0.5976251, -0.24376634, 0.7638208, 0, 0.9526615, 0.30403307, -0.8017757, 0.1816978, -0.5693344, 0, 0, 0)
-light_color = Color(1, 1, 0.8392157, 1)
+transform = Transform3D(-0.5976251, -0.24376634, 0.7638208, 0, 0.9526615, 0.30403307, -0.8017757, 0.1816978, -0.5693344, -10000, 10000, -10000)
 shadow_enabled = true
-directional_shadow_max_distance = 1.0
 
 [node name="Plains" type="Node3D" parent="."]
 script = ExtResource("2_036b0")
@@ -91,7 +93,6 @@ detail_noise = SubResource("NoiseGenerator_gbfbk")
 show_voxel_grid = true
 show_chunk_grid = true
 forcefield_detection_voxels = 12.0
-forcefield_enabled = true
 forcefield_height = 50.0
 forcefield_shader_material = SubResource("ShaderMaterial_k3n1d")
 

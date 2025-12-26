@@ -67,7 +67,7 @@ func _ready() -> void:
 	voxel_generator.enable_distance_lod = true
 	voxel_generator.lod_level = 6
 	voxel_generator.lod_reference_position = picele.global_position # no verbose
-	voxel_generator.lod_distance_multiplier = 1.0
+	voxel_generator.lod_distance_multiplier = 5.0
 	voxel_generator.show_lod_colors = false # no verbose
 	voxel_generator.heightmap_vertex_limit = 534000000
 	

@@ -14,8 +14,8 @@ var player: Picele = null
 
 # Color coding for terrains
 var terrain_colors: Dictionary = {
-	"TerrainPlains": Color(0.4, 0.8, 0.4), # Green
-	"TerrainMountains": Color(0.7, 0.5, 0.3) # Brown
+	"Plains": Color(0.4, 0.8, 0.4), # Green
+	"Mountains": Color(0.7, 0.5, 0.3) # Brown
 }
 @onready var terraform_settings: Control = $TerraformSettings
 @onready var terraform_panel: Panel = $TerraformSettings/TerraformPanel
@@ -71,7 +71,10 @@ var terrain_colors: Dictionary = {
 @onready var generate_async_button: Button = $DebugDisplay/DebugPanel/DebugContainer/GenerateAsyncButton
 @onready var generate_button: Button = $DebugDisplay/DebugPanel/DebugContainer/GenerateButton
 @onready var print_state_button: Button = $DebugDisplay/DebugPanel/DebugContainer/PrintStateButton
-@onready var exit_button: Button = $DebugDisplay/DebugPanel/DebugContainer/ExitButton
+@onready var save_map_button: Button = $DebugDisplay/DebugPanel/DebugContainer/SaveMapButton
+@onready var load_map_button: Button = $DebugDisplay/DebugPanel/DebugContainer/LoadMapButton
+@onready var exit_menu_button: Button = $DebugDisplay/DebugPanel/DebugContainer/ExitMenuButton
+@onready var close_demo_button: Button = $DebugDisplay/DebugPanel/DebugContainer/CloseDemoButton
 @onready var fps_counter: Label = $FPSControl/FPS/FpsCounter
 @onready var cross_hair: Control = $CrossHair
 
@@ -108,6 +111,8 @@ func _ready() -> void:
 	# Initialize UI from current selected generator if already available
 	if current_voxel_generator:
 		update_ui_from_voxel_generator()
+		# Show startup load dialog if saved maps exist
+		maybe_show_startup_load_dialog()
 	
 func _process(_delta: float) -> void:
 	# Update FPS counter
@@ -282,6 +287,13 @@ func create_debug_ui():
 	generate_button.text = "Call .generate()"
 	generate_button.pressed.connect(_on_generate_pressed)
 
+	# Save / Load map buttons
+	save_map_button.text = "Save Map"
+	save_map_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	load_map_button.text = "Load Map"
+	load_map_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
 	# Print State button
 	print_state_button.text = "Print Debug State"
 	print_state_button.pressed.connect(_on_print_state_pressed)
@@ -483,12 +495,10 @@ func _on_generate_pressed():
 		current_voxel_generator.generate()
 
 func _on_slice_pressed():
-	print("Slice button pressed!")
 	if current_voxel_generator:
 		current_voxel_generator.debug_draw_noise_slice(0.0)
 
 func _on_print_state_pressed():
-	print("Print State button pressed!")
 	if current_voxel_generator:
 		current_voxel_generator.debug_print_state()
 
@@ -536,3 +546,132 @@ func _on_exit_button_pressed() -> void:
 	terraform_settings.visible = false
 	cross_hair.visible = true
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+
+func _on_close_demo_button_pressed() -> void:
+	if current_voxel_generator:
+		current_voxel_generator.cancel_generation()
+		await get_tree().create_timer(1.0).timeout
+		get_tree().quit()
+	else:
+		push_error("No VoxelGenerator attached to Gui.")
+
+func _on_save_map_button_pressed() -> void:
+	if current_voxel_generator:
+		var ts = Time.get_unix_time_from_system()
+		var map_name = current_terrain_name if current_terrain_name != "" else "map_%d" % ts
+		current_voxel_generator.save_map("user://saved_maps", map_name)
+		print("Saved map to user://saved_maps/%s" % map_name)
+	else:
+		print("No voxel generator selected to save")
+
+func _on_load_map_button_pressed() -> void:
+	# Open a dialog to choose a saved map to load
+	maybe_show_startup_load_dialog()
+
+
+func maybe_show_startup_load_dialog() -> void:
+	var da = DirAccess.open("user://saved_maps")
+	if not da:
+		return
+	da.list_dir_begin()
+	var name = da.get_next()
+	var maps = []
+	while name != "":
+		if da.current_is_dir() and name != "." and name != "..":
+			maps.append(name)
+		name = da.get_next()
+	da.list_dir_end()
+	if maps.empty():
+		return
+
+	# Build a simple ConfirmationDialog with an ItemList for selection
+	var dlg = ConfirmationDialog.new()
+	dlg.window_title = "Load Saved Map"
+	dlg.dialog_text = "Select a saved map to load:"
+	var list = ItemList.new()
+	list.allow_reselect = false
+	list.min_size = Vector2(360, 220)
+	for m in maps:
+		list.add_item(m)
+	list.select(0)
+	dlg.add_child(list)
+	add_child(dlg)
+
+	# When confirmed, call helper to prompt/compare params and load
+	dlg.get_ok().text = "Load"
+	dlg.get_cancel().text = "Cancel"
+	dlg.popup_centered()
+	dlg.connect("confirmed", Callable(self, "_on_startup_load_confirmed").bind(list, maps))
+	dlg.connect("popup_hide", Callable(dlg, "queue_free"))
+
+
+func _on_startup_load_confirmed(list: ItemList, maps: Array) -> void:
+	var sel = list.get_selected_items()
+	if sel.size() == 0:
+		return
+	var idx = sel[0]
+	var map_name = maps[idx]
+	_prompt_and_load_map(map_name)
+
+
+func _prompt_and_load_map(map_name: String) -> void:
+	if not current_voxel_generator:
+		print("No voxel generator selected to load")
+		return
+
+	var meta_path = "user://saved_maps/%s/metadata.json" % map_name
+	var f = FileAccess.open(meta_path, FileAccess.READ)
+	if f == null:
+		# No metadata, load directly
+		current_voxel_generator.load_map("user://saved_maps", map_name, true)
+		print("Requested load from user://saved_maps/%s" % map_name)
+		return
+
+	var contents = f.get_as_text()
+	f.close()
+	var parsed = JSON.parse_string(contents)
+	if parsed.error != OK:
+		current_voxel_generator.load_map("user://saved_maps", map_name, true)
+		print("Requested load from user://saved_maps/%s (invalid metadata)" % map_name)
+		return
+
+	var meta = parsed.result
+	if meta.has("generator_params"):
+		var gp = meta["generator_params"]
+		var diffs = []
+		if gp.has("world_size"):
+			var ws = gp["world_size"]
+			if ws.size() >= 3:
+				var wx = int(ws[0]); var wy = int(ws[1]); var wz = int(ws[2])
+				var cur = current_voxel_generator.world_size
+				if cur.x != wx or cur.y != wy or cur.z != wz:
+					diffs.append("world_size")
+		if gp.has("chunk_size") and int(gp["chunk_size"]) != current_voxel_generator.chunk_size:
+			diffs.append("chunk_size")
+		if gp.has("resolution") and int(gp["resolution"]) != current_voxel_generator.resolution:
+			diffs.append("resolution")
+		if gp.has("cutoff") and float(gp["cutoff"]) != current_voxel_generator.cutoff:
+			diffs.append("cutoff")
+		if gp.has("seeder") and int(gp["seeder"]) != current_voxel_generator.seeder:
+			diffs.append("seeder")
+		if gp.has("generation_mode") and int(gp["generation_mode"]) != current_voxel_generator.generation_mode:
+			diffs.append("generation_mode")
+		if gp.has("surface_band") and float(gp["surface_band"]) != current_voxel_generator.surface_band:
+			diffs.append("surface_band")
+		if gp.has("lod_level") and int(gp["lod_level"]) != current_voxel_generator.lod_level:
+			diffs.append("lod_level")
+
+		if diffs.size() > 0:
+			var dlg = ConfirmationDialog.new()
+			dlg.window_title = "Load Saved Map"
+			dlg.dialog_text = "Saved map '%s' differs in: %s\nLoad anyway?" % [map_name, String(", ").join(diffs)]
+			add_child(dlg)
+			dlg.popup_centered()
+			dlg.connect("confirmed", Callable(current_voxel_generator, "load_map").bind("user://saved_maps", map_name, true))
+			dlg.connect("popup_hide", Callable(dlg, "queue_free"))
+			return
+
+	# No diffs or no generator_params: load immediately
+	current_voxel_generator.load_map("user://saved_maps", map_name, true)
+	print("Requested load from user://saved_maps/%s" % map_name)
