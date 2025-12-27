@@ -13,6 +13,16 @@ signal terrain_selected(terrain_name: String, voxel_generator: VoxelGenerator)
 # signal terrain_raycast_changed(terrain_name: String)
 
 func _ready() -> void:
+	# For autoload, don't setup here - wait for manual initialization
+	pass
+
+func initialize() -> void:
+	# Setup player and raycast
+	setup_player()
+	# Register all terrain nodes
+	register_terrains()
+
+func setup_player() -> void:
 	# Get player and raycast (search relative to this manager's parent / scene root)
 	var world = get_parent()
 	if not world:
@@ -26,19 +36,6 @@ func _ready() -> void:
 		player_raycast = player.get_node_or_null("PiceleCamera/PiceleRayCast")
 		if not player_raycast:
 			push_error("MultiTerrainManager: RayCast3D not found at Picele/PiceleCamera/PiceleRayCast")
-
-	# Register all terrain nodes
-	register_terrains()
-
-	# Set first terrain as default
-	if not terrain_registry.is_empty():
-		var keys = terrain_registry.keys()
-		current_terrain_name = keys[0]
-		current_voxel_generator = terrain_registry[current_terrain_name]["voxel_gen"]
-	print("[MultiTerrainManager] Initialized with terrain: %s" % current_terrain_name)
-	# Emit initial selection so listeners (GUI, etc.) can bind to the current generator
-	if current_voxel_generator:
-		emit_signal("terrain_selected", current_terrain_name, current_voxel_generator)
 
 func register_terrains() -> void:
 	var world = get_parent()
@@ -62,6 +59,16 @@ func register_terrains() -> void:
 				push_error("MultiTerrainManager: VoxelGenerator not found in %s" % terrain_name)
 		else:
 			push_error("MultiTerrainManager: Terrain node '%s' not found" % terrain_name)
+
+	# Set first terrain as default
+	if not terrain_registry.is_empty():
+		var keys = terrain_registry.keys()
+		current_terrain_name = keys[0]
+		current_voxel_generator = terrain_registry[current_terrain_name]["voxel_gen"]
+	print("[MultiTerrainManager] Initialized with terrain: %s" % current_terrain_name)
+	# Emit initial selection so listeners (GUI, etc.) can bind to the current generator
+	if current_voxel_generator:
+		emit_signal("terrain_selected", current_terrain_name, current_voxel_generator)
 
 func get_terrain_from_raycast() -> String:
 	if not player_raycast:

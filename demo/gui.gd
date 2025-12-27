@@ -83,16 +83,16 @@ var terrain_colors: Dictionary = {
 @export var terraform_settings_show: bool = false
 
 func _ready() -> void:
-	# Get terrain manager (from scene root)
-	var world = get_parent()
-	if world:
-		terrain_manager = world.get_node_or_null("MultiTerrainManager")
-		player = world.get_node_or_null("Picele")
+	# Get terrain manager (now autoload)
+	terrain_manager = get_node_or_null("/root/MultiTerrainManager")
 	if not terrain_manager:
-		push_error("GUI: MultiTerrainManager not found as a child of the scene root")
+		push_error("GUI: MultiTerrainManager autoload not found")
 		return
+	
+	# Get player
+	player = get_node_or_null("/root/World/Picele")
 	if not player:
-		push_error("GUI: Player not found as a child of the scene root")
+		push_error("GUI: Player not found")
 		return
 		
 	# Connect to terrain selection signal
@@ -113,6 +113,20 @@ func _ready() -> void:
 		update_ui_from_voxel_generator()
 		# Show startup load dialog if saved maps exist
 		maybe_show_startup_load_dialog()
+	
+	# Initialize MultiTerrainManager after scene is loaded
+	var mtm = get_node_or_null("/root/MultiTerrainManager")
+	if mtm:
+		mtm.initialize()
+	
+	# Check for pending map from startup
+	var ss = get_node_or_null("/root/StartupState")
+	if ss and ss.pending_map != "":
+		_prompt_and_load_map(ss.pending_map)
+		ss.pending_map = ""
+	elif current_voxel_generator:
+		# New map, generate
+		current_voxel_generator.generate()
 	
 func _process(_delta: float) -> void:
 	# Update FPS counter
@@ -148,6 +162,15 @@ func _on_terrain_selected(terrain_name: String, voxel_gen: VoxelGenerator) -> vo
 	current_voxel_generator = voxel_gen
 	print("[GUI] Switched to terrain: %s" % terrain_name)
 	update_ui_from_voxel_generator()
+	# If a startup autoload has requested a pending map, prompt to load it now
+	# Use Engine.has_singleton to avoid errors when the autoload isn't registered
+	if Engine.has_singleton("StartupState"):
+		var ss = Engine.get_singleton("StartupState")
+		if ss and ss.pending_map != "":
+			# Call the existing helper to compare params and load safely
+			_prompt_and_load_map(ss.pending_map)
+			# Clear the pending_map so it isn't re-applied
+			ss.pending_map = ""
 	
 func update_ui_from_voxel_generator() -> void:
 	if not current_voxel_generator:
@@ -557,13 +580,31 @@ func _on_close_demo_button_pressed() -> void:
 		push_error("No VoxelGenerator attached to Gui.")
 
 func _on_save_map_button_pressed() -> void:
-	if current_voxel_generator:
-		var ts = Time.get_unix_time_from_system()
-		var map_name = current_terrain_name if current_terrain_name != "" else "map_%d" % ts
-		current_voxel_generator.save_map("user://saved_maps", map_name)
-		print("Saved map to user://saved_maps/%s" % map_name)
-	else:
+	if not current_voxel_generator:
 		print("No voxel generator selected to save")
+		return
+
+	# Prompt for custom map name
+	var name_dialog = AcceptDialog.new()
+	name_dialog.dialog_text = "Enter a name for your saved map:"
+	name_dialog.title = "Save Map As"
+	var name_edit = LineEdit.new()
+	name_edit.placeholder_text = "Map name..."
+	name_dialog.add_child(name_edit)
+	name_dialog.get_ok_button().text = "Save"
+	add_child(name_dialog)
+
+	name_dialog.popup_centered()
+
+	name_dialog.connect("confirmed", func():
+		var map_name = name_edit.text.strip_edges()
+		if map_name == "":
+			map_name = current_terrain_name if current_terrain_name != "" else "map_%d" % Time.get_unix_time_from_system()
+		current_voxel_generator.save_map("user://saved_maps", map_name)
+		print("[Startup] Saved map to user://saved_maps/%s" % map_name)
+		name_dialog.queue_free()
+	)
+	name_dialog.connect("close_requested", Callable(name_dialog, "queue_free"))
 
 func _on_load_map_button_pressed() -> void:
 	# Open a dialog to choose a saved map to load
@@ -575,23 +616,23 @@ func maybe_show_startup_load_dialog() -> void:
 	if not da:
 		return
 	da.list_dir_begin()
-	var name = da.get_next()
+	var map_name = da.get_next()
 	var maps = []
-	while name != "":
-		if da.current_is_dir() and name != "." and name != "..":
-			maps.append(name)
-		name = da.get_next()
+	while map_name != "":
+		if da.current_is_dir() and map_name != "." and map_name != "..":
+			maps.append(map_name)
+		map_name = da.get_next()
 	da.list_dir_end()
-	if maps.empty():
+	if maps.is_empty():
 		return
 
 	# Build a simple ConfirmationDialog with an ItemList for selection
 	var dlg = ConfirmationDialog.new()
-	dlg.window_title = "Load Saved Map"
+	dlg.title = "Load Saved Map"
 	dlg.dialog_text = "Select a saved map to load:"
 	var list = ItemList.new()
 	list.allow_reselect = false
-	list.min_size = Vector2(360, 220)
+	list.custom_minimum_size = Vector2(360, 220)
 	for m in maps:
 		list.add_item(m)
 	list.select(0)
@@ -599,11 +640,10 @@ func maybe_show_startup_load_dialog() -> void:
 	add_child(dlg)
 
 	# When confirmed, call helper to prompt/compare params and load
-	dlg.get_ok().text = "Load"
-	dlg.get_cancel().text = "Cancel"
+	# Use default dialog buttons (OK/Cancel) to remain compatible across Godot versions
 	dlg.popup_centered()
 	dlg.connect("confirmed", Callable(self, "_on_startup_load_confirmed").bind(list, maps))
-	dlg.connect("popup_hide", Callable(dlg, "queue_free"))
+	dlg.connect("close_requested", Callable(dlg, "queue_free"))
 
 
 func _on_startup_load_confirmed(list: ItemList, maps: Array) -> void:
@@ -617,26 +657,35 @@ func _on_startup_load_confirmed(list: ItemList, maps: Array) -> void:
 
 func _prompt_and_load_map(map_name: String) -> void:
 	if not current_voxel_generator:
-		print("No voxel generator selected to load")
-		return
+		if terrain_manager and not terrain_manager.terrain_registry.is_empty():
+			var keys = terrain_manager.terrain_registry.keys()
+			terrain_manager.switch_to_terrain(keys[0])
+			current_terrain_name = keys[0]
+			current_voxel_generator = terrain_manager.current_voxel_generator
+		if not current_voxel_generator:
+			print("No voxel generator available to load")
+			return
 
 	var meta_path = "user://saved_maps/%s/metadata.json" % map_name
 	var f = FileAccess.open(meta_path, FileAccess.READ)
 	if f == null:
 		# No metadata, load directly
 		current_voxel_generator.load_map("user://saved_maps", map_name, true)
-		print("Requested load from user://saved_maps/%s" % map_name)
+		print("[Startup] Requested load from user://saved_maps/%s" % map_name)
 		return
 
 	var contents = f.get_as_text()
 	f.close()
 	var parsed = JSON.parse_string(contents)
-	if parsed.error != OK:
-		current_voxel_generator.load_map("user://saved_maps", map_name, true)
-		print("Requested load from user://saved_maps/%s (invalid metadata)" % map_name)
-		return
-
-	var meta = parsed.result
+	var meta
+	if parsed is Dictionary and parsed.has("error"):
+		if parsed.error != OK:
+			current_voxel_generator.load_map("user://saved_maps", map_name, true)
+			print("Requested load from user://saved_maps/%s (invalid metadata)" % map_name)
+			return
+		meta = parsed.result
+	else:
+		meta = parsed
 	if meta.has("generator_params"):
 		var gp = meta["generator_params"]
 		var diffs = []
@@ -664,12 +713,12 @@ func _prompt_and_load_map(map_name: String) -> void:
 
 		if diffs.size() > 0:
 			var dlg = ConfirmationDialog.new()
-			dlg.window_title = "Load Saved Map"
+			dlg.title = "Load Saved Map"
 			dlg.dialog_text = "Saved map '%s' differs in: %s\nLoad anyway?" % [map_name, String(", ").join(diffs)]
 			add_child(dlg)
 			dlg.popup_centered()
 			dlg.connect("confirmed", Callable(current_voxel_generator, "load_map").bind("user://saved_maps", map_name, true))
-			dlg.connect("popup_hide", Callable(dlg, "queue_free"))
+			dlg.connect("close_requested", Callable(dlg, "queue_free"))
 			return
 
 	# No diffs or no generator_params: load immediately

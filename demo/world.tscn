@@ -98,9 +98,6 @@ forcefield_shader_material = SubResource("ShaderMaterial_k3n1d")
 
 [node name="CentralDebugGUI" parent="." instance=ExtResource("3_tlwt5")]
 
-[node name="MultiTerrainManager" type="Node" parent="."]
-script = ExtResource("4_multi")
-
 [node name="Picele" parent="." instance=ExtResource("2_tlwt5")]
 
 [node name="WorldCamera" type="Camera3D" parent="."]

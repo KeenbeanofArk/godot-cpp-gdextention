@@ -413,7 +413,6 @@ theme_override_font_sizes/font_size = 20
 text = "Close Demo"
 
 [node name="FPSControl" type="Control" parent="."]
-visible = false
 layout_mode = 3
 anchors_preset = 1
 anchor_left = 1.0
@@ -449,7 +448,6 @@ theme_override_font_sizes/font_size = 30
 text = "FPS:"
 
 [node name="CrossHair" type="Control" parent="."]
-visible = false
 layout_mode = 3
 anchors_preset = 8
 anchor_left = 0.5
@@ -478,54 +476,6 @@ offset_bottom = 5.0
 grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.8959682, 0, 0.012285085, 1)
-
-[node name="SaveLoad" type="Control" parent="."]
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-metadata/_edit_group_ = true
-
-[node name="SaveLoadScreen" type="Panel" parent="SaveLoad"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="HBoxContainer" type="HBoxContainer" parent="SaveLoad/SaveLoadScreen"]
-layout_mode = 1
-anchors_preset = 5
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -82.5
-offset_right = 82.5
-offset_bottom = 49.0
-grow_horizontal = 2
-
-[node name="SaveContainer" type="VBoxContainer" parent="SaveLoad/SaveLoadScreen/HBoxContainer"]
-layout_mode = 2
-
-[node name="SaveLabel" type="Label" parent="SaveLoad/SaveLoadScreen/HBoxContainer/SaveContainer"]
-layout_mode = 2
-text = "Save Map
-"
-uppercase = true
-
-[node name="HSplitContainer" type="HSplitContainer" parent="SaveLoad/SaveLoadScreen/HBoxContainer"]
-layout_mode = 2
-
-[node name="LoadContainer" type="VBoxContainer" parent="SaveLoad/SaveLoadScreen/HBoxContainer"]
-layout_mode = 2
-
-[node name="LoadLabel" type="Label" parent="SaveLoad/SaveLoadScreen/HBoxContainer/LoadContainer"]
-layout_mode = 2
-text = "Load Map
-"
-uppercase = true
 
 [connection signal="pressed" from="TerraformSettings/TerraformPanel/TerraformContainer/ExitButton" to="." method="_on_exit_button_pressed"]
 [connection signal="pressed" from="DebugDisplay/DebugPanel/DebugContainer/SaveMapButton" to="." method="_on_save_map_button_pressed"]

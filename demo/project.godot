@@ -11,18 +11,17 @@ config_version=5
 [application]
 
 config/name="godot cpp template"
-run/main_scene="uid://etd11wxpmror"
+run/main_scene="uid://fo7o7c7l1syl"
 config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
 
+StartupState="*res://startup_state.gd"
 MultiTerrainManager="*res://multi_terrain_manager.gd"
 
 [display]
 
-window/size/viewport_width=1200
-window/size/viewport_height=800
 window/size/mode=3
 
 [dotnet]
