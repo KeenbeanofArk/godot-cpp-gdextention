@@ -8,6 +8,7 @@ var current_terrain_name: String = ""
 
 # Prevent multiple repeated UI connections
 var ui_initialized: bool = false
+var ui_bound_to_generator: bool = false
 
 # Get the player
 var player: Picele = null
@@ -162,6 +163,13 @@ func _on_terrain_selected(terrain_name: String, voxel_gen: VoxelGenerator) -> vo
 	current_voxel_generator = voxel_gen
 	print("[GUI] Switched to terrain: %s" % terrain_name)
 	update_ui_from_voxel_generator()
+	# Ensure UI layout exists, then bind controls to the newly selected generator
+	if not ui_initialized:
+		create_debug_ui()
+
+	# Bind controls to the current generator (idempotent)
+	if not ui_bound_to_generator:
+		bind_debug_controls()
 	# If a startup autoload has requested a pending map, prompt to load it now
 	# Use Engine.has_singleton to avoid errors when the autoload isn't registered
 	if Engine.has_singleton("StartupState"):
@@ -220,6 +228,8 @@ func update_ui_from_voxel_generator() -> void:
 
 	update_label(rock_influence_label, "Rock Influence: ", current_voxel_generator.rock_influence)
 	rock_influence_spinner.value = current_voxel_generator.rock_influence
+
+	# Note: layout remains initialized by create_debug_ui(); do not override here.
 
 func update_label(label: Label, prefix: String, value) -> void:
 	label.text = prefix + str(value)
@@ -288,6 +298,9 @@ func create_terraform_settings_ui():
 	)
 	
 func create_debug_ui():
+	if ui_initialized:
+		return
+	
 	# Debug Container - centered on screen
 	debug_panel.anchor_left = 0.5
 	debug_panel.anchor_right = 0.5
@@ -321,191 +334,204 @@ func create_debug_ui():
 	print_state_button.text = "Print Debug State"
 	print_state_button.pressed.connect(_on_print_state_pressed)
 
+	# If a generator is available, bind controls to it (de-duplicated in bind_debug_controls)
 	if current_voxel_generator:
-		# Debug Mode Toggle
-		debug_mode.text = "Debug Mode"
-		debug_mode.set_pressed(current_voxel_generator.debug_mode)
-		debug_mode.toggled.connect(func(pressed): current_voxel_generator.debug_mode = pressed)
+		bind_debug_controls()
 
-		# Visualize Noise toggle
-		visualize_noise.text = "Visualize Noise"
-		visualize_noise.set_pressed(current_voxel_generator.visualize_noise_values)
-		visualize_noise.toggled.connect(func(pressed): current_voxel_generator.visualize_noise_values = pressed)
+	# Mark UI layout as created so we don't recreate controls repeatedly
+	ui_initialized = true
 
-		# Auto Generate toggle
-		auto_generate.text = "Auto-Generate"
-		auto_generate.set_pressed(current_voxel_generator.auto_generate)
-		auto_generate.toggled.connect(func(pressed): current_voxel_generator.auto_generate = pressed)
 
-		# Show Voxel Grids toggle
-		show_voxel_grids.text = "Show Voxel Grids"
-		show_voxel_grids.set_pressed(current_voxel_generator.show_voxel_grid)
-		show_voxel_grids.toggled.connect(func(pressed): current_voxel_generator.show_voxel_grid = pressed)
-		
-		# Show Chunk Grids toggle
-		show_chunk_grids.text = "Show Chunk Grids"
-		show_chunk_grids.set_pressed(current_voxel_generator.show_chunk_grid)
-		show_chunk_grids.toggled.connect(func(pressed): current_voxel_generator.show_chunk_grid = pressed)
-		
-		# Show Centers toggle
-		show_centers.text = "Show Centers"
-		show_centers.set_pressed(current_voxel_generator.show_centers)
-		show_centers.toggled.connect(func(pressed): current_voxel_generator.show_centers = pressed)
+func bind_debug_controls():
+	if ui_bound_to_generator:
+		return
+	if not current_voxel_generator:
+		return
 
-		# Use Textures toggle
-		use_textures.text = "Use Textures"
-		use_textures.set_pressed(current_voxel_generator.use_textures)
-		use_textures.toggled.connect(func(pressed): current_voxel_generator.use_textures = pressed)
-		
-		# Verbosity slider and label
-		update_label(verbosity_label, "Verbosity: ", current_voxel_generator.debug_verbosity)
-		verbosity_slider.min_value = 0
-		verbosity_slider.max_value = 3
-		verbosity_slider.step = 1
-		verbosity_slider.value = current_voxel_generator.debug_verbosity
-		verbosity_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		verbosity_slider.value_changed.connect(func(value):
-			current_voxel_generator.debug_verbosity = int(value)
-			update_label(verbosity_label, "Verbosity: ", int(value))
-		)
+	# Debug Mode Toggle
+	debug_mode.text = "Debug Mode"
+	debug_mode.set_pressed(current_voxel_generator.debug_mode)
+	debug_mode.toggled.connect(func(pressed): current_voxel_generator.debug_mode = pressed)
 
-		# Chunk size slider
-		update_label(chunk_size_label, "Chunk Size: ", current_voxel_generator.chunk_size)
-		chunk_size_slider.min_value = 8
-		chunk_size_slider.max_value = 16
-		chunk_size_slider.step = 8
-		chunk_size_slider.value = current_voxel_generator.chunk_size
-		chunk_size_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		chunk_size_slider.value_changed.connect(func(value):
-			current_voxel_generator.chunk_size = int(value)
-			update_label(chunk_size_label, "Chunk Size: ", int(value))
-		)
+	# Visualize Noise toggle
+	visualize_noise.text = "Visualize Noise"
+	visualize_noise.set_pressed(current_voxel_generator.visualize_noise_values)
+	visualize_noise.toggled.connect(func(pressed): current_voxel_generator.visualize_noise_values = pressed)
 
-		# Resolution slider
-		update_label(resolution_label, "Resolution: ", current_voxel_generator.resolution)
-		resolution_spinner.min_value = 1
-		resolution_spinner.max_value = 10
-		resolution_spinner.step = 1
-		resolution_spinner.value = current_voxel_generator.resolution
-		resolution_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		resolution_spinner.value_changed.connect(func(value):
-			current_voxel_generator.resolution = int(value)
-			update_label(resolution_label, "Resolution: ", int(value))
-		)
+	# Auto Generate toggle
+	auto_generate.text = "Auto-Generate"
+	auto_generate.set_pressed(current_voxel_generator.auto_generate)
+	auto_generate.toggled.connect(func(pressed): current_voxel_generator.auto_generate = pressed)
 
-		# Surface Band slider
-		update_label(surface_band_label, "Surface Band: ", current_voxel_generator.surface_band)
-		surface_band_spinner.min_value = 1.0
-		surface_band_spinner.max_value = 20.0
-		surface_band_spinner.step = 0.5
-		surface_band_spinner.value = current_voxel_generator.surface_band
-		surface_band_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		surface_band_spinner.value_changed.connect(func(value):
-			current_voxel_generator.surface_band = value
-			update_label(surface_band_label, "Surface Band: ", value)
-		)
-		
-		# LOD Spinner
-		update_label(lod_label, "LOD: ", current_voxel_generator.lod_level)
-		lod_spinner.min_value = 0
-		lod_spinner.max_value = 7
-		lod_spinner.step = 1
-		lod_spinner.value = current_voxel_generator.lod_level
-		lod_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lod_spinner.value_changed.connect(func(value):
-			current_voxel_generator.lod_level = int(value)
-			update_label(lod_label, "LOD: ", int(value))
-		)
-		
-		# LOD Distance Multiplier
-		update_label(lod_distance_mult_label, "LOD Distance Multiplier: ", current_voxel_generator.lod_distance_multiplier)
-		lod_distance_mult_spinner.min_value = 1.0
-		lod_distance_mult_spinner.max_value = 10.0
-		lod_distance_mult_spinner.step = 0.1
-		lod_distance_mult_spinner.value = current_voxel_generator.lod_distance_multiplier
-		lod_distance_mult_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lod_distance_mult_spinner.value_changed.connect(func(value):
-			current_voxel_generator.lod_distance_multiplier = value
-			update_label(lod_distance_mult_label, "LOD Distance Multiplier: ", value)
-		)
-		
-		# World Size X spinner
-		update_label(world_size_x_label, "World X: ", current_voxel_generator.world_size.x)
-		world_size_x_spinner.min_value = 1
-		world_size_x_spinner.max_value = 100
-		world_size_x_spinner.step = 1
-		world_size_x_spinner.value = current_voxel_generator.world_size.x
-		world_size_x_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		world_size_x_spinner.value_changed.connect(func(value):
-			var ws = current_voxel_generator.world_size
-			current_voxel_generator.world_size = Vector3i(int(value), ws.y, ws.z)
-			update_label(world_size_x_label, "World X: ", int(value))
-		)
+	# Show Voxel Grids toggle
+	show_voxel_grids.text = "Show Voxel Grids"
+	show_voxel_grids.set_pressed(current_voxel_generator.show_voxel_grid)
+	show_voxel_grids.toggled.connect(func(pressed): current_voxel_generator.show_voxel_grid = pressed)
 
-		# World Size Y spinner
-		update_label(world_size_y_label, "World Y: ", current_voxel_generator.world_size.y)
-		world_size_y_spinner.min_value = 1
-		world_size_y_spinner.max_value = 100
-		world_size_y_spinner.step = 1
-		world_size_y_spinner.value = current_voxel_generator.world_size.y
-		world_size_y_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		world_size_y_spinner.value_changed.connect(func(value):
-			var ws = current_voxel_generator.world_size
-			current_voxel_generator.world_size = Vector3i(ws.x, int(value), ws.z)
-			update_label(world_size_y_label, "World Y: ", int(value))
-		)
+	# Show Chunk Grids toggle
+	show_chunk_grids.text = "Show Chunk Grids"
+	show_chunk_grids.set_pressed(current_voxel_generator.show_chunk_grid)
+	show_chunk_grids.toggled.connect(func(pressed): current_voxel_generator.show_chunk_grid = pressed)
 
-		# World Size Z spinner
-		update_label(world_size_z_label, "World Z: ", current_voxel_generator.world_size.z)
-		world_size_z_spinner.min_value = 1
-		world_size_z_spinner.max_value = 100
-		world_size_z_spinner.step = 1
-		world_size_z_spinner.value = current_voxel_generator.world_size.z
-		world_size_z_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		world_size_z_spinner.value_changed.connect(func(value):
-			var ws = current_voxel_generator.world_size
-			current_voxel_generator.world_size = Vector3i(ws.x, ws.y, int(value))
-			update_label(world_size_z_label, "World Z: ", int(value))
-		)
-		
-		# Terrain Height spinbox
-		update_label(terrain_height_label, "Terrain Height: ", current_voxel_generator.terrain_height)
-		terrain_height_spinner.min_value = -100.0
-		terrain_height_spinner.max_value = 100.0
-		terrain_height_spinner.step = 0.5
-		terrain_height_spinner.value = current_voxel_generator.terrain_height
-		terrain_height_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		terrain_height_spinner.value_changed.connect(func(value):
-			current_voxel_generator.terrain_height = value
-			update_label(terrain_height_label, "Terrain Height: ", value)
-		)
-		
-		# Terrain Amplitude spinbox
-		update_label(terrain_amplitude_label, "Terrain Amplitude: ", current_voxel_generator.terrain_amplitude)
-		terrain_amplitude_spinner.min_value = 0.0
-		terrain_amplitude_spinner.max_value = 100.0
-		terrain_amplitude_spinner.step = 0.5
-		terrain_amplitude_spinner.value = current_voxel_generator.terrain_amplitude
-		terrain_amplitude_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		terrain_amplitude_spinner.value_changed.connect(func(value):
-			current_voxel_generator.terrain_amplitude = value
-			update_label(terrain_amplitude_label, "Terrain Amplitude: ", value)
-		)
-		
-		# Rock Influence spinbox
-		update_label(rock_influence_label, "Rock Influence: ", current_voxel_generator.rock_influence)
-		rock_influence_spinner.min_value = 0.0
-		rock_influence_spinner.max_value = 1.0
-		rock_influence_spinner.step = 0.01
-		rock_influence_spinner.value = current_voxel_generator.rock_influence
-		rock_influence_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		rock_influence_spinner.value_changed.connect(func(value):
-			current_voxel_generator.rock_influence = value
-			update_label(rock_influence_label, "Rock Influence: ", value)
-		)
-	else:
-		# Voxel generator not available yet; UI will update when a terrain is selected
-		pass
+	# Show Centers toggle
+	show_centers.text = "Show Centers"
+	show_centers.set_pressed(current_voxel_generator.show_centers)
+	show_centers.toggled.connect(func(pressed): current_voxel_generator.show_centers = pressed)
+
+	# Use Textures toggle
+	use_textures.text = "Use Textures"
+	use_textures.set_pressed(current_voxel_generator.use_textures)
+	use_textures.toggled.connect(func(pressed): current_voxel_generator.use_textures = pressed)
+
+	# Verbosity slider and label
+	update_label(verbosity_label, "Verbosity: ", current_voxel_generator.debug_verbosity)
+	verbosity_slider.min_value = 0
+	verbosity_slider.max_value = 3
+	verbosity_slider.step = 1
+	verbosity_slider.value = current_voxel_generator.debug_verbosity
+	verbosity_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	verbosity_slider.value_changed.connect(func(value):
+		current_voxel_generator.debug_verbosity = int(value)
+		update_label(verbosity_label, "Verbosity: ", int(value))
+	)
+
+	# Chunk size slider
+	update_label(chunk_size_label, "Chunk Size: ", current_voxel_generator.chunk_size)
+	chunk_size_slider.min_value = 8
+	chunk_size_slider.max_value = 16
+	chunk_size_slider.step = 8
+	chunk_size_slider.value = current_voxel_generator.chunk_size
+	chunk_size_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chunk_size_slider.value_changed.connect(func(value):
+		current_voxel_generator.chunk_size = int(value)
+		update_label(chunk_size_label, "Chunk Size: ", int(value))
+	)
+
+	# Resolution spinner
+	update_label(resolution_label, "Resolution: ", current_voxel_generator.resolution)
+	resolution_spinner.min_value = 1
+	resolution_spinner.max_value = 10
+	resolution_spinner.step = 1
+	resolution_spinner.value = current_voxel_generator.resolution
+	resolution_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	resolution_spinner.value_changed.connect(func(value):
+		current_voxel_generator.resolution = int(value)
+		update_label(resolution_label, "Resolution: ", int(value))
+	)
+
+	# Surface Band spinner
+	update_label(surface_band_label, "Surface Band: ", current_voxel_generator.surface_band)
+	surface_band_spinner.min_value = 1.0
+	surface_band_spinner.max_value = 20.0
+	surface_band_spinner.step = 0.5
+	surface_band_spinner.value = current_voxel_generator.surface_band
+	surface_band_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	surface_band_spinner.value_changed.connect(func(value):
+		current_voxel_generator.surface_band = value
+		update_label(surface_band_label, "Surface Band: ", value)
+	)
+
+	# LOD Spinner
+	update_label(lod_label, "LOD: ", current_voxel_generator.lod_level)
+	lod_spinner.min_value = 0
+	lod_spinner.max_value = 7
+	lod_spinner.step = 1
+	lod_spinner.value = current_voxel_generator.lod_level
+	lod_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lod_spinner.value_changed.connect(func(value):
+		current_voxel_generator.lod_level = int(value)
+		update_label(lod_label, "LOD: ", int(value))
+	)
+
+	# LOD Distance Multiplier
+	update_label(lod_distance_mult_label, "LOD Distance Multiplier: ", current_voxel_generator.lod_distance_multiplier)
+	lod_distance_mult_spinner.min_value = 1.0
+	lod_distance_mult_spinner.max_value = 10.0
+	lod_distance_mult_spinner.step = 0.1
+	lod_distance_mult_spinner.value = current_voxel_generator.lod_distance_multiplier
+	lod_distance_mult_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lod_distance_mult_spinner.value_changed.connect(func(value):
+		current_voxel_generator.lod_distance_multiplier = value
+		update_label(lod_distance_mult_label, "LOD Distance Multiplier: ", value)
+	)
+
+	# World Size X spinner
+	update_label(world_size_x_label, "World X: ", current_voxel_generator.world_size.x)
+	world_size_x_spinner.min_value = 1
+	world_size_x_spinner.max_value = 100
+	world_size_x_spinner.step = 1
+	world_size_x_spinner.value = current_voxel_generator.world_size.x
+	world_size_x_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	world_size_x_spinner.value_changed.connect(func(value):
+		var ws = current_voxel_generator.world_size
+		current_voxel_generator.world_size = Vector3i(int(value), ws.y, ws.z)
+		update_label(world_size_x_label, "World X: ", int(value))
+	)
+
+	# World Size Y spinner
+	update_label(world_size_y_label, "World Y: ", current_voxel_generator.world_size.y)
+	world_size_y_spinner.min_value = 1
+	world_size_y_spinner.max_value = 100
+	world_size_y_spinner.step = 1
+	world_size_y_spinner.value = current_voxel_generator.world_size.y
+	world_size_y_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	world_size_y_spinner.value_changed.connect(func(value):
+		var ws = current_voxel_generator.world_size
+		current_voxel_generator.world_size = Vector3i(ws.x, int(value), ws.z)
+		update_label(world_size_y_label, "World Y: ", int(value))
+	)
+
+	# World Size Z spinner
+	update_label(world_size_z_label, "World Z: ", current_voxel_generator.world_size.z)
+	world_size_z_spinner.min_value = 1
+	world_size_z_spinner.max_value = 100
+	world_size_z_spinner.step = 1
+	world_size_z_spinner.value = current_voxel_generator.world_size.z
+	world_size_z_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	world_size_z_spinner.value_changed.connect(func(value):
+		var ws = current_voxel_generator.world_size
+		current_voxel_generator.world_size = Vector3i(ws.x, ws.y, int(value))
+		update_label(world_size_z_label, "World Z: ", int(value))
+	)
+
+	# Terrain Height spinner
+	update_label(terrain_height_label, "Terrain Height: ", current_voxel_generator.terrain_height)
+	terrain_height_spinner.min_value = -100.0
+	terrain_height_spinner.max_value = 100.0
+	terrain_height_spinner.step = 0.5
+	terrain_height_spinner.value = current_voxel_generator.terrain_height
+	terrain_height_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	terrain_height_spinner.value_changed.connect(func(value):
+		current_voxel_generator.terrain_height = value
+		update_label(terrain_height_label, "Terrain Height: ", value)
+	)
+
+	# Terrain Amplitude spinner
+	update_label(terrain_amplitude_label, "Terrain Amplitude: ", current_voxel_generator.terrain_amplitude)
+	terrain_amplitude_spinner.min_value = 0.0
+	terrain_amplitude_spinner.max_value = 100.0
+	terrain_amplitude_spinner.step = 0.5
+	terrain_amplitude_spinner.value = current_voxel_generator.terrain_amplitude
+	terrain_amplitude_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	terrain_amplitude_spinner.value_changed.connect(func(value):
+		current_voxel_generator.terrain_amplitude = value
+		update_label(terrain_amplitude_label, "Terrain Amplitude: ", value)
+	)
+
+	# Rock Influence spinner
+	update_label(rock_influence_label, "Rock Influence: ", current_voxel_generator.rock_influence)
+	rock_influence_spinner.min_value = 0.0
+	rock_influence_spinner.max_value = 1.0
+	rock_influence_spinner.step = 0.01
+	rock_influence_spinner.value = current_voxel_generator.rock_influence
+	rock_influence_spinner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rock_influence_spinner.value_changed.connect(func(value):
+		current_voxel_generator.rock_influence = value
+		update_label(rock_influence_label, "Rock Influence: ", value)
+	)
+
+	ui_bound_to_generator = true
+
 
 func _on_generate_async_pressed():
 	if current_voxel_generator:
@@ -723,4 +749,4 @@ func _prompt_and_load_map(map_name: String) -> void:
 
 	# No diffs or no generator_params: load immediately
 	current_voxel_generator.load_map("user://saved_maps", map_name, true)
-	print("Requested load from user://saved_maps/%s" % map_name)
+	print("[GUI] Requested load from user://saved_maps/%s" % map_name)

@@ -24,7 +24,7 @@ func _ready() -> void:
 	# Load shader resource and wrap in ShaderMaterial
 	var shader_res = load("res://scenes/shaders/forcefield.gdshader")
 	if not shader_res:
-		push_error("Could not load forcefield shader: res://scenes/shaders/forcefield.gdshader")
+		push_error("[TerrainPlains] Could not load forcefield shader: res://scenes/shaders/forcefield.gdshader")
 		return
 
 	var mat := ShaderMaterial.new()
@@ -57,15 +57,15 @@ func _ready() -> void:
 	voxel_generator.world_size = Vector3i(world_manager.WORLD_SIZE, world_manager.WORLD_DEPTH, world_manager.WORLD_SIZE) # Immediately calls .generate() if .auto_generate is set to true
 	
 	voxel_generator.chunk_size = 8
-	voxel_generator.resolution = 2
+	voxel_generator.resolution = 3
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
 	voxel_generator.use_textures = true
 	voxel_generator.surface_band = 1.5
-	voxel_generator.max_chunks_per_frame = 1
+	voxel_generator.max_chunks_per_frame = 8
 	voxel_generator.signal_every_n_chunks = 20
 	voxel_generator.lod_distances = custom_distances
 	voxel_generator.enable_distance_lod = true
-	voxel_generator.lod_level = 6
+	voxel_generator.lod_level = 5
 	voxel_generator.lod_reference_position = picele.global_position # no verbose
 	voxel_generator.lod_distance_multiplier = 5.0
 	voxel_generator.show_lod_colors = false # no verbose
@@ -76,9 +76,9 @@ func _ready() -> void:
 	voxel_generator.show_chunk_grid = false
 		
 	# Configure terrain
-	voxel_generator.terrain_height = 0.0
-	voxel_generator.terrain_amplitude = 0.0
-	voxel_generator.rock_influence = 0.0
+	voxel_generator.terrain_height = 0.1
+	voxel_generator.terrain_amplitude = 0.1
+	voxel_generator.rock_influence = 0.1
 	voxel_generator.cutoff = 0.1
 	
 	# Confugure biome generator
@@ -194,7 +194,7 @@ func _process(delta):
 
 func _print_biome_height_range(biome_gen: BiomeGenerator, samples: int = 8, spacing: float = 10.0) -> void:
 	if not biome_gen:
-		print("No biome generator to sample")
+		print("[TerrainPlains] No biome generator to sample")
 		return
 	var min_h := 1e9
 	var max_h := -1e9

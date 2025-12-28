@@ -17,7 +17,7 @@ func _ready() -> void:
 
 func _create_startup_ui() -> void:
 	# Setup main panel
-	main_panel.size = Vector2(1800, 1200)
+	main_panel.size = Vector2(2200, 1400)
 	main_panel.position = (get_viewport_rect().size - main_panel.size) / 2
 
 	# Panel background style
@@ -168,14 +168,14 @@ func _start_world() -> void:
 	# Resolve to an absolute filesystem path and check file existence
 	var fs_path = ProjectSettings.globalize_path(scene_path)
 	if not FileAccess.file_exists(fs_path):
-		push_error("World scene not found: %s" % scene_path)
+		push_error("[Startup] World scene not found: %s" % scene_path)
 		return
 
 	var tree = get_tree()
 	if tree == null:
-		push_error("Cannot change scene: SceneTree is null (get_tree() returned null). Make sure this node is in the scene tree and ready.")
+		push_error("[Startup] Cannot change scene: SceneTree is null (get_tree() returned null). Make sure this node is in the scene tree and ready.")
 		return
 
 	var err = tree.change_scene_to_file(scene_path)
 	if err != OK:
-		push_error("Failed to open world.tscn from startup scene (change_scene_to_file returned %d)" % err)
+		push_error("[Startup] Failed to open world.tscn from startup scene (change_scene_to_file returned %d)" % err)

@@ -36,6 +36,7 @@ class_name Picele # Picture Element or Pixel
 # References
 @onready var picele_camera: Camera3D = $PiceleCamera
 @onready var picele_ray_cast: RayCast3D = $PiceleCamera/PiceleRayCast
+@onready var gui_node: Node = get_node_or_null("/root/World/CentralDebugGUI")
 
 var terrain_manager: MultiTerrainManager = null
 var voxel_generator_plains: VoxelGenerator
@@ -90,6 +91,10 @@ func _physics_process(delta):
 			velocity.y -= gravity * delta
 	
 	move_and_slide()
+
+	# Disable terraforming when GUI is open
+	if gui_node and (gui_node.debug_display.visible or gui_node.terraform_settings.visible):
+		return
 
 	# Handle terraforming and voxel placement
 	if Input.is_action_just_pressed("primary_action"):

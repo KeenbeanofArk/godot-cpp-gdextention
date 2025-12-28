@@ -313,7 +313,7 @@ void VoxelGenerator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "forcefield_height", PROPERTY_HINT_RANGE, "-300,300,1.0"), "set_forcefield_height", "get_forcefield_height");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "forcefield_collision_enabled"), "set_forcefield_collision_enabled", "get_forcefield_collision_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "forcefield_detection_enabled"), "set_forcefield_detection_enabled", "get_forcefield_detection_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "forcefield_buffer", PROPERTY_HINT_RANGE, "0,10,0.1"), "set_forcefield_buffer", "get_forcefield_buffer");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "forcefield_buffer", PROPERTY_HINT_RANGE, "-10,10,0.1"), "set_forcefield_buffer", "get_forcefield_buffer");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "forcefield_shader_material", PROPERTY_HINT_RESOURCE_TYPE, "ShaderMaterial"), "set_forcefield_shader_material", "get_forcefield_shader_material");
 
 	// Per-wall toggles exposed as Inspector properties
@@ -529,17 +529,10 @@ void VoxelGenerator::save_map(const String &dir, const String &map_name) {
 	}
 	meta_ss << "],";
 
-	// Prepare background writer
-	{
-		std::lock_guard<std::mutex> lk(writer_mutex);
-		writer_queue.clear();
-	}
-	start_background_writer();
-
 	// Prepare chunks metadata list for metadata.json (we will append JSON entries)
 	std::vector<std::string> chunks_entries;
 
-	// Enqueue chunk mesh jobs (snapshot arrays on main thread)
+	// Write chunk mesh files (synchronous)
 	for (int i = 0; i < static_cast<int>(chunks.size()); ++i) {
 		Chunk *chunk = chunks[i];
 		if (!chunk || !is_instance_valid(chunk) || !chunk->mesh_instance)
@@ -607,26 +600,38 @@ void VoxelGenerator::save_map(const String &dir, const String &map_name) {
 			job.custom0.push_back(a);
 		}
 
-		// enqueue
-		{
-			std::lock_guard<std::mutex> lk(writer_mutex);
-			writer_queue.push_back(std::move(job));
-		}
-		writer_cv.notify_one();
-	}
+		// Write chunk mesh file directly (synchronous)
+		std::filesystem::path chunk_file = out_path / std::string(fname.utf8().get_data());
+		std::ofstream os(chunk_file.string(), std::ios::binary);
+		if (os) {
+			// simple header
+			os.write("VCHN", 4);
+			int32_t ver = 1;
+			os.write(reinterpret_cast<const char *>(&ver), sizeof(ver));
 
-	// Wait for writer to finish queued jobs
-	while (true) {
-		{
-			std::lock_guard<std::mutex> lk(writer_mutex);
-			if (writer_queue.empty())
-				break;
-		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	}
+			int32_t vcount = static_cast<int32_t>(job.vertices.size() / 3);
+			os.write(reinterpret_cast<const char *>(&vcount), sizeof(vcount));
+			// write positions
+			os.write(reinterpret_cast<const char *>(job.vertices.data()), job.vertices.size() * sizeof(float));
+			// write normals
+			int32_t ncount = static_cast<int32_t>(job.normals.size() / 3);
+			os.write(reinterpret_cast<const char *>(&ncount), sizeof(ncount));
+			if (ncount > 0)
+				os.write(reinterpret_cast<const char *>(job.normals.data()), job.normals.size() * sizeof(float));
+			// colors
+			int32_t cbytes = static_cast<int32_t>(job.colors.size());
+			os.write(reinterpret_cast<const char *>(&cbytes), sizeof(cbytes));
+			if (cbytes > 0)
+				os.write(reinterpret_cast<const char *>(job.colors.data()), job.colors.size());
+			// custom0
+			int32_t cb0 = static_cast<int32_t>(job.custom0.size());
+			os.write(reinterpret_cast<const char *>(&cb0), sizeof(cb0));
+			if (cb0 > 0)
+				os.write(reinterpret_cast<const char *>(job.custom0.data()), job.custom0.size());
 
-	// Stop writer
-	stop_background_writer();
+			os.close();
+		}
+	}
 
 	// Attach chunks metadata to main metadata JSON
 	meta_ss << "\"chunks\": [";
@@ -784,32 +789,52 @@ void VoxelGenerator::load_map(const String &dir, const String &map_name, bool st
 				continue;
 			char magic[4];
 			is.read(magic, 4);
+			if (std::string(magic, 4) != "VCHN")
+				continue;
 			int32_t ver = 0;
 			is.read(reinterpret_cast<char *>(&ver), sizeof(ver));
+			if (ver != 1)
+				continue;
 			int32_t vcount = 0;
 			is.read(reinterpret_cast<char *>(&vcount), sizeof(vcount));
+			if (vcount < 0 || vcount > 10000000 || is.fail())
+				continue;
 			std::vector<float> vertices(vcount * 3);
 			is.read(reinterpret_cast<char *>(vertices.data()), vertices.size() * sizeof(float));
+			if (is.fail())
+				continue;
 			int32_t ncount = 0;
 			is.read(reinterpret_cast<char *>(&ncount), sizeof(ncount));
+			if (ncount < 0 || ncount > 10000000 || is.fail())
+				continue;
 			std::vector<float> normals;
 			if (ncount > 0) {
 				normals.resize(ncount);
 				is.read(reinterpret_cast<char *>(normals.data()), normals.size() * sizeof(float));
+				if (is.fail())
+					continue;
 			}
 			int32_t cbytes = 0;
 			is.read(reinterpret_cast<char *>(&cbytes), sizeof(cbytes));
+			if (cbytes < 0 || cbytes > 10000000 || is.fail())
+				continue;
 			std::vector<uint8_t> colors;
 			if (cbytes > 0) {
 				colors.resize(cbytes);
 				is.read(reinterpret_cast<char *>(colors.data()), colors.size());
+				if (is.fail())
+					continue;
 			}
 			int32_t cb0 = 0;
 			is.read(reinterpret_cast<char *>(&cb0), sizeof(cb0));
+			if (cb0 < 0 || cb0 > 10000000 || is.fail())
+				continue;
 			std::vector<uint8_t> custom0;
 			if (cb0 > 0) {
 				custom0.resize(cb0);
 				is.read(reinterpret_cast<char *>(custom0.data()), custom0.size());
+				if (is.fail())
+					continue;
 			}
 			is.close();
 

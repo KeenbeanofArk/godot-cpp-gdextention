@@ -8,9 +8,9 @@ class_name WorldManager
 # NOTE: $VoxelEngine.set_voxel_generator_node($Plains/VoxelEngine/VoxelGenerator)
 
 # World settings
-const WORLD_SIZE: int = 20 # In Chunks
-const WORLD_DEPTH: int = 10 # In Chunks
-const WALL_HEIGHT: float = 200.0 
+const WORLD_SIZE: int = 5 # In Chunks
+const WORLD_DEPTH: int = 8 # In Chunks
+const WALL_HEIGHT: float = 100.0 
 
 func _ready():
 	plains.generate_plains()
