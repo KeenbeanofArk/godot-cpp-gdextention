@@ -94,6 +94,31 @@ enum GenerationMode {
 	HEIGHTMAP_FIRST = 1 // 2D heightmap then surface band only (optimized)
 };
 
+/// @brief VoxelGenerator: Core terrain generation engine with async support and LOD.
+///
+/// This class manages voxel terrain generation, including:
+/// - Procedural noise-based terrain with configurable amplitude and detail
+/// - Async mesh generation via WorkerThreadPool for non-blocking performance
+/// - Per-chunk Level-of-Detail (LOD) adjustment based on distance
+/// - Terraforming (dig/build spheres) with terrain edit persistence
+/// - Forcefield (world boundary walls) for containment
+/// - Save/load map functionality with compression support
+///
+/// @note DEPRECATED: Direct instantiation is discouraged. Use VoxelEngine::create_generator()
+/// instead to ensure proper lifecycle management and ownership. Direct VoxelGenerator
+/// instantiation may lead to cleanup issues if not managed carefully.
+///
+/// Example (correct usage):
+/// @code
+/// var engine = VoxelEngine.new()
+/// var generator = engine.create_generator()  # Owned by engine, auto-cleaned up
+/// @endcode
+///
+/// Example (deprecated usage - may cause cleanup issues):
+/// @code
+/// var generator = VoxelGenerator.new()  # NOT RECOMMENDED - manually managed
+/// @endcode
+///
 class VoxelGenerator : public Node3D {
 	GDCLASS(VoxelGenerator, Node3D)
 

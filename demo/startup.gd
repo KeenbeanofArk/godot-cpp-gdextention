@@ -12,6 +12,16 @@ extends Control
 @onready var exit_btn: Button = null
 @onready var map_list: ItemList = null
 
+# Terrain buttons
+var terrain_buttons: Dictionary = {}  # terrain_name -> Button
+var selected_terrain: String = "Plains"
+var terrain_names: Array = ["Plains", "Mountains", "TerrainMultiBiome"]
+var terrain_positions: Dictionary = {
+	"Plains": 300,
+	"Mountains": 550,
+	"TerrainMultiBiome": 800
+}
+
 func _ready() -> void:
 	_create_startup_ui()
 
@@ -37,7 +47,6 @@ func _create_startup_ui() -> void:
 	# Title
 	title_label.text = "Voxel Engine"
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	#title_label.position = Vector2(20, 20)
 	title_label.size = Vector2(600, 40)
 	title_label.add_theme_font_size_override("font_size", 40)
 	title_label.add_theme_color_override("font_color", Color(1, 1, 1))
@@ -67,6 +76,9 @@ func _create_startup_ui() -> void:
 	load_map_btn.add_theme_font_size_override("font_size", 20)
 	load_map_btn.pressed.connect(_on_load_map_pressed)
 	main_panel.add_child(load_map_btn)
+
+	# Create terrain selection buttons (Y=120)
+	_create_terrain_buttons()
 
 	# Map list (initially hidden)
 	map_list = ItemList.new()
@@ -105,11 +117,49 @@ func _create_startup_ui() -> void:
 	main_panel.set_meta("load_selected_btn", load_selected_btn)
 	main_panel.set_meta("back_btn", back_btn)
 
+func _create_terrain_buttons() -> void:
+	# Create terrain selection buttons at Y=120 with specified X offsets
+	for terrain_name in terrain_names:
+		var btn = Button.new()
+		btn.text = terrain_name
+		btn.position = Vector2(terrain_positions[terrain_name], 120)
+		btn.size = Vector2(200, 50)
+		btn.add_theme_font_size_override("font_size", 16)
+		btn.pressed.connect(_on_terrain_selected.bind(terrain_name))
+		main_panel.add_child(btn)
+		terrain_buttons[terrain_name] = btn
+	
+	# Highlight Plains as default selected terrain
+	_update_terrain_button_highlights()
+
+func _on_terrain_selected(terrain_name: String) -> void:
+	selected_terrain = terrain_name
+	
+	# Update StartupState pending terrain
+	var ss = get_node_or_null("/root/StartupState")
+	if ss:
+		ss.set_pending_terrain(terrain_name)
+	
+	# Update button highlights
+	_update_terrain_button_highlights()
+
+func _update_terrain_button_highlights() -> void:
+	# Update all terrain buttons - highlight selected, normal for others
+	for terrain_name in terrain_names:
+		var btn = terrain_buttons[terrain_name]
+		if terrain_name == selected_terrain:
+			# Highlight the selected terrain with green text
+			btn.add_theme_color_override("font_color", Color(0.0, 1.0, 0.0))  # Green
+		else:
+			# Normal white text for non-selected
+			btn.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))  # White
+
 func _on_new_map_pressed() -> void:
 	# Start new map
 	var ss = get_node_or_null("/root/StartupState")
 	if ss:
-		ss.pending_map = "" # Empty means new map
+		ss.pending_map = ""  # Empty means new map
+		ss.set_pending_terrain(selected_terrain)  # Set the selected terrain
 	_start_world()
 
 func _on_load_map_pressed() -> void:
@@ -149,6 +199,7 @@ func _on_load_selected_pressed() -> void:
 	var ss = get_node_or_null("/root/StartupState")
 	if ss:
 		ss.pending_map = map_name
+		ss.set_pending_terrain(selected_terrain)  # Set the selected terrain
 	_start_world()
 
 func _on_back_pressed() -> void:
@@ -161,7 +212,7 @@ func _on_back_pressed() -> void:
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()
-
+	
 func _start_world() -> void:
 	# Replace with the project's world scene path
 	var scene_path := "res://world.tscn"

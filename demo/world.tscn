@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3 uid="uid://etd11wxpmror"]
+[gd_scene load_steps=19 format=3 uid="uid://etd11wxpmror"]
 
 [ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://world_manager.gd" id="1_fj7yv"]
 [ext_resource type="Script" uid="uid://gdi5e7som4a" path="res://terrain_plains.gd" id="2_036b0"]
@@ -9,6 +9,7 @@
 [ext_resource type="Texture2D" uid="uid://7ov1ocn8s6b3" path="res://assets/textures/ground/Ground079S_1K-PNG_Color.png" id="3_wse8f"]
 [ext_resource type="Material" uid="uid://ykdewajhlxx2" path="res://assets/textures/ground/terrain_material.tres" id="4_gbfbk"]
 [ext_resource type="Shader" uid="uid://cawq4do1cgwq1" path="res://scenes/shaders/forcefield.gdshader" id="8_ic0uy"]
+[ext_resource type="Script" uid="uid://taqxr1lnejr5" path="res://debug_forcefield.gd" id="8_wse8f"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_pkg7o"]
 shader = ExtResource("2_gbfbk")
@@ -83,18 +84,18 @@ script = ExtResource("2_036b0")
 [node name="VoxelEngine" type="VoxelEngine" parent="Plains"]
 
 [node name="VoxelGenerator" type="VoxelGenerator" parent="Plains/VoxelEngine"]
-world_size = Vector3i(4, 2, 4)
+world_size = Vector3i(10, 5, 10)
 use_textures = true
 terrain_material = ExtResource("4_gbfbk")
 terrain_noise = SubResource("NoiseGenerator_dwbse")
 detail_noise = SubResource("NoiseGenerator_gbfbk")
-show_voxel_grid = true
-show_chunk_grid = true
 forcefield_detection_voxels = 12.0
-forcefield_enabled = true
 forcefield_height = 50.0
 forcefield_buffer = -0.5
 forcefield_shader_material = SubResource("ShaderMaterial_k3n1d")
+
+[node name="DebugForceField" type="Node3D" parent="Plains"]
+script = ExtResource("8_wse8f")
 
 [node name="CentralDebugGUI" parent="." instance=ExtResource("3_tlwt5")]
 

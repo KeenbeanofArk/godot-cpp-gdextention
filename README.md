@@ -43,10 +43,13 @@ scons -j12 target=template_debug debug_symbols=yes
 - Ensure you have a compatible C++ toolchain for your platform and the correct Godot headers (managed via `godot-cpp`).
 - If you run into linking or symbol issues, re-run the `godot-cpp` build step (CMake or SCons) to regenerate bindings for your compiler.
 
-**Docs**
+**Documentation**
 
-- Terraforming + runtime edits: `doc_classes/Terraforming.md`
-- Texture arrays + biome triplanar shader: `doc_classes/Terraforming.md#texturing--shaders`
+- **[USAGE_GUIDE.md](USAGE_GUIDE.md)** - Complete guide to using VoxelGenerator and VoxelEngine (START HERE!)
+- **[GENERATION_GUIDE.md](GENERATION_GUIDE.md)** - `generate()` vs `generate_async()` comparison
+- **[Terraforming.md](doc_classes/Terraforming.md)** - Terraforming API and runtime terrain editing
+- **[SAVE_LOAD_MAP.md](docs/SAVE_LOAD_MAP.md)** - Save and load map persistence
+- **[BUILD_WINDOWS.md](BUILD_WINDOWS.md)** - Windows build instructions
 
 **CI / Releases**
 

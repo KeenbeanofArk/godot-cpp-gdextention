@@ -41,8 +41,15 @@ using namespace voxel_engine;
 namespace voxel_engine {
 
 void VoxelEngine::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("set_voxel_generator_node", "node"), &VoxelEngine::set_voxel_generator_node);
+	// Factory methods (primary API)
+	ClassDB::bind_method(D_METHOD("create_generator"), &VoxelEngine::create_generator);
+	ClassDB::bind_method(D_METHOD("destroy_generator"), &VoxelEngine::destroy_generator);
 	ClassDB::bind_method(D_METHOD("get_voxel_generator"), &VoxelEngine::get_voxel_generator);
+
+	// Deprecated methods (kept for backward compatibility)
+	ClassDB::bind_method(D_METHOD("set_voxel_generator_node", "node"), &VoxelEngine::set_voxel_generator_node);
+
+	// Proxy methods
 	ClassDB::bind_method(D_METHOD("set_voxel", "position", "type"), &VoxelEngine::set_voxel);
 	ClassDB::bind_method(D_METHOD("get_voxel", "position"), &VoxelEngine::get_voxel);
 	ClassDB::bind_method(D_METHOD("get_total_voxel_count"), &VoxelEngine::get_total_voxel_count);
@@ -51,35 +58,103 @@ void VoxelEngine::_bind_methods() {
 VoxelEngine::VoxelEngine() = default;
 
 VoxelEngine::~VoxelEngine() {
-	voxel_generator = nullptr; // non-owning
+	// Cleanup of VoxelGenerator is handled in _notification(NOTIFICATION_PREDELETE)
+	// This ensures proper Godot lifecycle management during node deletion
+}
+
+void VoxelEngine::_notification(int p_what) {
+	switch (p_what) {
+		case NOTIFICATION_PREDELETE:
+			// Explicit cleanup when node is being deleted from the scene tree
+			destroy_generator();
+			break;
+		default:
+			break;
+	}
 }
 
 void VoxelEngine::_init() {
 	// no-op
 }
 
-void VoxelEngine::set_voxel_generator_node(Node *node) {
-	if (!node) {
-		voxel_generator = nullptr;
-		UtilityFunctions::print("VoxelEngine: cleared voxel_generator reference");
-		return;
+VoxelGenerator *VoxelEngine::create_generator() {
+	// Destroy any existing generator first
+	if (voxel_generator != nullptr) {
+		UtilityFunctions::print_verbose("VoxelEngine::create_generator: destroying existing generator");
+		destroy_generator();
 	}
-	VoxelGenerator *vg = Object::cast_to<VoxelGenerator>(node);
-	if (!vg) {
-		UtilityFunctions::push_error("VoxelEngine: provided node is not a VoxelGenerator");
-		return;
+
+	// Create new VoxelGenerator and own it
+	voxel_generator = memnew(VoxelGenerator);
+	voxel_generator->set_name("VoxelGenerator");
+
+	// Add as child to ensure it's part of the scene tree
+	add_child(voxel_generator);
+
+	UtilityFunctions::print("VoxelEngine::create_generator: created and added VoxelGenerator as child");
+	return voxel_generator;
+}
+
+void VoxelEngine::destroy_generator() {
+	if (voxel_generator == nullptr) {
+		return; // Already destroyed or never created
 	}
-	voxel_generator = vg;
-	UtilityFunctions::print("VoxelEngine: bound to VoxelGenerator node");
+
+	// Cancel any ongoing generation
+	if (voxel_generator->is_generating()) {
+		UtilityFunctions::print_verbose("VoxelEngine::destroy_generator: canceling ongoing generation");
+		voxel_generator->cancel_generation();
+	}
+
+	// Remove from scene tree
+	if (voxel_generator->is_inside_tree()) {
+		remove_child(voxel_generator);
+	}
+
+	// Delete the generator node (this will also trigger its destructor)
+	memdelete(voxel_generator);
+	voxel_generator = nullptr;
+
+	UtilityFunctions::print("VoxelEngine::destroy_generator: VoxelGenerator destroyed");
 }
 
 VoxelGenerator *VoxelEngine::get_voxel_generator() const {
 	return voxel_generator;
 }
 
+void VoxelEngine::set_voxel_generator_node(Node *node) {
+	// DEPRECATED: This method is deprecated. Use create_generator() instead.
+	// Kept for backward compatibility only.
+	UtilityFunctions::push_warning("VoxelEngine::set_voxel_generator_node is deprecated. Use create_generator() instead.");
+
+	if (!node) {
+		destroy_generator();
+		UtilityFunctions::print("VoxelEngine: cleared voxel_generator reference");
+		return;
+	}
+
+	VoxelGenerator *vg = Object::cast_to<VoxelGenerator>(node);
+	if (!vg) {
+		UtilityFunctions::push_error("VoxelEngine::set_voxel_generator_node: provided node is not a VoxelGenerator");
+		return;
+	}
+
+	// If we already own a generator, destroy it first
+	if (voxel_generator != nullptr && voxel_generator != vg) {
+		destroy_generator();
+	}
+
+	// Take ownership of the externally-created VoxelGenerator node
+	voxel_generator = vg;
+	if (!voxel_generator->is_inside_tree()) {
+		add_child(voxel_generator);
+	}
+	UtilityFunctions::print("VoxelEngine: bound to VoxelGenerator node (via deprecated API)");
+}
+
 void VoxelEngine::set_voxel(const Vector3i &position, int type) {
-	if (!voxel_generator) {
-		UtilityFunctions::push_error("VoxelEngine::set_voxel: no VoxelGenerator bound");
+	if (voxel_generator == nullptr) {
+		UtilityFunctions::push_error("VoxelEngine::set_voxel: no VoxelGenerator available (call create_generator first)");
 		return;
 	}
 	// Best-effort: use build/dig to approximate per-voxel change
@@ -87,8 +162,8 @@ void VoxelEngine::set_voxel(const Vector3i &position, int type) {
 }
 
 int VoxelEngine::get_voxel(const Vector3i &position) const {
-	if (!voxel_generator) {
-		UtilityFunctions::push_error("VoxelEngine::get_voxel: no VoxelGenerator bound");
+	if (voxel_generator == nullptr) {
+		UtilityFunctions::push_error("VoxelEngine::get_voxel: no VoxelGenerator available (call create_generator first)");
 		return 0; // AIR
 	}
 	// Use VoxelGenerator sampling API if available
@@ -96,7 +171,7 @@ int VoxelEngine::get_voxel(const Vector3i &position) const {
 }
 
 int64_t VoxelEngine::get_total_voxel_count() const {
-	if (!voxel_generator)
+	if (voxel_generator == nullptr)
 		return 0;
 	Vector3i world_size = voxel_generator->get_world_size();
 	int chunk_size = voxel_generator->get_chunk_size();

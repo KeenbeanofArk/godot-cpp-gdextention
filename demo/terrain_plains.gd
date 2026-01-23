@@ -1,5 +1,6 @@
 extends Node3D
 
+@onready var voxel_engine: VoxelEngine = $VoxelEngine
 @onready var voxel_generator: VoxelGenerator = $VoxelEngine/VoxelGenerator
 @onready var picele: CharacterBody3D = $"../Picele"
 
@@ -11,8 +12,8 @@ func _ready() -> void:
 	# Find WorldManager to get world size
 	var world_manager = get_tree().get_first_node_in_group("world")
 	
-	voxel_generator.cancel_generation()
-	voxel_generator.reset()
+	#voxel_generator.cancel_generation()
+	#voxel_generator.reset()
 	
 	# Enable the forcefield (if not already)
 	voxel_generator.forcefield_enabled = true
@@ -57,15 +58,15 @@ func _ready() -> void:
 	voxel_generator.world_size = Vector3i(world_manager.WORLD_SIZE, world_manager.WORLD_DEPTH, world_manager.WORLD_SIZE) # Immediately calls .generate() if .auto_generate is set to true
 	
 	voxel_generator.chunk_size = 8
-	voxel_generator.resolution = 3
+	voxel_generator.resolution = 2
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
 	voxel_generator.use_textures = true
 	voxel_generator.surface_band = 1.5
-	voxel_generator.max_chunks_per_frame = 8
+	voxel_generator.max_chunks_per_frame = 4
 	voxel_generator.signal_every_n_chunks = 20
 	voxel_generator.lod_distances = custom_distances
 	voxel_generator.enable_distance_lod = true
-	voxel_generator.lod_level = 5
+	voxel_generator.lod_level = 6
 	voxel_generator.lod_reference_position = picele.global_position # no verbose
 	voxel_generator.lod_distance_multiplier = 5.0
 	voxel_generator.show_lod_colors = false # no verbose
@@ -84,7 +85,7 @@ func _ready() -> void:
 	# Confugure biome generator
 	var biome_gen = BiomeGenerator.new()
 	biome_gen.seed = 12345 # no verbose
-	biome_gen.sea_level = 0.0 # no verbose
+	biome_gen.sea_level = 1.0 # no verbose
 	setup_biomes(biome_gen)
 	
 	# Connect to signals

@@ -941,6 +941,8 @@ void VoxelGenerator::_notification(int p_what) {
 			set_process(false); // Will be enabled during async generation
 			set_physics_process(false);
 
+			// Clean up forcefield nodes BEFORE removing all children to prevent stale pointers
+			remove_forcefield_nodes();
 			remove_children();
 			//randomize_seed();
 
@@ -2052,6 +2054,13 @@ void VoxelGenerator::generate() {
 	// Cache will be cleared only when fundamental parameters change (resolution, LOD, mode, world size)
 	cache_is_valid = true;
 
+	// Ensure forcefield nodes exist after a full synchronous generation pass
+	if (forcefield_enabled) {
+		// Recreate/update nodes if generation cleared children earlier
+		create_forcefield_nodes();
+		update_forcefield_nodes();
+	}
+
 	// Mark generation complete
 	generation_in_progress.store(false);
 
@@ -2755,8 +2764,17 @@ void VoxelGenerator::create_chunks() {
 
 // ==================== Forcefield Implementation ====================
 void VoxelGenerator::create_forcefield_nodes() {
-	if (forcefield_root && forcefield_root->is_inside_tree()) {
-		return; // already created
+	// Debug: log entry and pointer state
+	log_message(String("create_forcefield_nodes() called - forcefield_root ptr={0}, queued_for_deletion={1}")
+						.format(Array::make((int64_t)reinterpret_cast<intptr_t>(forcefield_root),
+								(forcefield_root ? forcefield_root->is_queued_for_deletion() : false))),
+			2);
+
+	// Only skip creation if the root node exists AND is still valid (not queued for deletion)
+	// Note: is_inside_tree() alone is insufficient since queue_free() nodes may still be in tree
+	if (forcefield_root && !forcefield_root->is_queued_for_deletion()) {
+		log_message(String("create_forcefield_nodes(): existing valid forcefield_root, skipping creation (ptr={0})").format(Array::make((int64_t)reinterpret_cast<intptr_t>(forcefield_root))), 2);
+		return; // already created and valid
 	}
 
 	// Create container
@@ -2822,12 +2840,15 @@ void VoxelGenerator::create_forcefield_nodes() {
 		// default detection box; will be updated
 		detect_shape->set_size(Vector3(det_thickness, forcefield_height, world_width_x));
 		acs->set_shape(detect_shape);
+		// CRITICAL: Both monitoring and monitorable must be enabled for detection to work
 		area->set_monitoring(forcefield_detection_enabled);
+		area->set_monitorable(true); // Must be true so bodies can be detected
 		// Name and connect signals with bound wall index
 		area->set_name(String("ForcefieldArea_{0}").format(Array::make(i)));
 		area->connect("body_entered", Callable(this, StringName("on_forcefield_body_entered")).bind(i));
 		area->connect("body_exited", Callable(this, StringName("on_forcefield_body_exited")).bind(i));
 	}
+	log_message("create_forcefield_nodes(): forcefield nodes created", 1);
 }
 
 // Forcefield shader material property
@@ -2949,7 +2970,13 @@ float VoxelGenerator::get_forcefield_detection_voxels() const {
 }
 
 void VoxelGenerator::update_forcefield_nodes() {
+	log_message(String("update_forcefield_nodes() called - forcefield_root ptr={0}, inside_tree={1}")
+						.format(Array::make((int64_t)reinterpret_cast<intptr_t>(forcefield_root),
+								(forcefield_root ? forcefield_root->is_inside_tree() : false))),
+			3);
+
 	if (!forcefield_root || !forcefield_root->is_inside_tree()) {
+		log_message("update_forcefield_nodes(): no forcefield_root or not in tree, skipping update", 3);
 		return;
 	}
 	float world_width_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
@@ -3053,14 +3080,24 @@ void VoxelGenerator::update_forcefield_nodes() {
 					dshape->set_size(Vector3(size.x, det_thickness, size.z));
 				}
 				dcs->set_shape(dshape);
+				// Ensure collision shape is centered and enabled
+				dcs->set_position(Vector3(0, 0, 0));
+				dcs->set_disabled(false);
 			}
 		}
 		area->set_position(pos);
 		area->set_monitoring(forcefield_detection_enabled);
+		area->set_monitorable(true); // Keep monitorable enabled for detection
 	}
+	log_message("update_forcefield_nodes(): forcefield nodes updated", 2);
 }
 
 void VoxelGenerator::remove_forcefield_nodes() {
+	log_message(String("remove_forcefield_nodes() called - forcefield_root ptr={0}, inside_tree={1}")
+						.format(Array::make((int64_t)reinterpret_cast<intptr_t>(forcefield_root),
+								(forcefield_root ? forcefield_root->is_inside_tree() : false))),
+			2);
+
 	if (forcefield_root && forcefield_root->is_inside_tree()) {
 		remove_child(forcefield_root);
 		forcefield_root->queue_free();
@@ -3072,6 +3109,7 @@ void VoxelGenerator::remove_forcefield_nodes() {
 		forcefield_shapes[i] = nullptr;
 		forcefield_areas[i] = nullptr;
 	}
+	log_message("remove_forcefield_nodes(): cleared forcefield pointers", 2);
 }
 
 void VoxelGenerator::on_forcefield_body_entered(Object *body, int wall_index) {
@@ -4873,27 +4911,33 @@ void VoxelGenerator::rebuild_debug_visualizations() {
 
 // ==================== Forcefield Property Setters/Getters ====================
 void VoxelGenerator::set_forcefield_enabled(bool enabled) {
-	// Always apply the desired state. If enabling and the nodes are missing
-	// or not inside the scene tree (they may have been removed during _ready()),
-	// recreate/update them. This prevents the case where the property is true
-	// in the inspector but the visual/collision nodes were removed and never
-	// recreated because the setter early-returned.
 	bool previously_enabled = forcefield_enabled;
 	forcefield_enabled = enabled;
-	log_message(String("Forcefield enabled set to: {0}").format(Array::make(forcefield_enabled)), 2);
+	log_message(String("set_forcefield_enabled() called - requested={0}, previous={1}").format(Array::make(forcefield_enabled, previously_enabled)), 2);
 
 	if (forcefield_enabled) {
 		// If root doesn't exist or isn't in the tree, create it.
-		if (!forcefield_root || !forcefield_root->is_inside_tree()) {
+		// Check both pointer validity AND scene tree presence
+		bool needs_creation = !forcefield_root ||
+				!forcefield_root->is_inside_tree() ||
+				forcefield_wall_meshes[0] == nullptr;
+
+		if (needs_creation) {
+			log_message("set_forcefield_enabled(): forcefield nodes missing or invalid, recreating...", 2);
 			// Ensure any stale pointers are cleared before creating new nodes
 			remove_forcefield_nodes();
 			create_forcefield_nodes();
+		} else {
+			log_message(String("set_forcefield_enabled(): existing forcefield_root ptr={0}, reusing").format(Array::make((int64_t)reinterpret_cast<intptr_t>(forcefield_root))), 3);
 		}
 
 		// Always update properties (visibility, collision, detection shapes)
-		update_forcefield_nodes();
+		if (is_inside_tree()) {
+			update_forcefield_nodes();
+		}
 	} else {
 		// If disabling, remove whatever exists regardless of previous state
+		log_message("set_forcefield_enabled(): disabling - removing forcefield nodes", 2);
 		remove_forcefield_nodes();
 	}
 }
@@ -4978,6 +5022,12 @@ void VoxelGenerator::_process(double delta) {
 
 			// Rebuild debug visualizations (voxel grid, chunk grid) after async generation completes
 			rebuild_debug_visualizations();
+
+			// Ensure forcefield nodes exist after async generation (generation may have cleared children)
+			if (forcefield_enabled) {
+				create_forcefield_nodes();
+				update_forcefield_nodes();
+			}
 
 			// Mark complete
 			generation_in_progress.store(false);

@@ -45,10 +45,11 @@ class VoxelEngine : public Node {
 	GDCLASS(VoxelEngine, Node);
 
 private:
-	VoxelGenerator *voxel_generator = nullptr; // non-owning
+	VoxelGenerator *voxel_generator = nullptr; // owning raw pointer
 
 protected:
 	static void _bind_methods();
+	void _notification(int p_what);
 
 public:
 	VoxelEngine();
@@ -56,9 +57,17 @@ public:
 
 	void _init();
 
-	// Bind a VoxelGenerator node (non-owning)
-	void set_voxel_generator_node(Node *node);
+	// Factory method: create and own a VoxelGenerator
+	VoxelGenerator *create_generator();
+
+	// Cleanup: explicitly destroy the owned generator
+	void destroy_generator();
+
+	// Get the owned generator
 	VoxelGenerator *get_voxel_generator() const;
+
+	// Deprecated: use create_generator() instead. Kept for backward compatibility.
+	void set_voxel_generator_node(Node *node);
 
 	// Simple proxies
 	void set_voxel(const Vector3i &position, int type);
