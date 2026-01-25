@@ -1,13 +1,34 @@
 extends Node3D
 ## Debug script to diagnose forcefield detection issues
 
-#@export var voxel_generator: VoxelGenerator = null
-@onready var voxel_generator: VoxelGenerator = $"../VoxelEngine/VoxelGenerator"
+@export var voxel_generator: VoxelGenerator = null
 @export var verbose: bool = true
 
 func _ready():
+	# Defer VoxelGenerator search to ensure scene is fully loaded
+	call_deferred("_find_voxel_generator")
+
+func _find_voxel_generator():
+	# Try to find VoxelGenerator if not exported
 	if not voxel_generator:
-		push_error("DebugForcefield: VoxelGenerator not assigned")
+		# First try searching from scene root (most reliable)
+		var root = get_tree().get_root()
+		if root and root.get_child_count() > 0:
+			var world = root.get_child(0)
+			voxel_generator = world.find_child("VoxelGenerator", true, false) as VoxelGenerator
+	
+	# Fallback: search parent hierarchy
+	if not voxel_generator:
+		var parent = get_parent()
+		while parent:
+			voxel_generator = parent.find_child("VoxelGenerator", true, false) as VoxelGenerator
+			if voxel_generator:
+				break
+			parent = parent.get_parent()
+	
+	if not voxel_generator:
+		if verbose:
+			print("[DebugForcefield] VoxelGenerator not found (will retry when needed)")
 		return
 	
 	# Schedule a delayed check to ensure forcefield is fully initialized

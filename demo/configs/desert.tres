@@ -1,0 +1,10 @@
+[gd_resource type="TerrainConfig" load_steps=2 format=3 uid="uid://desert001"]
+
+[resource]
+config_name = "Desert"
+world_size = Vector3i(12, 10, 12)
+resolution = 3
+seeder = 9012
+terrain_height = 2.0
+terrain_amplitude = 4.0
+rock_influence = 0.1

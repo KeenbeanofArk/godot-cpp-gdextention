@@ -1,64 +1,76 @@
 extends Node3D
 
-@onready var voxel_engine: VoxelEngine = $VoxelEngine
-@onready var voxel_generator: VoxelGenerator = $VoxelEngine/VoxelGenerator
 @onready var picele: CharacterBody3D = $"../Picele"
 
 var custom_distances = PackedFloat64Array([16, 32, 64, 128, 256, 512, 1024, 2048])
 var t := 1.0
+var voxel_generator: VoxelGenerator
 
 func _ready() -> void:
+	set_process(true)
+	
+	# Connect to MultiTerrainManager signal for dynamic generator injection
+	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
+	if terrain_manager:
+		terrain_manager.connect("terrain_selected", Callable(self, "_on_terrain_selected"))
+	
+	# If already initialized on Plains, set up immediately
+	if terrain_manager and terrain_manager.current_terrain_name == "Plains":
+		voxel_generator = terrain_manager.current_voxel_generator
+		_setup_terrain_instance()
+
+func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> void:
+	# Only initialize if this is the Plains terrain
+	if terrain_name == "Plains":
+		voxel_generator = generator
+		_setup_terrain_instance()
+
+func _setup_terrain_instance() -> void:
+	# Validate generator exists
+	if not voxel_generator:
+		push_error("[TerrainPlains] No voxel_generator available for setup")
+		return
 	
 	# Find WorldManager to get world size
 	var world_manager = get_tree().get_first_node_in_group("world")
 	
-	#voxel_generator.cancel_generation()
-	#voxel_generator.reset()
-	
 	# Enable the forcefield (if not already)
 	voxel_generator.forcefield_enabled = true
-	voxel_generator.forcefield_height = world_manager.WALL_HEIGHT
+	voxel_generator.forcefield_height = world_manager.WALL_HEIGHT if world_manager else 300
 	voxel_generator.forcefield_collision_enabled = true
 	voxel_generator.forcefield_detection_enabled = true
 	voxel_generator.forcefield_buffer = -1.0
+	voxel_generator.forcefield_detection_voxels = 10
 	
 	# Load shader resource and wrap in ShaderMaterial
 	var shader_res = load("res://scenes/shaders/forcefield.gdshader")
 	if not shader_res:
 		push_error("[TerrainPlains] Could not load forcefield shader: res://scenes/shaders/forcefield.gdshader")
-		return
+	else:
+		var mat := ShaderMaterial.new()
+		mat.shader = shader_res
 
-	var mat := ShaderMaterial.new()
-	mat.shader = shader_res
-
-	# Assign the ShaderMaterial to the VoxelGenerator forcefield (C++ binding)
-	# This calls `VoxelGenerator::set_forcefield_shader_material(Ref<ShaderMaterial>)` exposed in C++
-	voxel_generator.set_forcefield_shader_material(mat)
-	
-	# Set some shader parameters (example names; adjust to your shader's uniforms)
-	# You can either set via the generator helper or directly on the material:
-	# generator helper (calls into C++):
-	voxel_generator.set_forcefield_shader_param("u_color", Color(0.0, 0.8, 1.0))
-	voxel_generator.set_forcefield_shader_param("u_time_scale", 1.5)
-	voxel_generator.set_forcefield_shader_param("base_alpha", 0.0)
-	
-	# Or directly on the ShaderMaterial (if you hold a reference):
-	# mat.set_shader_parameter("u_color", Color(1,0,0))
-
-	# Example: animate a parameter over time
-	set_process(true)
+		# Assign the ShaderMaterial to the VoxelGenerator forcefield (C++ binding)
+		# This calls `VoxelGenerator::set_forcefield_shader_material(Ref<ShaderMaterial>)` exposed in C++
+		voxel_generator.set_forcefield_shader_material(mat)
 		
+		# Set some shader parameters (example names; adjust to your shader's uniforms)
+		voxel_generator.set_forcefield_shader_param("u_color", Color(0.0, 0.8, 1.0))
+		voxel_generator.set_forcefield_shader_param("u_time_scale", 1.5)
+		voxel_generator.set_forcefield_shader_param("base_alpha", 0.0)
+	
 	# Setup Debug
 	voxel_generator.debug_mode = true
 	voxel_generator.debug_verbosity = 2
 	voxel_generator.visualize_noise_values = false
 	voxel_generator.auto_generate = false # Make sure this is false before setting world_size
 	
-	# Configure plains generator
-	voxel_generator.world_size = Vector3i(world_manager.WORLD_SIZE, world_manager.WORLD_DEPTH, world_manager.WORLD_SIZE) # Immediately calls .generate() if .auto_generate is set to true
+	# Load terrain configuration from resource and apply to generator
+	var plains_config = TerrainLoader.get_config("Plains")
+	if plains_config:
+		plains_config.apply_to_voxel_generator(voxel_generator)
 	
-	voxel_generator.chunk_size = 8
-	voxel_generator.resolution = 2
+	# Override LOD and visual settings specific to this instance
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
 	voxel_generator.use_textures = true
 	voxel_generator.surface_band = 1.5
@@ -67,22 +79,14 @@ func _ready() -> void:
 	voxel_generator.lod_distances = custom_distances
 	voxel_generator.enable_distance_lod = true
 	voxel_generator.lod_level = 6
-	voxel_generator.lod_reference_position = picele.global_position # no verbose
+	voxel_generator.lod_reference_position = picele.global_position
 	voxel_generator.lod_distance_multiplier = 5.0
-	voxel_generator.show_lod_colors = false # no verbose
+	voxel_generator.show_lod_colors = false
 	voxel_generator.heightmap_vertex_limit = 534000000
-	
-	# Enable debug visualization
 	voxel_generator.show_voxel_grid = false
 	voxel_generator.show_chunk_grid = false
-		
-	# Configure terrain
-	voxel_generator.terrain_height = 0.1
-	voxel_generator.terrain_amplitude = 0.1
-	voxel_generator.rock_influence = 0.1
-	voxel_generator.cutoff = 0.1
 	
-	# Confugure biome generator
+	# Configure biome generator
 	var biome_gen = BiomeGenerator.new()
 	biome_gen.seed = 12345 # no verbose
 	biome_gen.sea_level = 1.0 # no verbose
@@ -92,6 +96,9 @@ func _ready() -> void:
 	voxel_generator.chunk_ready.connect(_on_chunk_ready)
 	voxel_generator.generation_progress.connect(_on_progress)
 	voxel_generator.generation_complete.connect(_on_complete)
+	
+	# Generate terrain
+	generate_plains()
 
 func generate_plains() -> void:
 	# Start async generation

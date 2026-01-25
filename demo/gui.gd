@@ -15,9 +15,12 @@ var player: Picele = null
 
 # Color coding for terrains
 var terrain_colors: Dictionary = {
-	"Plains": Color(0.4, 0.8, 0.4), # Green
-	"Mountains": Color(0.7, 0.5, 0.3) # Brown
+	"Plains": Color(0.4, 0.8, 0.4), # Green Grass
+	"Mountains": Color(0.7, 0.5, 0.3), # Brown
+	"Desert": Color(0.889, 0.793, 0.674, 1.0), # Tan
+	"Forest": Color(0.16, 0.393, 0.098, 1.0) # Forst Green
 }
+
 @onready var terraform_settings: Control = $TerraformSettings
 @onready var terraform_panel: Panel = $TerraformSettings/TerraformPanel
 @onready var terraform_container: VBoxContainer = $TerraformSettings/TerraformPanel/TerraformContainer

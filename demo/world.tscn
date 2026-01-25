@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3 uid="uid://etd11wxpmror"]
+[gd_scene load_steps=16 format=3 uid="uid://etd11wxpmror"]
 
 [ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://world_manager.gd" id="1_fj7yv"]
 [ext_resource type="Script" uid="uid://gdi5e7som4a" path="res://terrain_plains.gd" id="2_036b0"]
@@ -7,9 +7,11 @@
 [ext_resource type="Texture2D" uid="uid://te7ikjhfdhwf" path="res://assets/textures/sky/NightSkyHDRI014_4K_TONEMAPPED.jpg" id="3_ioo17"]
 [ext_resource type="PackedScene" uid="uid://deg7mq7jukfdi" path="res://gui.tscn" id="3_tlwt5"]
 [ext_resource type="Texture2D" uid="uid://7ov1ocn8s6b3" path="res://assets/textures/ground/Ground079S_1K-PNG_Color.png" id="3_wse8f"]
-[ext_resource type="Material" uid="uid://ykdewajhlxx2" path="res://assets/textures/ground/terrain_material.tres" id="4_gbfbk"]
-[ext_resource type="Shader" uid="uid://cawq4do1cgwq1" path="res://scenes/shaders/forcefield.gdshader" id="8_ic0uy"]
 [ext_resource type="Script" uid="uid://taqxr1lnejr5" path="res://debug_forcefield.gd" id="8_wse8f"]
+[ext_resource type="Script" uid="uid://bdja4113u1o6m" path="res://terrain_mountains.gd" id="9_mountains"]
+[ext_resource type="Script" uid="uid://b5d4yqv6bgpgg" path="res://terrain_desert.gd" id="10_desert"]
+[ext_resource type="Script" uid="uid://div4l1s143ym6" path="res://terrain_forest.gd" id="11_forest"]
+[ext_resource type="Script" uid="uid://1mvghwqsjnki" path="res://terrain_multi_biome.gd" id="12_multibiome"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_pkg7o"]
 shader = ExtResource("2_gbfbk")
@@ -25,47 +27,6 @@ sky_material = SubResource("ShaderMaterial_pkg7o")
 background_mode = 2
 sky = SubResource("Sky_tlwt5")
 
-[sub_resource type="FastNoiseLite" id="FastNoiseLite_036b0"]
-noise_type = 3
-seed = 1240
-frequency = 0.02
-fractal_octaves = 4
-
-[sub_resource type="NoiseGenerator" id="NoiseGenerator_dwbse"]
-seed = 1240
-noise = SubResource("FastNoiseLite_036b0")
-
-[sub_resource type="FastNoiseLite" id="FastNoiseLite_pkg7o"]
-noise_type = 3
-seed = 1241
-frequency = 0.1
-fractal_octaves = 3
-fractal_lacunarity = 2.5
-fractal_gain = 0.6
-
-[sub_resource type="NoiseGenerator" id="NoiseGenerator_gbfbk"]
-seed = 1241
-noise = SubResource("FastNoiseLite_pkg7o")
-octaves = 3
-period = 10.0
-persistence = 0.6
-lacunarity = 2.5
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_k3n1d"]
-render_priority = 0
-shader = ExtResource("8_ic0uy")
-shader_parameter/forcefield_color = Color(0.3, 0.6, 1, 1)
-shader_parameter/edge_intensity = 2.0
-shader_parameter/scan_speed = 0.5
-shader_parameter/scan_scale = 10.0
-shader_parameter/base_alpha = 0.25
-shader_parameter/ripple_pos_1 = Vector3(0, 0, 0)
-shader_parameter/ripple_pos_2 = Vector3(90, 90, 90)
-shader_parameter/ripple_pos_3 = Vector3(180, 180, 180)
-shader_parameter/ripple_time_1 = 1.0000000475
-shader_parameter/ripple_time_2 = 5.0000002375
-shader_parameter/ripple_time_3 = 10.0
-
 [node name="World" type="Node3D" groups=["world"]]
 script = ExtResource("1_fj7yv")
 
@@ -78,24 +39,39 @@ environment = SubResource("Environment_aqk2v")
 transform = Transform3D(-0.5976251, -0.24376634, 0.7638208, 0, 0.9526615, 0.30403307, -0.8017757, 0.1816978, -0.5693344, -10000, 10000, -10000)
 shadow_enabled = true
 
+[node name="VoxelEngine" type="VoxelEngine" parent="."]
+
 [node name="Plains" type="Node3D" parent="."]
+visible = false
 script = ExtResource("2_036b0")
-
-[node name="VoxelEngine" type="VoxelEngine" parent="Plains"]
-
-[node name="VoxelGenerator" type="VoxelGenerator" parent="Plains/VoxelEngine"]
-world_size = Vector3i(10, 5, 10)
-use_textures = true
-terrain_material = ExtResource("4_gbfbk")
-terrain_noise = SubResource("NoiseGenerator_dwbse")
-detail_noise = SubResource("NoiseGenerator_gbfbk")
-forcefield_detection_voxels = 12.0
-forcefield_height = 50.0
-forcefield_buffer = -0.5
-forcefield_shader_material = SubResource("ShaderMaterial_k3n1d")
 
 [node name="DebugForceField" type="Node3D" parent="Plains"]
 script = ExtResource("8_wse8f")
+
+[node name="Mountains" type="Node3D" parent="."]
+visible = false
+script = ExtResource("9_mountains")
+
+[node name="DebugForceField" type="Node3D" parent="Mountains"]
+script = ExtResource("8_wse8f")
+
+[node name="Desert" type="Node3D" parent="."]
+visible = false
+script = ExtResource("10_desert")
+
+[node name="DebugForceField" type="Node3D" parent="Desert"]
+script = ExtResource("8_wse8f")
+
+[node name="Forest" type="Node3D" parent="."]
+visible = false
+script = ExtResource("11_forest")
+
+[node name="DebugForceField" type="Node3D" parent="Forest"]
+script = ExtResource("8_wse8f")
+
+[node name="TerrainMultiBiome" type="Node3D" parent="."]
+visible = false
+script = ExtResource("12_multibiome")
 
 [node name="CentralDebugGUI" parent="." instance=ExtResource("3_tlwt5")]
 
@@ -104,6 +80,3 @@ script = ExtResource("8_wse8f")
 [node name="WorldCamera" type="Camera3D" parent="."]
 transform = Transform3D(-0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, -0.70710677, -40, 0, -40)
 fov = 26.8
-
-[connection signal="forcefield_body_entered" from="Plains/VoxelEngine/VoxelGenerator" to="." method="_on_voxel_generator_forcefield_body_entered"]
-[connection signal="forcefield_body_exited" from="Plains/VoxelEngine/VoxelGenerator" to="." method="_on_voxel_generator_forcefield_body_exited"]

@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  VoxelEngine.h                                                         */
+/*  BiomePreset.h                                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             KEEN VOXEL ENGINE                          */
@@ -28,57 +28,89 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef VOXEL_ENGINE_H
-#define VOXEL_ENGINE_H
+#ifndef BIOME_PRESET_H
+#define BIOME_PRESET_H
 
-#include <godot_cpp/classes/node.hpp>
+#include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/variant/vector3i.hpp>
+#include <godot_cpp/variant/typed_array.hpp>
 
 using namespace godot;
 
 namespace voxel_engine {
 
-class VoxelGenerator;
-
-class VoxelEngine : public Node {
-	GDCLASS(VoxelEngine, Node);
+/// @brief BiomePreset - Resource class wrapping biome configuration for serialization to .tres files
+/// Stores all parameters needed to configure a single biome (height range, temperature, humidity, blocks)
+class BiomePreset : public Resource {
+	GDCLASS(BiomePreset, Resource);
 
 private:
-	VoxelGenerator *voxel_generator = nullptr; // owning raw pointer
+	String biome_name;
+	float min_height = -1.0f;
+	float max_height = 1.0f;
+	float min_temperature = -1.0f;
+	float max_temperature = 1.0f;
+	float min_humidity = -1.0f;
+	float max_humidity = 1.0f;
+	TypedArray<int32_t> surface_blocks; // Array of voxel type IDs for surface layer
+	TypedArray<int32_t> subsurface_blocks; // Array of voxel type IDs for subsurface layer
+	int depth = 4; // Depth of subsurface layer
+	int bedrock_block = 1; // STONE by default (VoxelType::STONE = 1)
+	int filler_block = 1; // STONE by default
 
 protected:
 	static void _bind_methods();
-	void _notification(int p_what);
 
 public:
-	VoxelEngine();
-	~VoxelEngine() override;
+	BiomePreset();
+	~BiomePreset();
 
-	void _init();
+	// Biome name
+	void set_biome_name(const String &p_name);
+	String get_biome_name() const;
 
-	// Factory method: create and own a VoxelGenerator
-	VoxelGenerator *create_generator();
+	// Height range
+	void set_min_height(float p_height);
+	float get_min_height() const;
 
-	// Cleanup: explicitly destroy the owned generator
-	void destroy_generator();
+	void set_max_height(float p_height);
+	float get_max_height() const;
 
-	// Get the owned generator
-	VoxelGenerator *get_voxel_generator() const;
+	// Temperature range
+	void set_min_temperature(float p_temp);
+	float get_min_temperature() const;
 
-	// Load a terrain by name: loads config, creates/replaces generator, applies config
-	// Returns the VoxelGenerator instance, or nullptr on failure
-	VoxelGenerator *load_terrain(const String &terrain_name);
+	void set_max_temperature(float p_temp);
+	float get_max_temperature() const;
 
-	// Deprecated: use create_generator() instead. Kept for backward compatibility.
-	void set_voxel_generator_node(Node *node);
+	// Humidity range
+	void set_min_humidity(float p_humidity);
+	float get_min_humidity() const;
 
-	// Simple proxies
-	void set_voxel(const Vector3i &position, int type);
-	int get_voxel(const Vector3i &position) const;
-	int64_t get_total_voxel_count() const;
+	void set_max_humidity(float p_humidity);
+	float get_max_humidity() const;
+
+	// Surface blocks array
+	void set_surface_blocks(const TypedArray<int32_t> &p_blocks);
+	TypedArray<int32_t> get_surface_blocks() const;
+
+	// Subsurface blocks array
+	void set_subsurface_blocks(const TypedArray<int32_t> &p_blocks);
+	TypedArray<int32_t> get_subsurface_blocks() const;
+
+	// Depth
+	void set_depth(int p_depth);
+	int get_depth() const;
+
+	// Bedrock block type
+	void set_bedrock_block(int p_block);
+	int get_bedrock_block() const;
+
+	// Filler block type
+	void set_filler_block(int p_block);
+	int get_filler_block() const;
 };
 
 } // namespace voxel_engine
 
-#endif // VOXEL_ENGINE_H
+#endif // BIOME_PRESET_H

@@ -15,11 +15,13 @@ extends Control
 # Terrain buttons
 var terrain_buttons: Dictionary = {}  # terrain_name -> Button
 var selected_terrain: String = "Plains"
-var terrain_names: Array = ["Plains", "Mountains", "TerrainMultiBiome"]
+var terrain_names: Array = ["Plains", "Mountains", "Forest", "Desert", "TerrainMultiBiome"]
 var terrain_positions: Dictionary = {
 	"Plains": 300,
 	"Mountains": 550,
-	"TerrainMultiBiome": 800
+	"Forest": 800,
+	"Desert": 1050,
+	"TerrainMultiBiome": 1300
 }
 
 func _ready() -> void:

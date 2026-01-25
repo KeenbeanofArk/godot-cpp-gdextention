@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 StartupState="*res://startup_state.gd"
 MultiTerrainManager="*res://multi_terrain_manager.gd"
+TerrainLoader="*res://terrain_loader.gd"
 
 [display]
 

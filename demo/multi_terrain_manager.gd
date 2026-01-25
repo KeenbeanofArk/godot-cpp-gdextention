@@ -8,6 +8,9 @@ var current_voxel_generator: VoxelGenerator = null
 var player: CharacterBody3D = null
 var player_raycast: RayCast3D = null
 
+# Debug output control
+@export var verbose: bool = false
+
 # Signals
 signal terrain_selected(terrain_name: String, voxel_generator: VoxelGenerator)
 # signal terrain_raycast_changed(terrain_name: String)
@@ -42,33 +45,42 @@ func register_terrains() -> void:
 	if not world:
 		world = get_tree().get_root().get_child(0) if get_tree().get_root().get_child_count() > 0 else null
 
-	var terrain_names = ["Plains", "Mountains", "TerrainMultiBiome"]
+	# Find the single VoxelEngine instance (child of World)
+	var voxel_engine = null
+	if world:
+		voxel_engine = world.find_child("VoxelEngine", true, false) as VoxelEngine
+	
+	if not voxel_engine:
+		push_error("[MultiTerrainManager] VoxelEngine not found in World - terrain switching will not work")
+		return
+
+	# Register all terrain types (for raycast detection)
+	var terrain_names = ["Plains", "Mountains", "Desert", "Forest", "TerrainMultiBiome"]
 	for terrain_name in terrain_names:
 		var terrain_node = null
 		if world:
 			terrain_node = world.find_child(terrain_name, true, false)
 		if terrain_node:
-			var voxel_gen = terrain_node.find_child("VoxelGenerator", true, false) as VoxelGenerator
-			if voxel_gen:
-				terrain_registry[terrain_name] = {
-					"node": terrain_node,
-					"voxel_gen": voxel_gen
-				}
-				print("[MultiTerrainManager] Registered terrain: %s" % terrain_name)
-			else:
-				push_error("MultiTerrainManager: VoxelGenerator not found in %s" % terrain_name)
+			# Just store the terrain node reference - VoxelEngine handles generator creation
+			terrain_registry[terrain_name] = {
+				"node": terrain_node,
+				"voxel_engine": voxel_engine # Single shared VoxelEngine for all terrains
+			}
+			print("[MultiTerrainManager] Registered terrain: %s" % terrain_name)
 		else:
-			push_error("MultiTerrainManager: Terrain node '%s' not found" % terrain_name)
+			if verbose:
+				print("[MultiTerrainManager] Terrain node '%s' not found (skipping)" % terrain_name)
 
-	# Set first terrain as default
+	# Set first terrain as default and load it
 	if not terrain_registry.is_empty():
 		var keys = terrain_registry.keys()
 		current_terrain_name = keys[0]
-		current_voxel_generator = terrain_registry[current_terrain_name]["voxel_gen"]
-	print("[MultiTerrainManager] Initialized with terrain: %s" % current_terrain_name)
-	# Emit initial selection so listeners (GUI, etc.) can bind to the current generator
-	if current_voxel_generator:
-		emit_signal("terrain_selected", current_terrain_name, current_voxel_generator)
+		# Load the first terrain (this creates the VoxelGenerator)
+		current_voxel_generator = voxel_engine.load_terrain(current_terrain_name)
+		print("[MultiTerrainManager] Initialized with terrain: %s" % current_terrain_name)
+		# Emit initial selection so listeners (GUI, etc.) can bind to the current generator
+		if current_voxel_generator:
+			emit_signal("terrain_selected", current_terrain_name, current_voxel_generator)
 
 func get_terrain_from_raycast() -> String:
 	if not player_raycast:
@@ -97,7 +109,15 @@ func switch_to_terrain(terrain_name: String) -> void:
 		return
 
 	current_terrain_name = terrain_name
-	current_voxel_generator = terrain_registry[terrain_name]["voxel_gen"]
+	var terrain_data = terrain_registry[terrain_name]
+	
+	# Load terrain using the single VoxelEngine instance
+	if terrain_data.has("voxel_engine") and terrain_data["voxel_engine"] != null:
+		var voxel_engine = terrain_data["voxel_engine"] as VoxelEngine
+		if voxel_engine:
+			# load_terrain() handles destroying old generator and creating a new one
+			current_voxel_generator = voxel_engine.load_terrain(terrain_name)
+	
 	print("[MultiTerrainManager] Switched to terrain: %s" % current_terrain_name)
 	emit_signal("terrain_selected", current_terrain_name, current_voxel_generator)
 

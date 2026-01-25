@@ -1,0 +1,7 @@
+[gd_resource type="TerrainConfig" format=3 uid="uid://plains001"]
+
+[resource]
+config_name = "Plains"
+world_size = Vector3i(12, 10, 12)
+chunk_size = 8
+resolution = 3

@@ -5,6 +5,8 @@
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
 
+#include "BiomePreset.h"
+#include "TerrainConfig.h"
 #include "VoxelEngine.h"
 #include "VoxelGenerator.h"
 #include "core/chunk.h"
@@ -31,6 +33,10 @@ void initialize_voxel_engine_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(VoxelGenerator);
 	// Register the VoxelEngine facade class
 	GDREGISTER_CLASS(VoxelEngine);
+	// Register the BiomePreset resource class
+	GDREGISTER_CLASS(BiomePreset);
+	// Register the TerrainConfig resource class
+	GDREGISTER_CLASS(TerrainConfig);
 	// Register the NoiseGenerator class
 	GDREGISTER_CLASS(NoiseGenerator);
 	// Register the BiomeGenerator class

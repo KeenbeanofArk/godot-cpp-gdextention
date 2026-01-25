@@ -1,0 +1,11 @@
+[gd_resource type="TerrainConfig" format=3 uid="uid://forest001"]
+
+[resource]
+config_name = "Forest"
+world_size = Vector3i(12, 10, 12)
+chunk_size = 8
+resolution = 3
+seeder = 3456
+terrain_height = 6.0
+terrain_amplitude = 10.0
+rock_influence = 0.2

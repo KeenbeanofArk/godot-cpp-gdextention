@@ -7,49 +7,68 @@ class_name TerrainMultiBiome
 var voxel_generator: VoxelGenerator = null
 var forcefield_active: bool = false
 
-# Four biomes configuration
+# Four biomes configuration - non-overlapping height ranges
 var active_biomes = {
 	"Plains": {
-		"height_range": [0.0, 0.25],
-		"temp_range": [0.4, 0.6],
-		"humidity_range": [0.3, 0.5],
+		"height_range": [-1.0, 0.0],
+		"temp_range": [0.3, 0.7],
+		"humidity_range": [0.3, 0.6],
 		"seed_offset": 1001
 	},
-	"Mountains": {
-		"height_range": [0.6, 1.0],
-		"temp_range": [0.0, 0.3],
-		"humidity_range": [0.2, 0.7],
-		"seed_offset": 2002
-	},
 	"Desert": {
-		"height_range": [0.15, 0.4],
-		"temp_range": [0.7, 1.0],
-		"humidity_range": [0.0, 0.2],
+		"height_range": [0.0, 0.3],
+		"temp_range": [0.6, 1.0],
+		"humidity_range": [0.0, 0.3],
 		"seed_offset": 3003
 	},
 	"Forest": {
-		"height_range": [0.3, 0.55],
-		"temp_range": [0.35, 0.55],
-		"humidity_range": [0.6, 0.9],
+		"height_range": [0.3, 0.6],
+		"temp_range": [0.3, 0.6],
+		"humidity_range": [0.5, 1.0],
 		"seed_offset": 4004
+	},
+	"Mountains": {
+		"height_range": [0.6, 1.0],
+		"temp_range": [0.0, 0.4],
+		"humidity_range": [0.2, 0.8],
+		"seed_offset": 2002
 	}
 }
 
 func _ready() -> void:
-	# Create VoxelGenerator
+	set_process(true)
+	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
+	if terrain_manager:
+		terrain_manager.connect("terrain_selected", Callable(self, "_on_terrain_selected"))
+	if terrain_manager and terrain_manager.current_terrain_name == "MultiB iome":
+		_setup_terrain_instance()
+
+
+func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> void:
+	# MultiB iome manages its own generator, ignore factory generators
+	if terrain_name == "MultiB iome":
+		_setup_terrain_instance()
+
+
+func _setup_terrain_instance() -> void:
+	"""Setup multi-biome terrain instance with signal integration"""
+	if voxel_generator:
+		return # Already initialized
+	
+	# Create VoxelGenerator internally (MultiB iome pattern)
 	voxel_generator = VoxelGenerator.new()
 	add_child(voxel_generator)
 	voxel_generator.set_name("VoxelGenerator")
 	
 	# Fixed world size: 7x7x7 chunks (not dynamic from WorldManager)
-	voxel_generator.world_size = Vector3i(7, 7, 7)
+	voxel_generator.world_size = Vector3i(25, 12, 25)
 	voxel_generator.chunk_size = 8
 	
 	# Generation settings
 	voxel_generator.resolution = 2
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST for performance
 	voxel_generator.surface_band = 4.0
-	voxel_generator.cutoff = 0.0
+	voxel_generator.cutoff = 0.1
 	voxel_generator.lod_level = 6
 	
 	# Terrain generation parameters
@@ -89,9 +108,8 @@ func _ready() -> void:
 	# Print biome configuration
 	print_active_biome_config()
 	
-	# Auto-generate on startup
-	print("[TerrainMultiBiome] Starting generation...")
-	voxel_generator.generate_async()
+	# Do NOT auto-generate here - WorldManager will call generate_terrain()
+	print("[TerrainMultiBiome] Ready - awaiting generate_terrain() call")
 
 
 func setup_multi_biomes() -> void:
@@ -128,63 +146,59 @@ func setup_multi_biomes() -> void:
 	biome_gen.set_humidity_noise(humidity_noise)
 	biome_gen.set_seed(base_seed)
 	biome_gen.set_sea_level(0.0)
-	biome_gen.set_default_voxel(VoxelType.AIR)
+	biome_gen.set_default_voxel(0) # VoxelType.AIR
 	biome_gen.set_blend_distance(8)
 	
-	# Biome 1: Plains
-	# Low elevation, moderate temperature, moderate humidity
+	# Biome 1: Plains - low areas, moderate temp, moderate humidity
 	biome_gen.add_biome_extended(
 		"Plains",
-		0.0, 0.25, # height range
-		0.4, 0.6, # temperature range
-		0.3, 0.5, # humidity range
-		[VoxelType.GRASS], # surface blocks
-		[VoxelType.DIRT], # subsurface blocks
+		-1.0, 0.0, # height range (lowest)
+		0.3, 0.7, # temperature range
+		0.3, 0.6, # humidity range
+		[2], # surface blocks (GRASS)
+		[1], # subsurface blocks (DIRT)
 		4, # depth
-		VoxelType.STONE, # bedrock
-		VoxelType.DIRT # filler
+		3, # bedrock (STONE)
+		1 # filler (DIRT)
 	)
 	
-	# Biome 2: Mountains
-	# High elevation, cold, mixed humidity
-	biome_gen.add_biome_extended(
-		"Mountains",
-		0.6, 1.0, # height range
-		0.0, 0.3, # temperature range (cold)
-		0.2, 0.7, # humidity range
-		[VoxelType.STONE], # surface blocks
-		[VoxelType.COAL], # subsurface blocks
-		3, # depth
-		VoxelType.STONE, # bedrock
-		VoxelType.STONE # filler
-	)
-	
-	# Biome 3: Desert
-	# Low-medium elevation, very hot, very dry
+	# Biome 2: Desert - low-medium areas, hot, dry
 	biome_gen.add_biome_extended(
 		"Desert",
-		0.15, 0.4, # height range
-		0.7, 1.0, # temperature range (hot)
-		0.0, 0.2, # humidity range (dry)
-		[VoxelType.SAND], # surface blocks
-		[VoxelType.SAND], # subsurface blocks
+		0.0, 0.3, # height range
+		0.6, 1.0, # temperature range (hot)
+		0.0, 0.3, # humidity range (dry)
+		[5], # surface blocks (SAND)
+		[5], # subsurface blocks (SAND)
 		2, # depth
-		VoxelType.STONE, # bedrock
-		VoxelType.SAND # filler
+		3, # bedrock (STONE)
+		5 # filler (SAND)
 	)
 	
-	# Biome 4: Forest
-	# Medium elevation, cool-moderate, very wet
+	# Biome 3: Forest - medium areas, moderate temp, wet
 	biome_gen.add_biome_extended(
 		"Forest",
-		0.3, 0.55, # height range
-		0.35, 0.55, # temperature range
-		0.6, 0.9, # humidity range (wet)
-		[VoxelType.GRASS], # surface blocks
-		[VoxelType.DIRT], # subsurface blocks
+		0.3, 0.6, # height range
+		0.3, 0.6, # temperature range
+		0.5, 1.0, # humidity range (wet)
+		[2], # surface blocks (GRASS)
+		[1], # subsurface blocks (DIRT)
 		5, # depth (thicker soil)
-		VoxelType.STONE, # bedrock
-		VoxelType.DIRT # filler
+		3, # bedrock (STONE)
+		1 # filler (DIRT)
+	)
+	
+	# Biome 4: Mountains - high areas, cold
+	biome_gen.add_biome_extended(
+		"Mountains",
+		0.6, 1.0, # height range (highest)
+		0.0, 0.4, # temperature range (cold)
+		0.2, 0.8, # humidity range
+		[3], # surface blocks (STONE)
+		[10], # subsurface blocks (COAL)
+		3, # depth
+		3, # bedrock (STONE)
+		3 # filler (STONE)
 	)
 	
 	# Assign biome generator to voxel generator
@@ -194,11 +208,11 @@ func setup_multi_biomes() -> void:
 func setup_forcefield() -> void:
 	"""Setup forcefield for world boundary containment"""
 	voxel_generator.set_forcefield_enabled(true)
-	voxel_generator.set_forcefield_height(300.0)
+	voxel_generator.set_forcefield_height(200.0)
 	voxel_generator.set_forcefield_collision_enabled(true)
 	voxel_generator.set_forcefield_detection_enabled(true)
-	voxel_generator.set_forcefield_buffer(0.5)
-	voxel_generator.set_forcefield_detection_voxels(3.0)
+	voxel_generator.set_forcefield_buffer(-1.0)
+	voxel_generator.set_forcefield_detection_voxels(10.0)
 	
 	# Setup forcefield shader material if available
 	var shader_material = ShaderMaterial.new()
@@ -280,6 +294,13 @@ func print_active_biome_summary() -> void:
 	print("Active Biomes: %s" % ", ".join(active_biomes.keys()))
 	print("Forcefield: %s" % ("ENABLED" if forcefield_active else "DISABLED"))
 	print("=========================================\n")
+
+
+# Public method for WorldManager compatibility
+func generate_terrain() -> void:
+	"""Generate the multi-biome terrain - called by WorldManager"""
+	print("[TerrainMultiBiome] Starting terrain generation...")
+	voxel_generator.generate_async()
 
 
 # Optional: Public method to switch generation mode

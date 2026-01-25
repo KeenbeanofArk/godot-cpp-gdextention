@@ -118,6 +118,45 @@ void VoxelEngine::destroy_generator() {
 	UtilityFunctions::print("VoxelEngine::destroy_generator: VoxelGenerator destroyed");
 }
 
+VoxelGenerator *VoxelEngine::load_terrain(const String &terrain_name) {
+	UtilityFunctions::print(String("[VoxelEngine::load_terrain] Loading terrain: {0}").format(Array::make(terrain_name)));
+
+	// Destroy any existing generator first
+	if (voxel_generator != nullptr) {
+		UtilityFunctions::print("[VoxelEngine::load_terrain] Destroying existing generator");
+		destroy_generator();
+	}
+
+	// Load the config resource from res://configs/{terrain_name}.tres
+	String config_path = String("res://configs/{0}.tres").format(Array::make(terrain_name));
+	Ref<Resource> config_resource = ResourceLoader::get_singleton()->load(config_path);
+
+	if (!config_resource.is_valid()) {
+		UtilityFunctions::push_error(String("[VoxelEngine::load_terrain] Failed to load config: {0}").format(Array::make(config_path)));
+		// Create generator with defaults even if config fails to load
+		return create_generator();
+	}
+
+	// Create a new generator
+	VoxelGenerator *gen = create_generator();
+	if (!gen) {
+		UtilityFunctions::push_error("[VoxelEngine::load_terrain] Failed to create generator");
+		return nullptr;
+	}
+
+	// Call apply_to_voxel_generator() on the config resource if the method exists
+	// This applies all terrain-specific properties (world_size, resolution, seeder, etc.)
+	if (config_resource->has_method("apply_to_voxel_generator")) {
+		UtilityFunctions::print(String("[VoxelEngine::load_terrain] Applying config to generator").format(Array::make()));
+		config_resource->call("apply_to_voxel_generator", gen);
+	} else {
+		UtilityFunctions::push_warning(String("[VoxelEngine::load_terrain] Config resource {0} does not have apply_to_voxel_generator() method").format(Array::make(config_path)));
+	}
+
+	UtilityFunctions::print(String("[VoxelEngine::load_terrain] Terrain {0} loaded successfully").format(Array::make(terrain_name)));
+	return gen;
+}
+
 VoxelGenerator *VoxelEngine::get_voxel_generator() const {
 	return voxel_generator;
 }
