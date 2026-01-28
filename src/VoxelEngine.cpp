@@ -32,6 +32,7 @@
 #include "VoxelGenerator.h"
 
 // Godot includes
+#include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
@@ -45,6 +46,7 @@ void VoxelEngine::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("create_generator"), &VoxelEngine::create_generator);
 	ClassDB::bind_method(D_METHOD("destroy_generator"), &VoxelEngine::destroy_generator);
 	ClassDB::bind_method(D_METHOD("get_voxel_generator"), &VoxelEngine::get_voxel_generator);
+	ClassDB::bind_method(D_METHOD("load_terrain", "terrain_name"), &VoxelEngine::load_terrain);
 
 	// Deprecated methods (kept for backward compatibility)
 	ClassDB::bind_method(D_METHOD("set_voxel_generator_node", "node"), &VoxelEngine::set_voxel_generator_node);

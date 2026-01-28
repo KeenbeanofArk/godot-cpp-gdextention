@@ -1,7 +1,9 @@
-[gd_resource type="TerrainConfig" format=3 uid="uid://plains001"]
+[gd_resource type="TerrainConfig" load_steps=2 format=3 uid="uid://plains001"]
+
+[ext_resource type="Material" uid="uid://ykdewajhlxx2" path="res://assets/textures/ground/terrain_material.tres" id="1_7ggjd"]
 
 [resource]
 config_name = "Plains"
 world_size = Vector3i(12, 10, 12)
-chunk_size = 8
 resolution = 3
+terrain_material = ExtResource("1_7ggjd")

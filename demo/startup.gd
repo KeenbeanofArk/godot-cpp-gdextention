@@ -15,13 +15,14 @@ extends Control
 # Terrain buttons
 var terrain_buttons: Dictionary = {}  # terrain_name -> Button
 var selected_terrain: String = "Plains"
-var terrain_names: Array = ["Plains", "Mountains", "Forest", "Desert", "TerrainMultiBiome"]
+var terrain_names: Array = ["Plains", "Mountains", "Forest", "Desert", "Swamp", "TerrainMultiBiome"]
 var terrain_positions: Dictionary = {
 	"Plains": 300,
 	"Mountains": 550,
 	"Forest": 800,
 	"Desert": 1050,
-	"TerrainMultiBiome": 1300
+	"Swamp": 1300,
+	"TerrainMultiBiome": 1550
 }
 
 func _ready() -> void:
@@ -29,7 +30,7 @@ func _ready() -> void:
 
 func _create_startup_ui() -> void:
 	# Setup main panel
-	main_panel.size = Vector2(2200, 1400)
+	main_panel.size = Vector2(2400, 1600)
 	main_panel.position = (get_viewport_rect().size - main_panel.size) / 2
 
 	# Panel background style

@@ -69,6 +69,12 @@ script = ExtResource("11_forest")
 [node name="DebugForceField" type="Node3D" parent="Forest"]
 script = ExtResource("8_wse8f")
 
+[node name="Swamp" type="Node3D" parent="."]
+visible = false
+
+[node name="DebugForceField" type="Node3D" parent="Swamp"]
+script = ExtResource("8_wse8f")
+
 [node name="TerrainMultiBiome" type="Node3D" parent="."]
 visible = false
 script = ExtResource("12_multibiome")

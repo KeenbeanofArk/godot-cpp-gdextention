@@ -5,6 +5,7 @@ class_name TerrainMultiBiome
 # Demonstrates: Plains, Mountains, Desert, and Forest biomes from one BiomeGenerator
 
 var voxel_generator: VoxelGenerator = null
+var _pending_generation: bool = false
 var forcefield_active: bool = false
 
 # Four biomes configuration - non-overlapping height ranges
@@ -40,25 +41,29 @@ func _ready() -> void:
 	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
 	if terrain_manager:
 		terrain_manager.connect("terrain_selected", Callable(self, "_on_terrain_selected"))
-	if terrain_manager and terrain_manager.current_terrain_name == "MultiB iome":
+	if terrain_manager and terrain_manager.current_terrain_name == "TerrainMultiBiome":
 		_setup_terrain_instance()
 
 
 func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> void:
-	# MultiB iome manages its own generator, ignore factory generators
-	if terrain_name == "MultiB iome":
-		_setup_terrain_instance()
+	# Use the VoxelEngine-created generator (passed from VoxelEngine.load_terrain)
+	if terrain_name == "TerrainMultiBiome":
+		if generator:
+			voxel_generator = generator
+			_setup_terrain_instance()
+			
+			if _pending_generation:
+				_pending_generation = false
+				generate_terrain()
+		else:
+			push_error("[TerrainMultiBiome] No VoxelGenerator provided by VoxelEngine")
 
 
 func _setup_terrain_instance() -> void:
 	"""Setup multi-biome terrain instance with signal integration"""
-	if voxel_generator:
-		return # Already initialized
-	
-	# Create VoxelGenerator internally (MultiB iome pattern)
-	voxel_generator = VoxelGenerator.new()
-	add_child(voxel_generator)
-	voxel_generator.set_name("VoxelGenerator")
+	if not voxel_generator:
+		push_error("[TerrainMultiBiome] VoxelGenerator not set - cannot setup terrain")
+		return
 	
 	# Fixed world size: 7x7x7 chunks (not dynamic from WorldManager)
 	voxel_generator.world_size = Vector3i(25, 12, 25)
@@ -299,6 +304,12 @@ func print_active_biome_summary() -> void:
 # Public method for WorldManager compatibility
 func generate_terrain() -> void:
 	"""Generate the multi-biome terrain - called by WorldManager"""
+	# Check if generator is available
+	if not voxel_generator:
+		print("[TerrainMultiBiome] VoxelGenerator not yet available, marking generation as pending")
+		_pending_generation = true
+		return
+	
 	print("[TerrainMultiBiome] Starting terrain generation...")
 	voxel_generator.generate_async()
 

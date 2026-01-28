@@ -1,12 +1,14 @@
-[gd_resource type="TerrainConfig" format=3 uid="uid://bttj5f2xtebbc"]
+[gd_resource type="TerrainConfig" load_steps=2 format=3 uid="uid://bttj5f2xtebbc"]
+
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_y4m6m"]
 
 [resource]
 config_name = "Swamp"
 world_size = Vector3i(12, 10, 12)
-chunk_size = 8
 resolution = 4
 seeder = 1500
 terrain_height = -2.0
 terrain_amplitude = 1.0
+noise_generator = SubResource("NoiseGenerator_y4m6m")
 rock_influence = 0.03
 sea_level = -0.5

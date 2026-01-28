@@ -39,18 +39,18 @@ class_name Picele # Picture Element or Pixel
 @onready var gui_node: Node = get_node_or_null("/root/World/CentralDebugGUI")
 
 var terrain_manager: MultiTerrainManager = null
-var voxel_generator_plains: VoxelGenerator
+var voxel_generator: VoxelGenerator
 
 func _ready() -> void:
 	# Get references after node is in tree
 	terrain_manager = get_node_or_null("/root/MultiTerrainManager")
-	voxel_generator_plains = get_node_or_null("../Plains/VoxelEngine/VoxelGenerator")
+	voxel_generator = get_node_or_null("../VoxelEngine/VoxelGenerator")
 	
 	if terrain_manager == null:
 		push_error("[Picele] MultiTerrainManager not found as autoload")
 	
-	if voxel_generator_plains == null:
-		push_error("[Picele] VoxelGenPlains not found at ../Plains/VoxelEngine/VoxelGenerator")
+	if voxel_generator == null:
+		push_error("[Picele] voxel_generator not found at ../VoxelEngine/VoxelGenerator")
 		
 	# Lock mouse cursor to center of screen
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -118,7 +118,7 @@ func _physics_process(delta):
 	# Handle sprint
 	is_sprinting = Input.is_action_pressed("sprint") and stamina > 0.0
 	
-func _input(event):
+func _input(event: InputEvent) -> void:
 	# Only process camera rotation when mouse is captured
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 		rotate_y(-event.relative.x * look_sensitivity)

@@ -63,10 +63,10 @@ private:
 	int seeder = 1240;
 	float terrain_height = 4.0f;
 	float terrain_amplitude = 8.0f;
-	Material *terrain_material = nullptr;
+	Ref<Material> terrain_material;
 	bool use_textures = true;
-	NoiseGenerator *noise_generator = nullptr;
-	BiomeGenerator *biome_generator = nullptr;
+	Ref<NoiseGenerator> noise_generator;
+	Ref<BiomeGenerator> biome_generator;
 	float rock_influence = 0.3f;
 	Array biome_presets; // Array of BiomePreset resources
 	float sea_level = 0.0f;
@@ -111,17 +111,17 @@ public:
 	void set_terrain_amplitude(float p_amplitude);
 	float get_terrain_amplitude() const;
 
-	Material *get_terrain_material() const;
-	void set_terrain_material(Material *p_material);
+	Ref<Material> get_terrain_material() const;
+	void set_terrain_material(const Ref<Material> &p_material);
 
 	bool get_use_textures() const;
 	void set_use_textures(bool p_use_textures);
 
-	NoiseGenerator *get_noise_generator() const;
-	void set_noise_generator(NoiseGenerator *p_noise_generator);
+	Ref<NoiseGenerator> get_noise_generator() const;
+	void set_noise_generator(const Ref<NoiseGenerator> &p_noise_generator);
 
-	BiomeGenerator *get_biome_generator() const;
-	void set_biome_generator(BiomeGenerator *p_biome_generator);
+	Ref<BiomeGenerator> get_biome_generator() const;
+	void set_biome_generator(const Ref<BiomeGenerator> &p_biome_generator);
 
 	// Rock influence
 	void set_rock_influence(float p_influence);

@@ -5,6 +5,7 @@ class_name WorldManager
 @onready var mountains: Node3D = $Mountains
 @onready var desert: Node3D = $Desert
 @onready var forest: Node3D = $Forest
+@onready var swamp: Node3D = $Swamp
 @onready var terrain_multi_biome: Node3D = $TerrainMultiBiome
 
 # World settings
@@ -23,50 +24,28 @@ func _ready():
 		if pending != "":
 			active_terrain = pending
 	
-	# Hide all terrains initially, then show only the selected one
+	# Hide all terrains initially
 	_hide_all_terrains()
-	
-	# Generate and show the active terrain
-	match active_terrain:
-		"Plains":
-			if plains and plains.has_method("generate_plains"):
-				plains.generate_plains()
-				plains.visible = true
-		"Mountains":
-			if mountains and mountains.has_method("generate_mountains"):
-				mountains.generate_mountains()
-				mountains.visible = true
-		"Desert":
-			if desert and desert.has_method("generate_desert"):
-				desert.generate_desert()
-				desert.visible = true
-		"Forest":
-			if forest and forest.has_method("generate_forest"):
-				forest.generate_forest()
-				forest.visible = true
-		"TerrainMultiBiome":
-			if terrain_multi_biome and terrain_multi_biome.has_method("generate_terrain"):
-				terrain_multi_biome.generate_terrain()
-				terrain_multi_biome.visible = true
-		_:
-			# Default to Plains if unknown terrain
-			if plains and plains.has_method("generate_plains"):
-				plains.generate_plains()
-				plains.visible = true
-				active_terrain = "Plains"
 	
 	print("[WorldManager] Active terrain: %s" % active_terrain)
 	
-	# Initialize MultiTerrainManager after world setup
+	# Initialize MultiTerrainManager - it will handle loading and generating terrain
 	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
 	if terrain_manager:
 		terrain_manager.initialize()
 		
-		# Set the active terrain in the manager
+		# Set the active terrain in the manager (this triggers generation via signal)
 		if terrain_manager.terrain_registry.has(active_terrain):
 			terrain_manager.switch_to_terrain(active_terrain)
 		else:
-			print("[WorldManager] Terrain '%s' not registered in manager" % active_terrain)
+			print("[WorldManager] Terrain '%s' not registered in manager, using first available" % active_terrain)
+			# MultiTerrainManager.initialize() already loads the first terrain, so just inform
+			active_terrain = terrain_manager.current_terrain_name
+		
+		# Make the selected terrain visible (critical for rendering)
+		_show_selected_terrain()
+	else:
+		push_error("[WorldManager] MultiTerrainManager not found")
 
 func _hide_all_terrains() -> void:
 	if plains:
@@ -79,6 +58,32 @@ func _hide_all_terrains() -> void:
 		forest.visible = false
 	if terrain_multi_biome:
 		terrain_multi_biome.visible = false
+
+func _show_selected_terrain() -> void:
+	"""Show the currently selected terrain node"""
+	match active_terrain:
+		"Plains":
+			if plains:
+				plains.visible = true
+		"Mountains":
+			if mountains:
+				mountains.visible = true
+		"Desert":
+			if desert:
+				desert.visible = true
+		"Forest":
+			if forest:
+				forest.visible = true
+		"Swamp":
+			if swamp:
+				swamp.visible = true
+		"TerrainMultiBiome":
+			if terrain_multi_biome:
+				terrain_multi_biome.visible = true
+		_:
+			push_error("[WorldManager] Unknown terrain: %s" % active_terrain)
+	
+	print("[WorldManager] Showing terrain: %s" % active_terrain)
 	
 func _on_voxel_generator_forcefield_body_entered(_wall_index: int, body: Object) -> void:
 	# Get current voxel generator from terrain manager

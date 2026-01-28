@@ -36,7 +36,8 @@ func _find_voxel_generator():
 	debug_print_forcefield_state()
 
 func _process(_delta):
-	if Input.is_action_just_pressed("ui_accept"):
+	# F3 for debug print state
+	if Input.is_action_just_pressed("debug_forcefield"):
 		debug_print_forcefield_state()
 
 func debug_print_forcefield_state():
@@ -60,42 +61,73 @@ func debug_print_forcefield_state():
 	print("Buffer: %.2f" % voxel_generator.forcefield_buffer)
 	print("Detection Voxels: %.2f" % voxel_generator.forcefield_detection_voxels)
 	
-	# Find the forcefield root
-	var root = voxel_generator.find_child("ForcefieldRoot")
+	# Get the forcefield root - search properly through voxel generator's children
+	var root = voxel_generator.find_child("ForcefieldRoot", true, false)
 	if not root:
 		# Try asking the generator to (re)create forcefield nodes, then re-check briefly
 		print("\n[WARN] ForcefieldRoot not found, requesting creation and retrying...")
 		if voxel_generator.has_method("create_forcefield_nodes"):
 			voxel_generator.create_forcefield_nodes()
 			# allow a short time for nodes to be added to the scene tree
-			await get_tree().create_timer(0.05).timeout
-			root = voxel_generator.find_child("ForcefieldRoot")
+			await get_tree().create_timer(0.1).timeout
+			root = voxel_generator.find_child("ForcefieldRoot", true, false)
 		if not root:
 			print("\n[ERROR] ForcefieldRoot not found after create_forcefield_nodes()")
+			print("[DEBUG] VoxelGenerator children: %d" % voxel_generator.get_child_count())
+			for i in range(voxel_generator.get_child_count()):
+				var child = voxel_generator.get_child(i)
+				print("  Child %d: %s" % [i, child.name])
 			return
 	
 	print("\nForcefieldRoot found: %s (in_tree: %s)" % [root.name, root.is_inside_tree()])
 	print("ForcefieldRoot children: %d" % root.get_child_count())
+	
+	# Debug: List all children of forcefield root
+	print("ForcefieldRoot child list:")
+	for i in range(root.get_child_count()):
+		var child = root.get_child(i)
+		print("  Child %d: %s (type: %s)" % [i, child.name, child.get_class()])
 	
 	# Check each wall
 	var wall_names = ["NORTH", "SOUTH", "EAST", "WEST", "TOP", "BOTTOM"]
 	for i in range(6):
 		print("\n--- Wall %d (%s) ---" % [i, wall_names[i]])
 		var wall_name = "ForcefieldWall_%d" % i
-		var mi = root.find_child(wall_name)
+		
+		# Debug: Check direct children first
+		var mi = null
+		for child in root.get_children():
+			if child.name == wall_name:
+				mi = child
+				break
+		
+		if not mi:
+			mi = root.find_child(wall_name, true, false)
+		
 		if mi:
 			print("  Visual Mesh: Found ✓")
+			print("    Type: %s" % mi.get_class())
 			print("    Visible: %s" % mi.visible)
 			print("    Position: %s" % mi.position)
 			print("    Mesh: %s" % mi.mesh)
 		else:
 			print("  Visual Mesh: NOT FOUND ✗")
+			print("    [Looking for: '%s']" % wall_name)
 		
 		# Find Area3D
 		var area_name = "ForcefieldArea_%d" % i
-		var area = root.find_child(area_name)
+		var area = null
+		for child in root.get_children():
+			if child.name == area_name:
+				area = child
+				break
+		
+		if not area:
+			area = root.find_child(area_name, true, false)
+		
 		if area:
 			print("  Detection Area: Found ✓")
+			print("    Type: %s" % area.get_class())
 			print("    Position: %s" % area.position)
 			print("    Monitoring: %s" % area.is_monitoring())
 			print("    Monitorable: %s" % area.is_monitorable())
@@ -112,24 +144,38 @@ func debug_print_forcefield_state():
 					if cs.shape:
 						print("      Shape Size: %s" % cs.shape.size)
 				else:
-					print("    CollisionShape3D: NOT FOUND ✗")
+					print("    CollisionShape3D: NOT FOUND ✗ (got %s instead)" % cs.get_class())
 			else:
 				print("    CollisionShape3D: NO CHILDREN ✗")
 		else:
 			print("  Detection Area: NOT FOUND ✗")
+			print("    [Looking for: '%s']" % area_name)
 	
 	print("\n" + "=".repeat(60))
 	print("CONNECTED SIGNALS")
 	print("=".repeat(60))
 	
 	# Check if signals are connected
+	var found_areas = 0
 	for i in range(6):
 		var area_name = "ForcefieldArea_%d" % i
-		var area = root.find_child(area_name)
+		var area = null
+		for child in root.get_children():
+			if child.name == area_name:
+				area = child
+				break
+		
+		if not area:
+			area = root.find_child(area_name, true, false)
+		
 		if area:
+			found_areas += 1
 			var connections = area.get_signal_connection_list("body_entered")
 			print("Area %d body_entered connections: %d" % [i, connections.size()])
 			for conn in connections:
 				print("  -> %s::%s" % [conn.signal.get_object().name, conn.signal.get_name()])
+		else:
+			print("Area %d: NOT FOUND" % i)
 	
+	print("Total areas found: %d/6" % found_areas)
 	print("\n" + "=".repeat(60))

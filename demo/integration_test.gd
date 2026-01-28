@@ -138,12 +138,12 @@ func test_gui_integration() -> void:
 	var test_name = "GUI Integration"
 	print("[TEST] %s..." % test_name)
 	
-	var gui = get_node_or_null("/root/World/CentralDebugGUI")
-	if not gui:
+	var debug_gui = get_node_or_null("/root/World/CentralDebugGUI")
+	if not debug_gui:
 		fail_test(test_name, "GUI node not found")
 		return
 	
-	if not gui.has_method("update_ui_from_voxel_generator"):
+	if not debug_gui.has_method("update_ui_from_voxel_generator"):
 		fail_test(test_name, "GUI missing update_ui_from_voxel_generator method")
 		return
 	

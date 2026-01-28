@@ -179,35 +179,35 @@ float TerrainConfig::get_terrain_amplitude() const {
 	return terrain_amplitude;
 }
 
-void TerrainConfig::set_terrain_material(Material *p_material) {
-	terrain_material = p_material;
-}
-
-Material *TerrainConfig::get_terrain_material() const {
+Ref<Material> TerrainConfig::get_terrain_material() const {
 	return terrain_material;
 }
 
-bool TerrainConfig::get_use_textures() const {
-	return use_textures;
+void TerrainConfig::set_terrain_material(const Ref<Material> &p_material) {
+	terrain_material = p_material;
 }
 
 void TerrainConfig::set_use_textures(bool p_use_textures) {
 	use_textures = p_use_textures;
 }
 
-NoiseGenerator *TerrainConfig::get_noise_generator() const {
+bool TerrainConfig::get_use_textures() const {
+	return use_textures;
+}
+
+Ref<NoiseGenerator> TerrainConfig::get_noise_generator() const {
 	return noise_generator;
 }
 
-void TerrainConfig::set_noise_generator(NoiseGenerator *p_noise_generator) {
+void TerrainConfig::set_noise_generator(const Ref<NoiseGenerator> &p_noise_generator) {
 	noise_generator = p_noise_generator;
 }
 
-BiomeGenerator *TerrainConfig::get_biome_generator() const {
+Ref<BiomeGenerator> TerrainConfig::get_biome_generator() const {
 	return biome_generator;
 }
 
-void TerrainConfig::set_biome_generator(BiomeGenerator *p_biome_generator) {
+void TerrainConfig::set_biome_generator(const Ref<BiomeGenerator> &p_biome_generator) {
 	biome_generator = p_biome_generator;
 }
 

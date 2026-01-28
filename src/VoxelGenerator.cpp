@@ -3093,15 +3093,23 @@ void VoxelGenerator::update_forcefield_nodes() {
 }
 
 void VoxelGenerator::remove_forcefield_nodes() {
+	// Check if forcefield_root is valid and in tree BEFORE logging (to avoid dereferencing invalid ptr in logging)
+	bool root_in_tree = false;
+	if (forcefield_root != nullptr && forcefield_root->is_inside_tree()) {
+		root_in_tree = true;
+	}
+
 	log_message(String("remove_forcefield_nodes() called - forcefield_root ptr={0}, inside_tree={1}")
-						.format(Array::make((int64_t)reinterpret_cast<intptr_t>(forcefield_root),
-								(forcefield_root ? forcefield_root->is_inside_tree() : false))),
+						.format(Array::make((int64_t)reinterpret_cast<intptr_t>(forcefield_root), root_in_tree)),
 			2);
 
-	if (forcefield_root && forcefield_root->is_inside_tree()) {
+	// Only manipulate forcefield_root if it's still valid and in the tree
+	if (root_in_tree) {
 		remove_child(forcefield_root);
 		forcefield_root->queue_free();
 	}
+
+	// Clear all pointers to avoid dangling references
 	forcefield_root = nullptr;
 	for (int i = 0; i < FF_COUNT; ++i) {
 		forcefield_wall_meshes[i] = nullptr;

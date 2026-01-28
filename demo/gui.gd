@@ -18,7 +18,8 @@ var terrain_colors: Dictionary = {
 	"Plains": Color(0.4, 0.8, 0.4), # Green Grass
 	"Mountains": Color(0.7, 0.5, 0.3), # Brown
 	"Desert": Color(0.889, 0.793, 0.674, 1.0), # Tan
-	"Forest": Color(0.16, 0.393, 0.098, 1.0) # Forst Green
+	"Forest": Color(0.16, 0.393, 0.098, 1.0), # Forst Green
+	"Swamp": Color(0.027, 0.027, 0.027, 1.0) # Swampee
 }
 
 @onready var terraform_settings: Control = $TerraformSettings

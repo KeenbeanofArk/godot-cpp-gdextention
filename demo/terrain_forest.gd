@@ -5,6 +5,7 @@ extends Node3D
 var custom_distances = PackedFloat64Array([16, 32, 64, 128, 256, 512, 1024, 2048])
 var t := 1.0
 var voxel_generator: VoxelGenerator
+var _pending_generation: bool = false # Flag to track if generation was requested but pending
 
 func _ready() -> void:
 	set_process(true)
@@ -24,12 +25,19 @@ func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> vo
 	if terrain_name == "Forest":
 		voxel_generator = generator
 		_setup_terrain_instance()
+		
+		# If generation was pending, trigger it now that we have the generator
+		if _pending_generation:
+			_pending_generation = false
+			generate_forest()
 
 func _setup_terrain_instance() -> void:
+	# Validate generator exists
 	if not voxel_generator:
 		push_error("[TerrainForest] No voxel_generator available for setup")
 		return
 	
+	# Find WorldManager to get world size
 	var world_manager = get_tree().get_first_node_in_group("world")
 	
 	# Enable the forcefield (if not already)
@@ -44,20 +52,19 @@ func _setup_terrain_instance() -> void:
 	var shader_res = load("res://scenes/shaders/forcefield.gdshader")
 	if not shader_res:
 		push_error("[TerrainForest] Could not load forcefield shader: res://scenes/shaders/forcefield.gdshader")
-		return
+	else:
+		var mat := ShaderMaterial.new()
+		mat.shader = shader_res
 
-	var mat := ShaderMaterial.new()
-	mat.shader = shader_res
-
-	# Assign the ShaderMaterial to the VoxelGenerator forcefield
-	voxel_generator.set_forcefield_shader_material(mat)
-	
-	# Set shader parameters - forest-themed green color
-	voxel_generator.set_forcefield_shader_param("u_color", Color(0.2, 0.8, 0.3))
-	voxel_generator.set_forcefield_shader_param("u_time_scale", 1.5)
-	voxel_generator.set_forcefield_shader_param("base_alpha", 0.0)
-
-	# Shared terrain material (shader reads biome id from CUSTOM0)
+		# Assign the ShaderMaterial to the VoxelGenerator forcefield (C++ binding)
+		voxel_generator.set_forcefield_shader_material(mat)
+		
+		# Set shader parameters - forest-themed green color
+		voxel_generator.set_forcefield_shader_param("u_color", Color(0.2, 0.8, 0.3))
+		voxel_generator.set_forcefield_shader_param("u_time_scale", 1.5)
+		voxel_generator.set_forcefield_shader_param("base_alpha", 0.0)
+		
+		# Shared terrain material (shader reads biome id from CUSTOM0)
 	voxel_generator.terrain_material = preload("res://scenes/shaders/TerrainBiomeTriplanar.tres")
 	var terrain_mat := voxel_generator.terrain_material
 	if terrain_mat is ShaderMaterial:
@@ -74,9 +81,13 @@ func _setup_terrain_instance() -> void:
 	var forest_config = TerrainLoader.get_config("Forest")
 	if forest_config:
 		forest_config.apply_to_voxel_generator(voxel_generator)
+		# Apply material via script instead of .tres
+		var material = load("res://assets/textures/ground/terrain_material.tres")
+		voxel_generator.set_terrain_material(material)
 	
-	# Override LOD and visual settings specific to forest
-	voxel_generator.generation_mode = 1
+	# Override LOD and visual settings specific to this instance
+	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
+	voxel_generator.use_textures = true
 	voxel_generator.surface_band = 1.5
 	voxel_generator.max_chunks_per_frame = 4
 	voxel_generator.signal_every_n_chunks = 20
@@ -95,7 +106,7 @@ func _setup_terrain_instance() -> void:
 	biome_gen.seed = 44004
 	biome_gen.sea_level = 1.0
 	setup_biomes(biome_gen)
-
+	
 	# Connect to signals
 	voxel_generator.chunk_ready.connect(_on_chunk_ready)
 	voxel_generator.generation_progress.connect(_on_progress)
@@ -105,6 +116,12 @@ func _setup_terrain_instance() -> void:
 	generate_forest()
 
 func generate_forest() -> void:
+	# Check if generator is available
+	if not voxel_generator:
+		print("[TerrainForest] VoxelGenerator not yet available, marking generation as pending")
+		_pending_generation = true
+		return
+	
 	# Start async generation
 	voxel_generator.generate_async()
 	
@@ -166,6 +183,10 @@ func setup_biomes(biome_gen: BiomeGenerator) -> void:
 	print("[TerrainForest] Forest biome configured")
 
 func _process(delta: float) -> void:
+	# Check if generator is valid before accessing it
+	if not voxel_generator or not is_instance_valid(voxel_generator):
+		return
+	
 	t += delta
 	# Animate forcefield parameter
 	voxel_generator.set_forcefield_shader_param("time", t)

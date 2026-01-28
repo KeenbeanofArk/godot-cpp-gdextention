@@ -5,6 +5,7 @@ extends Node3D
 var custom_distances = PackedFloat64Array([16, 32, 64, 128, 256, 512, 1024, 2048])
 var t := 1.0
 var voxel_generator: VoxelGenerator
+var _pending_generation: bool = false # Flag to track if generation was requested but pending
 
 func _ready() -> void:
 	set_process(true)
@@ -24,6 +25,11 @@ func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> vo
 	if terrain_name == "Desert":
 		voxel_generator = generator
 		_setup_terrain_instance()
+		
+		# If generation was pending, trigger it now that we have the generator
+		if _pending_generation:
+			_pending_generation = false
+			generate_desert()
 
 func _setup_terrain_instance() -> void:
 	# Validate generator exists
@@ -51,18 +57,25 @@ func _setup_terrain_instance() -> void:
 		mat.shader = shader_res
 
 		# Assign the ShaderMaterial to the VoxelGenerator forcefield (C++ binding)
+		# This calls `VoxelGenerator::set_forcefield_shader_material(Ref<ShaderMaterial>)` exposed in C++
 		voxel_generator.set_forcefield_shader_material(mat)
 		
-		# Set desert-themed warm color for shader
-		voxel_generator.set_forcefield_shader_param("u_color", Color(1.0, 0.6, 0.2))
+		# Set some shader parameters (example names; adjust to your shader's uniforms)		voxel_generator.set_forcefield_shader_param("u_color", Color(1.0, 0.6, 0.2))
 		voxel_generator.set_forcefield_shader_param("u_time_scale", 1.5)
 		voxel_generator.set_forcefield_shader_param("base_alpha", 0.0)
+
+		# Shared terrain material (shader reads biome id from CUSTOM0)
+	voxel_generator.terrain_material = preload("res://scenes/shaders/TerrainBiomeTriplanar.tres")
+	var terrain_mat := voxel_generator.terrain_material
+	if terrain_mat is ShaderMaterial:
+		preload("res://scenes/shaders/terrain_texture_arrays.gd").new().ensure_default_arrays(terrain_mat)
+	voxel_generator.use_textures = true
 	
 	# Setup Debug
 	voxel_generator.debug_mode = true
 	voxel_generator.debug_verbosity = 2
 	voxel_generator.visualize_noise_values = false
-	voxel_generator.auto_generate = false
+	voxel_generator.auto_generate = false # Make sure this is false before setting world_size
 	
 	# Load terrain configuration from resource and apply to generator
 	var desert_config = TerrainLoader.get_config("Desert")
@@ -90,8 +103,8 @@ func _setup_terrain_instance() -> void:
 	
 	# Configure biome generator for desert
 	var biome_gen = BiomeGenerator.new()
-	biome_gen.seed = 33003
-	biome_gen.sea_level = 1.0
+	biome_gen.seed = 33003 # no verbose
+	biome_gen.sea_level = 1.0 # no verbose
 	setup_biomes(biome_gen)
 	
 	# Connect to signals
@@ -103,6 +116,12 @@ func _setup_terrain_instance() -> void:
 	generate_desert()
 
 func generate_desert() -> void:
+	# Check if generator is available
+	if not voxel_generator:
+		print("[TerrainDesert] VoxelGenerator not yet available, marking generation as pending")
+		_pending_generation = true
+		return
+	
 	# Start async generation
 	voxel_generator.generate_async()
 	
@@ -164,6 +183,15 @@ func setup_biomes(biome_gen: BiomeGenerator) -> void:
 	print("[TerrainDesert] Desert biome configured")
 
 func _process(delta: float) -> void:
+	# Check if generator is valid before accessing it
+	if not voxel_generator or not is_instance_valid(voxel_generator):
+		return
+	
+	voxel_generator.lod_reference_position = picele.global_position
+	var changed_count = voxel_generator.update_chunks_lod()
+	if changed_count > 0:
+		voxel_generator.regenerate_dirty_chunks()
+	
 	t += delta
 	# Animate forcefield parameter
 	voxel_generator.set_forcefield_shader_param("time", t)

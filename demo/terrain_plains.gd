@@ -2,9 +2,10 @@ extends Node3D
 
 @onready var picele: CharacterBody3D = $"../Picele"
 
-var custom_distances = PackedFloat64Array([16, 32, 64, 128, 256, 512, 1024, 2048])
+var custom_distances = PackedFloat64Array([20, 40, 80, 160, 320, 640, 1280, 2560])
 var t := 1.0
 var voxel_generator: VoxelGenerator
+var _pending_generation: bool = false # Flag to track if generation was requested but pending
 
 func _ready() -> void:
 	set_process(true)
@@ -24,6 +25,11 @@ func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> vo
 	if terrain_name == "Plains":
 		voxel_generator = generator
 		_setup_terrain_instance()
+		
+		# If generation was pending, trigger it now that we have the generator
+		if _pending_generation:
+			_pending_generation = false
+			generate_plains()
 
 func _setup_terrain_instance() -> void:
 	# Validate generator exists
@@ -58,6 +64,13 @@ func _setup_terrain_instance() -> void:
 		voxel_generator.set_forcefield_shader_param("u_color", Color(0.0, 0.8, 1.0))
 		voxel_generator.set_forcefield_shader_param("u_time_scale", 1.5)
 		voxel_generator.set_forcefield_shader_param("base_alpha", 0.0)
+
+		# Shared terrain material (shader reads biome id from CUSTOM0)
+	voxel_generator.terrain_material = preload("res://scenes/shaders/TerrainBiomeTriplanar.tres")
+	var terrain_mat := voxel_generator.terrain_material
+	if terrain_mat is ShaderMaterial:
+		preload("res://scenes/shaders/terrain_texture_arrays.gd").new().ensure_default_arrays(terrain_mat)
+	voxel_generator.use_textures = true
 	
 	# Setup Debug
 	voxel_generator.debug_mode = true
@@ -69,6 +82,9 @@ func _setup_terrain_instance() -> void:
 	var plains_config = TerrainLoader.get_config("Plains")
 	if plains_config:
 		plains_config.apply_to_voxel_generator(voxel_generator)
+		# Apply material via script instead of .tres
+		var material = load("res://assets/textures/ground/terrain_material.tres")
+		voxel_generator.set_terrain_material(material)
 	
 	# Override LOD and visual settings specific to this instance
 	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
@@ -85,13 +101,19 @@ func _setup_terrain_instance() -> void:
 	voxel_generator.heightmap_vertex_limit = 534000000
 	voxel_generator.show_voxel_grid = false
 	voxel_generator.show_chunk_grid = false
+		
+	# Configure terrain - Mountains have dramatic height
+	voxel_generator.terrain_height = 0.0
+	voxel_generator.terrain_amplitude = 0.0
+	voxel_generator.rock_influence = 0.0
+	voxel_generator.cutoff = 0.1
 	
-	# Configure biome generator
+	# Configure biome generator for mountains
 	var biome_gen = BiomeGenerator.new()
 	biome_gen.seed = 12345 # no verbose
 	biome_gen.sea_level = 1.0 # no verbose
 	setup_biomes(biome_gen)
-	
+
 	# Connect to signals
 	voxel_generator.chunk_ready.connect(_on_chunk_ready)
 	voxel_generator.generation_progress.connect(_on_progress)
@@ -101,6 +123,12 @@ func _setup_terrain_instance() -> void:
 	generate_plains()
 
 func generate_plains() -> void:
+	# Check if generator is available
+	if not voxel_generator:
+		print("[TerrainPlains] VoxelGenerator not yet available, marking generation as pending")
+		_pending_generation = true
+		return
+	
 	# Start async generation
 	voxel_generator.generate_async()
 	
@@ -146,53 +174,22 @@ func setup_biomes(biome_gen: BiomeGenerator):
 		Voxel.STONE # Filler Block
 		)
 
-	## Mountains
-	#var stone: Array[int] = [Voxel.STONE]
-	#biome_gen.add_biome_extended(
-		#"Mountains", 
-		#0.7, 
-		#1.0, 
-		#0.0, 
-		#0.5, 
-		#0.2, 
-		#0.8,
-		#stone, 
-		#stone, 
-		#2, 
-		#Voxel.STONE, 
-		#Voxel.STONE
-		#)
-#
-	## Desert
-	#var sand: Array[int] = [Voxel.SAND]
-	#biome_gen.add_biome_extended(
-		#"Desert", 
-		#0.2, 
-		#0.5, 
-		#0.7, 
-		#1.0, 
-		#0.0, 
-		#0.3,
-		#sand, 
-		#sand, 
-		#2, 
-		#Voxel.STONE, 
-		#Voxel.SAND
-		#)
-		
+
 	voxel_generator.biome_generator = biome_gen
 
 	# Print sampled biome height range for debugging (normalized units)
-	_print_biome_height_range(biome_gen)
+	_print_biome_height_range(biome_gen, 8, 10.0)
 
-func _process(delta):
+func _process(delta: float) -> void:
+	# Check if generator is valid before accessing it
+	if not voxel_generator or not is_instance_valid(voxel_generator):
+		return
+	
 	voxel_generator.lod_reference_position = picele.global_position
 	var changed_count = voxel_generator.update_chunks_lod()
 	if changed_count > 0:
 		voxel_generator.regenerate_dirty_chunks()
 	
-	if not voxel_generator:
-		return
 	t += delta
 	
 	# Oscillate brightness uniform if shader exposes one
@@ -202,7 +199,7 @@ func _process(delta):
 
 func _print_biome_height_range(biome_gen: BiomeGenerator, samples: int = 8, spacing: float = 10.0) -> void:
 	if not biome_gen:
-		print("[TerrainPlains] No biome generator to sample")
+		print("No biome generator to sample")
 		return
 	var min_h := 1e9
 	var max_h := -1e9
@@ -214,5 +211,5 @@ func _print_biome_height_range(biome_gen: BiomeGenerator, samples: int = 8, spac
 			min_h = min(min_h, h)
 			max_h = max(max_h, h)
 			
-	print("[TerrainPlains] Biome Height Range: Min = %.2f, Max = %.2f" % [min_h, max_h])
-	print("[TerrainPlains] Biome Generator Details: ", biome_gen)
+	print("[TerrainMountains] Biome Height Range: Min = %.2f, Max = %.2f" % [min_h, max_h])
+	print("[TerrainMountains] Biome Generator Details: ", biome_gen)

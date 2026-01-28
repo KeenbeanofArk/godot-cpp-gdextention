@@ -55,7 +55,7 @@ func register_terrains() -> void:
 		return
 
 	# Register all terrain types (for raycast detection)
-	var terrain_names = ["Plains", "Mountains", "Desert", "Forest", "TerrainMultiBiome"]
+	var terrain_names = ["Plains", "Mountains", "Desert", "Forest", "Swamp", "TerrainMultiBiome"]
 	for terrain_name in terrain_names:
 		var terrain_node = null
 		if world:
@@ -75,12 +75,17 @@ func register_terrains() -> void:
 	if not terrain_registry.is_empty():
 		var keys = terrain_registry.keys()
 		current_terrain_name = keys[0]
-		# Load the first terrain (this creates the VoxelGenerator)
-		current_voxel_generator = voxel_engine.load_terrain(current_terrain_name)
-		print("[MultiTerrainManager] Initialized with terrain: %s" % current_terrain_name)
-		# Emit initial selection so listeners (GUI, etc.) can bind to the current generator
-		if current_voxel_generator:
-			emit_signal("terrain_selected", current_terrain_name, current_voxel_generator)
+		# Load the terrain using VoxelEngine
+		# Special case: TerrainMultiBiome creates its generator when explicitly selected, not during init
+		if current_terrain_name != "TerrainMultiBiome":
+			current_voxel_generator = voxel_engine.load_terrain(current_terrain_name)
+			print("[MultiTerrainManager] Initialized with terrain: %s" % current_terrain_name)
+			# Emit initial selection so listeners (GUI, etc.) can bind to the current generator
+			if current_voxel_generator:
+				emit_signal("terrain_selected", current_terrain_name, current_voxel_generator)
+		else:
+			# TerrainMultiBiome will create its generator when explicitly selected
+			print("[MultiTerrainManager] Initialized with terrain: %s (will create generator on selection)" % current_terrain_name)
 
 func get_terrain_from_raycast() -> String:
 	if not player_raycast:
@@ -111,11 +116,12 @@ func switch_to_terrain(terrain_name: String) -> void:
 	current_terrain_name = terrain_name
 	var terrain_data = terrain_registry[terrain_name]
 	
-	# Load terrain using the single VoxelEngine instance
+	# All terrains now use VoxelEngine.load_terrain() - unified pattern
 	if terrain_data.has("voxel_engine") and terrain_data["voxel_engine"] != null:
 		var voxel_engine = terrain_data["voxel_engine"] as VoxelEngine
 		if voxel_engine:
 			# load_terrain() handles destroying old generator and creating a new one
+			# This works for all terrains including TerrainMultiBiome
 			current_voxel_generator = voxel_engine.load_terrain(terrain_name)
 	
 	print("[MultiTerrainManager] Switched to terrain: %s" % current_terrain_name)
@@ -123,8 +129,9 @@ func switch_to_terrain(terrain_name: String) -> void:
 
 func get_all_voxel_generators() -> Array[VoxelGenerator]:
 	var generators: Array[VoxelGenerator] = []
-	for terrain_data in terrain_registry.values():
-		generators.append(terrain_data["voxel_gen"])
+	# With the shared VoxelEngine model, return the current active generator
+	if current_voxel_generator:
+		generators.append(current_voxel_generator)
 	return generators
 
 func get_raycast_info() -> Dictionary:
