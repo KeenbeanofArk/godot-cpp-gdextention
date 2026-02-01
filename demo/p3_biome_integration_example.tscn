@@ -1,0 +1,41 @@
+[gd_scene load_steps=9 format=3 uid="uid://cxhbgo5ykaojt"]
+
+[ext_resource type="Script" uid="uid://bmnobpfsn1u4k" path="res://p3_biome_integration_example.gd" id="1_jvaau"]
+[ext_resource type="PackedScene" uid="uid://cp6m8e8v6rkjm" path="res://player/picele.tscn" id="2_l7bkx"]
+[ext_resource type="Shader" uid="uid://cg66uhbbmrxru" path="res://world.gdshader" id="2_sce3e"]
+[ext_resource type="Texture2D" uid="uid://7ov1ocn8s6b3" path="res://assets/textures/ground/Ground079S_1K-PNG_Color.png" id="3_qlgxh"]
+[ext_resource type="Texture2D" uid="uid://te7ikjhfdhwf" path="res://assets/textures/sky/NightSkyHDRI014_4K_TONEMAPPED.jpg" id="4_vdsxx"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_8bfdq"]
+shader = ExtResource("2_sce3e")
+shader_parameter/sky_tex = ExtResource("4_vdsxx")
+shader_parameter/sun_pos = Vector3(-10000, 10000, -10000)
+shader_parameter/planet_tex = ExtResource("3_qlgxh")
+shader_parameter/planet_radius = 500.0
+
+[sub_resource type="Sky" id="Sky_tlwt5"]
+sky_material = SubResource("ShaderMaterial_8bfdq")
+
+[sub_resource type="Environment" id="Environment_v5enw"]
+background_mode = 2
+sky = SubResource("Sky_tlwt5")
+
+[node name="P3BiomeIntegration" type="Node3D"]
+script = ExtResource("1_jvaau")
+
+[node name="WorldCamera" type="Camera3D" parent="."]
+transform = Transform3D(-0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, -0.70710677, -40, 0, -40)
+fov = 26.8
+
+[node name="Lighting" type="Node3D" parent="."]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="Lighting"]
+environment = SubResource("Environment_v5enw")
+
+[node name="Sun" type="DirectionalLight3D" parent="Lighting"]
+transform = Transform3D(-0.5976251, -0.24376634, 0.7638208, 0, 0.9526615, 0.30403307, -0.8017757, 0.1816978, -0.5693344, -10000, 10000, -10000)
+shadow_enabled = true
+
+[node name="VoxelEngine" type="VoxelEngine" parent="."]
+
+[node name="Picele" parent="." instance=ExtResource("2_l7bkx")]

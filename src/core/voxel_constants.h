@@ -136,6 +136,23 @@ enum class FeatureType {
 	STRUCTURE
 };
 
+/// @brief SubsurfaceLayer - Defines a block layer with absolute Y-coordinate range.
+/// Used for vertical terrain composition: stacking different block types at different depths.
+/// When Y-ranges overlap, first registered layer wins (iteration order = priority).
+struct SubsurfaceLayer {
+	int block_type; // Block type to place in this Y range (must match VoxelType enum)
+	int y_min; // Minimum Y coordinate (absolute world position, inclusive)
+	int y_max; // Maximum Y coordinate (absolute world position, inclusive)
+	float density; // Density multiplier for this layer (0.0-1.0; unused if 0.0)
+
+	SubsurfaceLayer() : block_type(0), y_min(0), y_max(0), density(1.0f) {}
+	SubsurfaceLayer(int p_type, int p_min, int p_max, float p_density = 1.0f) :
+			block_type(p_type),
+			y_min(p_min),
+			y_max(p_max),
+			density(p_density) {}
+};
+
 } // namespace voxel_engine
 
 #endif // VOXEL_CONSTANTS_H

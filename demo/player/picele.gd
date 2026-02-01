@@ -39,23 +39,22 @@ class_name Picele # Picture Element or Pixel
 @onready var gui_node: Node = get_node_or_null("/root/World/CentralDebugGUI")
 
 var terrain_manager: MultiTerrainManager = null
-var voxel_generator: VoxelGenerator
+var voxel_generator: VoxelGenerator = null
 
 func _ready() -> void:
 	# Get references after node is in tree
-	terrain_manager = get_node_or_null("/root/MultiTerrainManager")
-	voxel_generator = get_node_or_null("../VoxelEngine/VoxelGenerator")
-	
+	#terrain_manager = get_node_or_null("/root/MultiTerrainManager")
+	terrain_manager = get_tree().root.find_child("MultiTerrainManager", true, false)
 	if terrain_manager == null:
 		push_error("[Picele] MultiTerrainManager not found as autoload")
 	
-	if voxel_generator == null:
-		push_error("[Picele] voxel_generator not found at ../VoxelEngine/VoxelGenerator")
-		
-	# Lock mouse cursor to center of screen
+	# Defer VoxelGenerator lookup to next frame (p3_biome_integration_example creates it in its _ready)
+	call_deferred("_find_voxel_generator")
+			
+	# Lock mouse cursor to center of screen	
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	add_to_group("player")
-	global_position = Vector3(0.0, 15.0, 0.0)
+	global_position = Vector3(0.0, 200.0, 0.0)
 	# Ensure the raycast can hit world geometry (layer 1) while keeping existing masks
 	picele_ray_cast.set_collision_mask_value(1, true)
 
@@ -144,11 +143,11 @@ func terraform_dig():
 		return
 	
 	var hit_position = raycast_info["position"]
-	var all_generators = terrain_manager.get_all_voxel_generators()
+	# var all_generators = terrain_manager.get_all_voxel_generators()
 	
 	# Apply terraform to all terrain generators (each will handle collisions independently)
-	for voxel_gen in all_generators:
-		voxel_gen.dig_sphere(hit_position, dig_radius, dig_strength)
+	# for voxel_gen in all_generators:
+	voxel_generator.dig_sphere(hit_position, dig_radius, dig_strength)
 	
 	var distance = raycast_info["distance"]
 	print("[Picele] Terraforming at: %s (distance: %.2f)" % [hit_position, distance])
@@ -165,11 +164,19 @@ func terraform_build():
 		return
 	
 	var hit_position = raycast_info["position"]
-	var all_generators = terrain_manager.get_all_voxel_generators()
+	# var all_generators = terrain_manager.get_all_voxel_generators()
 	
 	# Apply terraform to all terrain generators (each will handle collisions independently)
-	for voxel_gen in all_generators:
-		voxel_gen.build_sphere(hit_position, build_radius, build_strength)
-	
+	# for voxel_gen in all_generators:
+	voxel_generator.build_sphere(hit_position, build_radius, build_strength)
+		
 	var distance = raycast_info["distance"]
 	print("[Picele] Terraforming at: %s (distance: %.2f)" % [hit_position, distance])
+
+## Find VoxelGenerator (deferred lookup to wait for scene tree initialization)
+func _find_voxel_generator() -> void:
+	voxel_generator = get_tree().root.find_child("VoxelGenerator", true, false)
+	if voxel_generator == null:
+		push_error("[Picele] voxel_generator not found in tree after deferred lookup.")
+	else:
+		print("[Picele] voxel_generator found: ", voxel_generator.name)

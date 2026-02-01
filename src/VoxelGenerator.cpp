@@ -1838,9 +1838,9 @@ void VoxelGenerator::generate() {
 					float y_min_world = world_y_center - eff_surface_band;
 					float y_max_world = world_y_center + eff_surface_band;
 
-					// Convert to voxel indices
-					int iy_min = std::max(0, static_cast<int>((y_min_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
-					int iy_max = std::min(total_voxels_y - 1, static_cast<int>((y_max_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
+					// Convert to voxel indices using std::floor for consistent rounding
+					int iy_min = std::max(0, static_cast<int>(std::floor((y_min_world + physical_extent.y * 0.5f) / eff_voxel_size.y)));
+					int iy_max = std::min(total_voxels_y - 1, static_cast<int>(std::floor((y_max_world + physical_extent.y * 0.5f) / eff_voxel_size.y)));
 
 					// Only process voxels within the surface band
 					for (int iy = iy_min; iy <= iy_max; ++iy) {
@@ -3426,6 +3426,37 @@ Color VoxelGenerator::get_biome_debug_color(int biome_index) const {
 	return palette[biome_index % palette_size];
 }
 
+Color VoxelGenerator::get_voxel_type_color(int voxel_type) const {
+	// Map voxel types to distinct colors for layer visualization
+	// These correspond to VoxelType enum in core/voxel.h
+	switch (voxel_type) {
+		case 0:
+			return Color(0.2f, 0.2f, 0.2f); // AIR - dark gray/black
+		case 1:
+			return Color(0.6f, 0.4f, 0.2f); // DIRT - brown
+		case 2:
+			return Color(0.1f, 0.6f, 0.1f); // GRASS - green
+		case 3:
+			return Color(0.5f, 0.5f, 0.5f); // STONE - gray
+		case 4:
+			return Color(0.2f, 0.5f, 0.8f); // WATER - blue
+		case 5:
+			return Color(0.9f, 0.8f, 0.4f); // SAND - yellow/tan
+		case 6:
+			return Color(0.8f, 0.3f, 0.0f); // LAVA - orange/red
+		case 7:
+			return Color(1.0f, 0.8f, 0.0f); // GOLD - gold/bright yellow
+		case 8:
+			return Color(0.0f, 0.8f, 1.0f); // DIAMOND - cyan/light blue
+		case 9:
+			return Color(0.8f, 0.8f, 0.8f); // IRON - light gray
+		case 10:
+			return Color(0.3f, 0.3f, 0.3f); // COAL - very dark gray
+		default:
+			return Color(1.0f, 0.0f, 1.0f); // Unknown - magenta (error indicator)
+	}
+}
+
 int VoxelGenerator::apply_features_to_chunk(Chunk *chunk) {
 	if (!chunk) {
 		return 0;
@@ -4149,18 +4180,19 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 				}
 				Color custom0_color(static_cast<float>(biome_index_for_textures) / 255.0f, 0.0f, 0.0f, 0.0f);
 
-				// Calculate color based on position or LOD visualization
+				// Calculate default color based on position or LOD visualization
+				// This will be overridden by per-vertex layer colors if biome system is active
 				int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
 				int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
 				int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
-				Color color;
+				Color default_color;
 				if (show_lod_colors) {
-					color = get_lod_color(lod_level);
+					default_color = get_lod_color(lod_level);
 				} else if (biome_generator.is_valid()) {
 					int biome_index = biome_generator->get_biome_index_at(center.x, center.z);
-					color = get_biome_debug_color(biome_index);
+					default_color = get_biome_debug_color(biome_index);
 				} else {
-					color = Color(
+					default_color = Color(
 							(center.x + total_voxels_x * 0.5f) / (float)total_voxels_x,
 							(center.y + total_voxels_y * 0.5f) / (float)total_voxels_y,
 							(center.z + total_voxels_z * 0.5f) / (float)total_voxels_z);
@@ -4193,6 +4225,39 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 					Vector3 vector_b = vertex2 - vertex1;
 					Vector3 normal = vector_a.cross(vector_b).normalized();
 
+					// Calculate per-vertex layer colors (if biome system is active)
+					// Each vertex gets colored based on its Y position and the biome layer at that height
+					Color color1 = default_color;
+					Color color2 = default_color;
+					Color color3 = default_color;
+
+					if (biome_generator.is_valid() && !show_lod_colors) {
+						// Query voxel type at each vertex's Y position for layer-based coloring
+						Ref<Voxel> voxel1 = biome_generator->get_voxel_at(
+								static_cast<int>(vertex1.x),
+								static_cast<int>(vertex1.y),
+								static_cast<int>(vertex1.z));
+						if (voxel1.is_valid()) {
+							color1 = get_voxel_type_color(voxel1->get_type());
+						}
+
+						Ref<Voxel> voxel2 = biome_generator->get_voxel_at(
+								static_cast<int>(vertex2.x),
+								static_cast<int>(vertex2.y),
+								static_cast<int>(vertex2.z));
+						if (voxel2.is_valid()) {
+							color2 = get_voxel_type_color(voxel2->get_type());
+						}
+
+						Ref<Voxel> voxel3 = biome_generator->get_voxel_at(
+								static_cast<int>(vertex3.x),
+								static_cast<int>(vertex3.y),
+								static_cast<int>(vertex3.z));
+						if (voxel3.is_valid()) {
+							color3 = get_voxel_type_color(voxel3->get_type());
+						}
+					}
+
 					// Add vertices to mesh data
 					mesh_data.vertices.push_back(vertex1);
 					mesh_data.vertices.push_back(vertex2);
@@ -4202,9 +4267,9 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 					mesh_data.normals.push_back(normal);
 					mesh_data.normals.push_back(normal);
 
-					mesh_data.colors.push_back(color);
-					mesh_data.colors.push_back(color);
-					mesh_data.colors.push_back(color);
+					mesh_data.colors.push_back(color1);
+					mesh_data.colors.push_back(color2);
+					mesh_data.colors.push_back(color3);
 
 					mesh_data.custom0.push_back(custom0_color);
 					mesh_data.custom0.push_back(custom0_color);
@@ -4396,6 +4461,39 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 					Vector3 vector_b = vertex2 - vertex1;
 					Vector3 normal = vector_a.cross(vector_b).normalized();
 
+					// Calculate per-vertex layer colors (if biome system is active)
+					// Each vertex gets colored based on its Y position and the biome layer at that height
+					Color color1 = color;
+					Color color2 = color;
+					Color color3 = color;
+
+					if (biome_generator.is_valid() && !show_lod_colors) {
+						// Query voxel type at each vertex's Y position for layer-based coloring
+						Ref<Voxel> voxel1 = biome_generator->get_voxel_at(
+								static_cast<int>(vertex1.x),
+								static_cast<int>(vertex1.y),
+								static_cast<int>(vertex1.z));
+						if (voxel1.is_valid()) {
+							color1 = get_voxel_type_color(voxel1->get_type());
+						}
+
+						Ref<Voxel> voxel2 = biome_generator->get_voxel_at(
+								static_cast<int>(vertex2.x),
+								static_cast<int>(vertex2.y),
+								static_cast<int>(vertex2.z));
+						if (voxel2.is_valid()) {
+							color2 = get_voxel_type_color(voxel2->get_type());
+						}
+
+						Ref<Voxel> voxel3 = biome_generator->get_voxel_at(
+								static_cast<int>(vertex3.x),
+								static_cast<int>(vertex3.y),
+								static_cast<int>(vertex3.z));
+						if (voxel3.is_valid()) {
+							color3 = get_voxel_type_color(voxel3->get_type());
+						}
+					}
+
 					// Add vertices to mesh data
 					vertices.push_back(vertex1);
 					vertices.push_back(vertex2);
@@ -4405,9 +4503,9 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 					normals.push_back(normal);
 					normals.push_back(normal);
 
-					colors.push_back(color);
-					colors.push_back(color);
-					colors.push_back(color);
+					colors.push_back(color1);
+					colors.push_back(color2);
+					colors.push_back(color3);
 
 					custom0.push_back(custom0_color);
 					custom0.push_back(custom0_color);

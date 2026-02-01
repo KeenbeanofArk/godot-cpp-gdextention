@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://crtepax5ep43b"]
+
+[ext_resource type="Script" uid="uid://bhufjk4e6bh2r" path="res://test_y_range_biomes.gd" id="1_sli02"]
+
+[node name="TestYRangeBiomes" type="Node3D"]
+script = ExtResource("1_sli02")
+
+[node name="VoxelEngine" type="VoxelEngine" parent="."]

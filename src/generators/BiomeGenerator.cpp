@@ -98,6 +98,7 @@ void BiomeGenerator::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("add_biome", "name", "min_height", "max_height", "min_temperature", "max_temperature", "min_humidity", "max_humidity", "surface_blocks", "subsurface_blocks", "depth"), &BiomeGenerator::add_biome);
 	ClassDB::bind_method(D_METHOD("add_biome_extended", "name", "min_height", "max_height", "min_temperature", "max_temperature", "min_humidity", "max_humidity", "surface_blocks", "subsurface_blocks", "depth", "bedrock_block", "filler_block"), &BiomeGenerator::add_biome_extended);
+	ClassDB::bind_method(D_METHOD("add_biome_with_y_ranges", "name", "min_height", "max_height", "min_temperature", "max_temperature", "min_humidity", "max_humidity", "surface_blocks", "subsurface_layers", "bedrock_block", "filler_block"), &BiomeGenerator::add_biome_with_y_ranges);
 	ClassDB::bind_method(D_METHOD("clear_biomes"), &BiomeGenerator::clear_biomes);
 	ClassDB::bind_method(D_METHOD("get_biome_count"), &BiomeGenerator::get_biome_count);
 	ClassDB::bind_method(D_METHOD("get_biome_data", "index"), &BiomeGenerator::get_biome_data);
@@ -266,6 +267,54 @@ void BiomeGenerator::add_biome_extended(const String &name,
 	biome.depth = depth;
 	biome.bedrock_block = bedrock_block;
 	biome.filler_block = filler_block;
+
+	biomes.push_back(biome);
+}
+
+void BiomeGenerator::add_biome_with_y_ranges(const String &name,
+		float min_height, float max_height,
+		float min_temperature, float max_temperature,
+		float min_humidity, float max_humidity,
+		const TypedArray<int32_t> &surface_blocks,
+		const Array &subsurface_layers_array,
+		int bedrock_block,
+		int filler_block) {
+	BiomeData biome;
+	biome.name = name;
+	biome.min_height = min_height;
+	biome.max_height = max_height;
+	biome.min_temperature = min_temperature;
+	biome.max_temperature = max_temperature;
+	biome.min_humidity = min_humidity;
+	biome.max_humidity = max_humidity;
+	biome.surface_blocks = surface_blocks;
+	biome.bedrock_block = bedrock_block;
+	biome.filler_block = filler_block;
+
+	// Convert Array of Dictionaries to Vector<SubsurfaceLayer>
+	for (int i = 0; i < subsurface_layers_array.size(); ++i) {
+		Variant v = subsurface_layers_array[i];
+		if (v.get_type() == Variant::DICTIONARY) {
+			Dictionary dict = v;
+			SubsurfaceLayer layer;
+			if (dict.has("block_type")) {
+				layer.block_type = static_cast<int>(dict["block_type"]);
+			}
+			if (dict.has("y_min")) {
+				layer.y_min = static_cast<int>(dict["y_min"]);
+			}
+			if (dict.has("y_max")) {
+				layer.y_max = static_cast<int>(dict["y_max"]);
+			}
+			if (dict.has("density")) {
+				layer.density = static_cast<float>(dict["density"]);
+			}
+			biome.subsurface_layers.push_back(layer);
+		}
+	}
+
+	// Note: depth field left uninitialized (DEPRECATED - use subsurface_layers instead)
+	// Note: subsurface_blocks left uninitialized (DEPRECATED - use subsurface_layers instead)
 
 	biomes.push_back(biome);
 }
@@ -506,6 +555,47 @@ Ref<Voxel> BiomeGenerator::get_voxel_at(int x, int y, int z) const {
 	}
 
 	const BiomeData &primary_biome = biomes[primary_biome_index];
+
+	// ====== P2: Y-Range Based Layer Selection (NEW SYSTEM) ======
+	// First, try Y-range based subsurface layers (if defined)
+	if (primary_biome.subsurface_layers.size() > 0) {
+		// Iterate through Y-range layers in priority order (first match wins)
+		for (const auto &layer : primary_biome.subsurface_layers) {
+			if (y >= layer.y_min && y <= layer.y_max) {
+				// Found matching Y-range layer
+				// Use the block_type with density consideration
+				int block_type = layer.block_type;
+				if (block_type != 0) {
+					// Apply density: if density < 1.0, sometimes use default voxel based on hash
+					if (layer.density >= 1.0f) {
+						voxel->set_type(block_type);
+					} else {
+						// Probabilistic density: use hash to determine if block appears
+						uint32_t hash = hash_position(x, y, z, seed);
+						float rand_val = hash_to_float(hash);
+						if (rand_val < layer.density) {
+							voxel->set_type(block_type);
+						} else {
+							// Fallback to blended subsurface based on density miss
+							int voxel_type = select_voxel_with_blending(x, y, z, biome_weights, false);
+							if (voxel_type == 0 && primary_biome.subsurface_blocks.size() > 0) {
+								voxel_type = select_block_deterministic(x, y, z, primary_biome.subsurface_blocks);
+							}
+							voxel->set_type(voxel_type);
+						}
+					}
+					voxel->set_position(Vector3(x, y, z));
+					return voxel;
+				}
+				break; // Match found, don't check further ranges even if block_type is 0
+			}
+		}
+	}
+
+	// ====== Depth-Based Layer Selection (FALLBACK - OLD SYSTEM) ======
+	// Use traditional depth-based logic if:
+	// 1. No Y-range layers are defined, OR
+	// 2. Y is outside all Y-range layers (need to fill gaps)
 
 	// Determine layer based on depth
 	int depth_from_surface = static_cast<int>(height) - y;

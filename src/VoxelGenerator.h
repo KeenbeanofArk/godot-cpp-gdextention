@@ -599,6 +599,7 @@ private:
 	float sample_raw_base_height(float world_x, float world_z) const;
 	float sample_base_height(float world_x, float world_z) const;
 	Color get_biome_debug_color(int biome_index) const;
+	Color get_voxel_type_color(int voxel_type) const;
 	void ensure_vertical_extent_for_biomes();
 
 	// ==================== Density Cache Methods ====================

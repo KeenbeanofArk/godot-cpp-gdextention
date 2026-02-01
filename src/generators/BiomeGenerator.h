@@ -56,13 +56,16 @@ struct BiomeData {
 	float max_temperature;
 	float min_humidity;
 	float max_humidity;
-	TypedArray<int32_t> surface_blocks;
-	TypedArray<int32_t> subsurface_blocks;
-	int depth;
+	TypedArray<int32_t> surface_blocks; // DEPRECATED: Use surface_layers instead; kept for backward compat
+	TypedArray<int32_t> subsurface_blocks; // DEPRECATED: Use subsurface_layers instead; kept for backward compat
+	int depth; // DEPRECATED: Use subsurface_layers instead; kept for backward compat
 
-	// New layer fields
-	int bedrock_block; // Block type at bottom of world
-	int filler_block; // Block type between subsurface and bedrock
+	// New Y-range based layer system (replaces depth-based system)
+	Vector<SubsurfaceLayer> subsurface_layers; // Y-range defined blocks; first match wins
+
+	// Layer boundary block types
+	int bedrock_block; // Block type at bottom of world (Y < all layer ranges)
+	int filler_block; // Block type between subsurface and bedrock (fallback if Y outside all ranges)
 
 	BiomeData() : min_height(-1.0f),
 				  max_height(1.0f),
@@ -148,7 +151,8 @@ public:
 			const TypedArray<int32_t> &subsurface_blocks,
 			int depth);
 
-	// Extended biome registration with layer blocks
+	// Extended biome registration with layer blocks (DEPRECATED)
+	// Kept for backward compatibility; internally converts to Y-range format
 	void add_biome_extended(const String &name,
 			float min_height, float max_height,
 			float min_temperature, float max_temperature,
@@ -156,6 +160,18 @@ public:
 			const TypedArray<int32_t> &surface_blocks,
 			const TypedArray<int32_t> &subsurface_blocks,
 			int depth,
+			int bedrock_block,
+			int filler_block);
+
+	// New biome registration with Y-range based subsurface layers (PREFERRED)
+	// Allows explicit control over block placement at specific Y coordinates.
+	// When Y-ranges overlap, first registered layer wins (iteration order = priority).
+	void add_biome_with_y_ranges(const String &name,
+			float min_height, float max_height,
+			float min_temperature, float max_temperature,
+			float min_humidity, float max_humidity,
+			const TypedArray<int32_t> &surface_blocks,
+			const Array &subsurface_layers_array,
 			int bedrock_block,
 			int filler_block);
 
