@@ -36,6 +36,10 @@ From the repository root (replace path as needed):
 ```powershell
 Set-Location -Path "C:\Users\Brian\godot-cpp-gdextention"
 scons -j12 target=template_debug debug_symbols=yes platform=windows
+
+or do this for everything
+
+Set-Location -Path 'C:\Users\Brian\godot-cpp-gdextention'; git submodule update --init --recursive; Set-Location -Path godot-cpp; scons -j12 platform=windows; Set-Location -Path ..; scons -j12 target=template_debug debug_symbols=yes platform=windows; New-Item -ItemType Directory -Force -Path .\demo\bin\windows; Copy-Item -Path .\bin\windows\* -Destination .\demo\bin\windows\ -Force; Get-ChildItem .\demo\bin\windows -File | Select-Object Name, Length | Format-Table -AutoSize
 ```
 
 ## Copy built DLL(s) into the demo folder

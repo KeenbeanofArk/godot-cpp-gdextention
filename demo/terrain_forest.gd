@@ -13,7 +13,7 @@ func _ready() -> void:
 	# Connect to MultiTerrainManager signal for dynamic generator injection
 	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
 	if terrain_manager:
-		terrain_manager.connect("terrain_selected", Callable(self, "_on_terrain_selected"))
+		terrain_manager.connect("terrain_selected", Callable(self , "_on_terrain_selected"))
 	
 	# If already initialized on Forest, set up immediately
 	if terrain_manager and terrain_manager.current_terrain_name == "Forest":
@@ -168,7 +168,7 @@ func setup_biomes(biome_gen: BiomeGenerator) -> void:
 	# VoxelType: GRASS=2, DIRT=1
 	biome_gen.add_biome_extended(
 		"Forest",
-		0.3, 0.55, # height range (moderate elevation)
+		0.40, 0.60, # height range (moderate elevation)
 		0.35, 0.55, # temperature range (moderate)
 		0.6, 0.9, # humidity range (humid)
 		[2], # surface blocks (GRASS)

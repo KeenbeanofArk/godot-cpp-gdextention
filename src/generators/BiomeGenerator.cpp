@@ -411,9 +411,16 @@ float BiomeGenerator::get_blended_height_at(float x, float z) const {
 
 		const BiomeData &bd = biomes[biome_index];
 
-		// Map biome min/max (assumed 0..1) to 0..100 world height range
-		float min_h = bd.min_height * 100.0f;
-		float max_h = bd.max_height * 100.0f;
+		// Map biome min/max to height range.
+		// Supports two authoring modes:
+		// 1) Normalized 0..1 (or -1..1) -> scaled to 0..100
+		// 2) Absolute 0..100 units -> used as-is
+		float min_h = bd.min_height;
+		float max_h = bd.max_height;
+		if (max_h <= 1.0f && min_h >= -1.0f) {
+			min_h *= 100.0f;
+			max_h *= 100.0f;
+		}
 		float local_h = min_h + (max_h - min_h) * n;
 
 		blended += local_h * weight;
@@ -532,7 +539,8 @@ Ref<Voxel> BiomeGenerator::get_voxel_at(int x, int y, int z) const {
 		return voxel;
 	}
 
-	float height = get_height_at(x, z);
+	// Use blended height so voxel layer selection matches terrain surface used by the generator.
+	float height = get_blended_height_at(static_cast<float>(x), static_cast<float>(z));
 
 	// Above ground
 	if (y > height) {

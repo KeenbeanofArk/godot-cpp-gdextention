@@ -1,10 +1,11 @@
-[gd_scene load_steps=9 format=3 uid="uid://cxhbgo5ykaojt"]
+[gd_scene load_steps=10 format=3 uid="uid://cxhbgo5ykaojt"]
 
 [ext_resource type="Script" uid="uid://bmnobpfsn1u4k" path="res://p3_biome_integration_example.gd" id="1_jvaau"]
 [ext_resource type="PackedScene" uid="uid://cp6m8e8v6rkjm" path="res://player/picele.tscn" id="2_l7bkx"]
 [ext_resource type="Shader" uid="uid://cg66uhbbmrxru" path="res://world.gdshader" id="2_sce3e"]
 [ext_resource type="Texture2D" uid="uid://7ov1ocn8s6b3" path="res://assets/textures/ground/Ground079S_1K-PNG_Color.png" id="3_qlgxh"]
 [ext_resource type="Texture2D" uid="uid://te7ikjhfdhwf" path="res://assets/textures/sky/NightSkyHDRI014_4K_TONEMAPPED.jpg" id="4_vdsxx"]
+[ext_resource type="PackedScene" uid="uid://deg7mq7jukfdi" path="res://gui.tscn" id="6_qlgxh"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_8bfdq"]
 shader = ExtResource("2_sce3e")
@@ -39,3 +40,5 @@ shadow_enabled = true
 [node name="VoxelEngine" type="VoxelEngine" parent="."]
 
 [node name="Picele" parent="." instance=ExtResource("2_l7bkx")]
+
+[node name="CentralDebugGUI" parent="." instance=ExtResource("6_qlgxh")]

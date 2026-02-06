@@ -13,12 +13,14 @@ func _ready() -> void:
 	# Connect to MultiTerrainManager signal for dynamic generator injection
 	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
 	if terrain_manager:
-		terrain_manager.connect("terrain_selected", Callable(self, "_on_terrain_selected"))
+		terrain_manager.connect("terrain_selected", Callable(self , "_on_terrain_selected"))
 	
 	# If already initialized on Plains, set up immediately
 	if terrain_manager and terrain_manager.current_terrain_name == "Plains":
 		voxel_generator = terrain_manager.current_voxel_generator
 		_setup_terrain_instance()
+		
+	picele.global_position = Vector3(0.0, 25.0, 0.0)
 
 func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> void:
 	# Only initialize if this is the Plains terrain
@@ -41,10 +43,10 @@ func _setup_terrain_instance() -> void:
 	var world_manager = get_tree().get_first_node_in_group("world")
 	
 	# Enable the forcefield (if not already)
-	voxel_generator.forcefield_enabled = true
+	voxel_generator.forcefield_enabled = false
 	voxel_generator.forcefield_height = world_manager.WALL_HEIGHT if world_manager else 300
-	voxel_generator.forcefield_collision_enabled = true
-	voxel_generator.forcefield_detection_enabled = true
+	voxel_generator.forcefield_collision_enabled = false
+	voxel_generator.forcefield_detection_enabled = false
 	voxel_generator.forcefield_buffer = -1.0
 	voxel_generator.forcefield_detection_voxels = 10
 	
@@ -102,13 +104,13 @@ func _setup_terrain_instance() -> void:
 	voxel_generator.show_voxel_grid = false
 	voxel_generator.show_chunk_grid = false
 		
-	# Configure terrain - Mountains have dramatic height
-	voxel_generator.terrain_height = 0.0
-	voxel_generator.terrain_amplitude = 0.0
-	voxel_generator.rock_influence = 0.0
+	# Configure terrain - Plains
+	voxel_generator.terrain_height = 4.0
+	voxel_generator.terrain_amplitude = 5.0
+	voxel_generator.rock_influence = 0.1
 	voxel_generator.cutoff = 0.1
 	
-	# Configure biome generator for mountains
+	# Configure biome generator for Plains
 	var biome_gen = BiomeGenerator.new()
 	biome_gen.seed = 12345 # no verbose
 	biome_gen.sea_level = 1.0 # no verbose
@@ -161,8 +163,8 @@ func setup_biomes(biome_gen: BiomeGenerator):
 	# Use normalized height range (0.0 - 1.0) to match BiomeGenerator API
 	biome_gen.add_biome_extended(
 		"Plains",
-		0.0, # Min height
-		0.3, # Max height
+		0.35, # Min height
+		0.55, # Max height
 		0.3, # Min temp
 		0.4, # Max temp
 		0.2, # Min humidity

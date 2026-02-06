@@ -174,6 +174,12 @@ private:
 	bool visualize_noise_values = false;
 	int debug_verbosity = 1;
 
+	// Debug: per-chunk density dump instrumentation
+	// When enabled, generator will emit DUMP_START/DUMP_SAMPLE/DUMP_END logs for a single chunk
+	// Enabled by default for development to capture chunk (1,0,0)
+	bool debug_dump_chunk_enabled = true;
+	Vector3i debug_dump_chunk_coord = Vector3i(1, 0, 0);
+
 	// Add a container for chunks, e.g.:
 	std::vector<Chunk *> chunks;
 	int chunk_size = Constants::DEFAULT_CHUNK_SIZE; // Default value from voxel_constants.h
@@ -373,9 +379,19 @@ public:
 	void set_debug_verbosity(int p_level);
 	int get_debug_verbosity() const;
 
+	// Per-chunk density dump controls (instrumentation)
+	void set_debug_dump_chunk_enabled(bool enabled);
+	bool get_debug_dump_chunk_enabled() const;
+
+	void set_debug_dump_chunk_coord(const Vector3i &coord);
+	Vector3i get_debug_dump_chunk_coord() const;
+
+	// Trigger a density dump for a specific chunk (main-thread callable)
+	void dump_chunk_density_samples(int chunk_index) const;
+
 	void debug_print_state();
 	void debug_draw_noise_slice(float y_level);
-	void log_message(const String &message, int verbosity_level = 1);
+	void log_message(const String &message, int verbosity_level = 1) const;
 
 	bool is_object_binding_set_by_parent_constructor() const;
 

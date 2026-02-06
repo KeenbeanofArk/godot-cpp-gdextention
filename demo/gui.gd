@@ -95,7 +95,9 @@ func _ready() -> void:
 		return
 	
 	# Get player
-	player = get_node_or_null("/root/World/Picele")
+	# Find player in the scene
+	player = get_tree().root.find_child("Picele", true, false)
+	
 	if not player:
 		push_error("GUI: Player not found")
 		return
@@ -107,6 +109,12 @@ func _ready() -> void:
 	if not terrain_manager.terrain_registry.is_empty():
 		current_terrain_name = terrain_manager.current_terrain_name
 		current_voxel_generator = terrain_manager.current_voxel_generator
+	else:
+		call_deferred("_find_voxel_generator")
+		
+		# Bind controls to the current generator (idempotent)
+		if not ui_bound_to_generator:
+			bind_debug_controls()
 	
 	debug_display.visible = debug_show
 	terraform_settings.visible = terraform_settings_show
@@ -754,3 +762,11 @@ func _prompt_and_load_map(map_name: String) -> void:
 	# No diffs or no generator_params: load immediately
 	current_voxel_generator.load_map("user://saved_maps", map_name, true)
 	print("[GUI] Requested load from user://saved_maps/%s" % map_name)
+
+## Find VoxelGenerator (deferred lookup to wait for scene tree initialization)
+func _find_voxel_generator() -> void:
+	current_voxel_generator = get_tree().root.find_child("VoxelGenerator", true, false)
+	if current_voxel_generator == null:
+		push_error("[GUI] voxel_generator not found in tree after deferred lookup.")
+	else:
+		print("[GUI] voxel_generator found: ", current_voxel_generator.name)

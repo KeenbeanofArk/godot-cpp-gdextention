@@ -13,7 +13,7 @@ func _ready() -> void:
 	# Connect to MultiTerrainManager signal for dynamic generator injection
 	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
 	if terrain_manager:
-		terrain_manager.connect("terrain_selected", Callable(self, "_on_terrain_selected"))
+		terrain_manager.connect("terrain_selected", Callable(self , "_on_terrain_selected"))
 	
 	# If already initialized on Mountains, set up immediately
 	if terrain_manager and terrain_manager.current_terrain_name == "Mountains":
@@ -160,8 +160,8 @@ func setup_biomes(biome_gen: BiomeGenerator):
 	# Mountains occupy higher normalized elevation range
 	biome_gen.add_biome_extended(
 		"Mountains",
-		0.7,
-		1.0,
+		0.55,
+		0.85,
 		0.0,
 		0.5,
 		0.2,

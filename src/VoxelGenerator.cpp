@@ -162,6 +162,13 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_debug_verbosity", "level"), &VoxelGenerator::set_debug_verbosity);
 	ClassDB::bind_method(D_METHOD("get_debug_verbosity"), &VoxelGenerator::get_debug_verbosity);
 
+	// Debug dump bindings
+	ClassDB::bind_method(D_METHOD("set_debug_dump_chunk_enabled", "enabled"), &VoxelGenerator::set_debug_dump_chunk_enabled);
+	ClassDB::bind_method(D_METHOD("get_debug_dump_chunk_enabled"), &VoxelGenerator::get_debug_dump_chunk_enabled);
+	ClassDB::bind_method(D_METHOD("set_debug_dump_chunk_coord", "coord"), &VoxelGenerator::set_debug_dump_chunk_coord);
+	ClassDB::bind_method(D_METHOD("get_debug_dump_chunk_coord"), &VoxelGenerator::get_debug_dump_chunk_coord);
+	ClassDB::bind_method(D_METHOD("dump_chunk_density_samples", "chunk_index"), &VoxelGenerator::dump_chunk_density_samples);
+
 	ClassDB::bind_method(D_METHOD("debug_print_state"), &VoxelGenerator::debug_print_state);
 	ClassDB::bind_method(D_METHOD("debug_draw_noise_slice", "y_level"), &VoxelGenerator::debug_draw_noise_slice);
 	ClassDB::bind_method(D_METHOD("log_message", "message", "verbosity_level"), &VoxelGenerator::log_message, DEFVAL(1));
@@ -259,7 +266,7 @@ void VoxelGenerator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_generate"), "set_auto_generate", "get_auto_generate");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "chunk_size", PROPERTY_HINT_RANGE, "8,64,8"), "set_chunk_size", "get_chunk_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "resolution", PROPERTY_HINT_RANGE, "1,10,1"), "set_resolution", "get_resolution");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cutoff", PROPERTY_HINT_RANGE, "-1,1,0.01"), "set_cutoff", "get_cutoff");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cutoff", PROPERTY_HINT_RANGE, "-100,100,0.01"), "set_cutoff", "get_cutoff");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "seeder", PROPERTY_HINT_RANGE, "0,1000000,1"), "set_seeder", "get_seeder");
 
 	ADD_GROUP("Generation Mode", "generation_");
@@ -741,11 +748,28 @@ void VoxelGenerator::load_map(const String &dir, const String &map_name, bool st
 		// Restore auto_generate flag directly (do not call setter to avoid generate())
 		auto_generate = prev_auto;
 		log_message("generator_params applied; chunks recreated to match saved layout", 1);
+		
+		// ==================== CRITICAL: Rebuild density cache BEFORE loading terrain edits ====================
+		// The density cache MUST be built at the current (loaded) resolution and parameters
+		// so that terrain_edits (which are stored as voxel-space indices) are applied to the correct density grid.
+		// If cache is not built, terrain edits will fail to apply during density evaluation.
+		log_message("Rebuilding density cache to match loaded parameters", 2);
+		if (generation_mode == VOXELS_FIRST) {
+			build_density_cache();
+		} else {
+			build_heightmap_cache();
+			build_density_cache();
+		}
+		cache_is_valid = true;
+		log_message(String("Density cache rebuilt: resolution={0}, cache_resolution={1}, mode={2}")
+			.format(Array::make(get_effective_resolution(), cache_resolution, generation_mode == VOXELS_FIRST ? "VOXELS_FIRST" : "HEIGHTMAP_FIRST")), 2);
 	}
 
 	// Load terrain edits
+	int edit_count = 0;
 	if (meta.has("terrain_edits")) {
 		Array edits = meta["terrain_edits"];
+		log_message(String("Loading {0} terrain edits").format(Array::make(static_cast<int>(edits.size()))), 2);
 		std::lock_guard<std::mutex> lock(terrain_edits_mutex);
 		terrain_edits.clear();
 		for (int i = 0; i < edits.size(); ++i) {
@@ -757,7 +781,13 @@ void VoxelGenerator::load_map(const String &dir, const String &map_name, bool st
 			uint64_t key = pack_edit_key(x, y, z);
 			terrain_edits[key] = delta;
 		}
+		edit_count = static_cast<int>(edits.size());
+		log_message(String("Loaded {0} terrain edits into terrain_edits map").format(Array::make(edit_count)), 2);
 	}
+	
+	// Mark all chunks as dirty so they will regenerate with the loaded edits applied
+	mark_all_chunks_dirty();
+	log_message("All chunks marked dirty for regeneration with loaded edits", 2);
 
 	if (meta.has("feature_edits")) {
 		Array edits = meta["feature_edits"];
@@ -897,6 +927,8 @@ void VoxelGenerator::load_map(const String &dir, const String &map_name, bool st
 	}
 
 	log_message(String("Loaded map from: {0}").format(Array::make(String(in_dir.string().c_str()))), 1);
+	log_message(String("Load complete: edits={0}, cache_valid={1}, cache_resolution={2}, effective_resolution={3}")
+		.format(Array::make(edit_count, cache_is_valid ? "yes" : "no", cache_resolution, get_effective_resolution())), 1);
 }
 
 void VoxelGenerator::calculate_world_size() {
@@ -2421,7 +2453,22 @@ float VoxelGenerator::get_terrain_density(const Vector3 &pos) const {
 	}
 
 	// Base density: negative = solid (below terrain), positive = air (above terrain)
+	// Formula: pos.y - height means: (Y position) - (terrain height) = delta from surface
+	//   If Y is below surface (Y < height): density is negative (solid)
+	//   If Y is above surface (Y > height): density is positive (air)
 	float base_density = pos.y - height + rocky_detail;
+	
+	// DIAGNOSTIC: Log critical test position to verify density gradient
+	const float world_height_extent = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+	if (debug_verbosity >= 3 && std::abs(pos.x) < 1.0f && std::abs(pos.z) < 1.0f) {
+		// Log at X=0, Z=0 across Y values to see gradient
+		static int logged_count = 0;
+		if (logged_count < 20) {
+			log_message(String("DENSITY_CHECK: pos=({0:.1f},{1:.1f},{2:.1f}) height={3:.1f} extent={4:.1f} cutoff={5:.1f} density={6:.2f}")
+				.format(Array::make(pos.x, pos.y, pos.z, height, world_height_extent, cutoff, base_density)), 3);
+			logged_count++;
+		}
+	}
 
 	// Apply terrain + feature edits
 	// Convert world position to voxel index for lookup
@@ -2453,11 +2500,30 @@ float VoxelGenerator::get_terrain_density(const Vector3 &pos) const {
 }
 
 float VoxelGenerator::sample_raw_base_height(float world_x, float world_z) const {
-	float height = terrain_height;
+	// Option C: Transform biome 0-100 output to world-centered coordinates
+	// Formula: world_y = ((biome_height / 100.0) - 0.5) * world_height_extent
+	// Maps: biome 0 → -extent/2, biome 50 → 0 (center), biome 100 → +extent/2
+	const float world_height_extent = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
+
+	float height = 0.0f;
+
 	if (biome_generator.is_valid()) {
-		height = biome_generator->get_blended_height_at(world_x, world_z);
+		// BiomeGenerator outputs 0-100 range; transform to world-centered coordinates
+		float biome_height = biome_generator->get_blended_height_at(world_x, world_z);
+		height = ((biome_height / 100.0f) - 0.5f) * world_height_extent;
+		
+		// DIAGNOSTIC: Log height scaling
+		if (debug_verbosity >= 3 && (static_cast<int>(world_x) % 8 == 0 && static_cast<int>(world_z) % 8 == 0)) {
+			log_message(String("HEIGHT_CALC: x={0:.1f} z={1:.1f} biome_height={2:.1f} world_extent={3:.1f} final_height={4:.1f}")
+				.format(Array::make(world_x, world_z, biome_height, world_height_extent, height)), 3);
+		}
+	} else {
+		// Fallback: use terrain_height as a world-space offset (already in world coordinates)
+		height = terrain_height;
 	}
+
 	if (terrain_noise.is_valid()) {
+		// Add noise variation (terrain_amplitude is already in world units)
 		float noise_value = terrain_noise->get_noise_2d(world_x, world_z);
 		height += noise_value * terrain_amplitude;
 	}
@@ -2557,6 +2623,68 @@ void VoxelGenerator::set_debug_verbosity(int p_level) {
 
 int VoxelGenerator::get_debug_verbosity() const {
 	return debug_verbosity;
+}
+
+// ---------------- Debug Dump Controls ----------------
+void VoxelGenerator::set_debug_dump_chunk_enabled(bool enabled) {
+	debug_dump_chunk_enabled = enabled;
+	log_message(String("Debug dump chunk enabled: {0}").format(Array::make(debug_dump_chunk_enabled)), 2);
+}
+
+bool VoxelGenerator::get_debug_dump_chunk_enabled() const {
+	return debug_dump_chunk_enabled;
+}
+
+void VoxelGenerator::set_debug_dump_chunk_coord(const Vector3i &coord) {
+	debug_dump_chunk_coord = coord;
+	log_message(String("Debug dump chunk coord set to: ({0},{1},{2})").format(Array::make(coord.x, coord.y, coord.z)), 2);
+}
+
+Vector3i VoxelGenerator::get_debug_dump_chunk_coord() const {
+	return debug_dump_chunk_coord;
+}
+
+void VoxelGenerator::dump_chunk_density_samples(int chunk_index) const {
+	Vector3i chunk_coord = index_to_chunk_coord(chunk_index);
+	if (chunk_coord.x < 0) {
+		log_message(String("dump_chunk_density_samples: invalid chunk index {0}").format(Array::make(chunk_index)), 1);
+		return;
+	}
+
+	// Determine cache resolution and chunk bounds in cache index space
+	int cr = cache_resolution > 0 ? cache_resolution : get_effective_resolution();
+	int start_ix = chunk_coord.x * chunk_size * cr;
+	int start_iy = chunk_coord.y * chunk_size * cr;
+	int start_iz = chunk_coord.z * chunk_size * cr;
+	int end_ix = start_ix + chunk_size * cr - 1;
+	int end_iy = start_iy + chunk_size * cr - 1;
+	int end_iz = start_iz + chunk_size * cr - 1;
+
+	UtilityFunctions::print(String("DUMP_START chunk_index={0} coord=({1},{2},{3}) cache_res={4}")
+					.format(Array::make(chunk_index, chunk_coord.x, chunk_coord.y, chunk_coord.z, cr)));
+
+	const int MAX_SAMPLES = 10000; // safety cap
+	int samples = 0;
+
+	for (int iz = start_iz; iz <= end_iz; ++iz) {
+		for (int iy = start_iy; iy <= end_iy; ++iy) {
+			for (int ix = start_ix; ix <= end_ix; ++ix) {
+				if (samples >= MAX_SAMPLES) {
+					UtilityFunctions::print(String("DUMP_TRUNCATED samples={0}").format(Array::make(samples)));
+					goto done_dump;
+				}
+
+				// Get cached density if possible, otherwise compute directly
+				float d = get_cached_density(ix, iy, iz);
+
+				UtilityFunctions::print(String("DUMP_SAMPLE chunk={0} coord=({1},{2},{3}) ix={4} iy={5} iz={6} density={7}")
+								.format(Array::make(chunk_index, chunk_coord.x, chunk_coord.y, chunk_coord.z, ix, iy, iz, d)));
+				samples++;
+			}
+		}
+	}
+done_dump:
+	UtilityFunctions::print(String("DUMP_END chunk_index={0} samples={1}").format(Array::make(chunk_index, samples)));
 }
 
 void VoxelGenerator::debug_print_state() {
@@ -2698,7 +2826,7 @@ void VoxelGenerator::debug_draw_noise_slice(float y_level) {
 	log_message("Noise slice visualization created", 2);
 }
 
-void VoxelGenerator::log_message(const String &message, int verbosity_level) {
+void VoxelGenerator::log_message(const String &message, int verbosity_level) const {
 	if (!debug_mode && verbosity_level <= 1) {
 		// Always print critical messages (level 1) even if debug mode is off
 		UtilityFunctions::print(String("[VoxelGenerator] {0}").format(Array::make(message)));
@@ -3501,6 +3629,8 @@ void VoxelGenerator::build_density_cache() {
 		float physical_extent_z = static_cast<float>(world_size.z * chunk_size);
 		Vector3 physical_extent(physical_extent_x, physical_extent_y, physical_extent_z);
 
+		float min_density = std::numeric_limits<float>::infinity();
+		float max_density = -std::numeric_limits<float>::infinity();
 		for (int iz = 0; iz < cache_size_z; ++iz) {
 			for (int iy = 0; iy < cache_size_y; ++iy) {
 				for (int ix = 0; ix < cache_size_x; ++ix) {
@@ -3512,10 +3642,20 @@ void VoxelGenerator::build_density_cache() {
 					pos.z = -physical_extent.z * 0.5f + iz * effective_voxel_size.z;
 
 					int index = density_cache_index(ix, iy, iz);
-					density_cache[index] = get_terrain_density(pos);
+					float d = get_terrain_density(pos);
+					density_cache[index] = d;
+					if (d < min_density)
+						min_density = d;
+					if (d > max_density)
+						max_density = d;
 				}
 			}
 		}
+
+		// Diagnostic summary of density cache range
+		float world_extent_y = static_cast<float>(world_size.y * chunk_size);
+		log_message(String("Density cache range: min={0}, max={1} | World Y extent={2} | Cutoff={3} | World size.y={4} | Chunk size={5}")
+			.format(Array::make(min_density, max_density, world_extent_y, cutoff, world_size.y, chunk_size)), 1);
 	}
 
 	log_message("Density cache built successfully", 2);
@@ -4117,6 +4257,14 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 		return; // Invalid index
 	}
 
+	// If debug dump is enabled for this chunk, run it and continue (main-thread only)
+	if (debug_dump_chunk_enabled) {
+		if (debug_dump_chunk_coord.x == chunk_coord.x && debug_dump_chunk_coord.y == chunk_coord.y && debug_dump_chunk_coord.z == chunk_coord.z) {
+			// Dump densities for inspection
+			dump_chunk_density_samples(chunk_index);
+		}
+	}
+
 	log_message(String("Async generating chunk ({0},{1},{2})").format(Array::make(chunk_coord.x, chunk_coord.y, chunk_coord.z)), 3);
 
 	// Use effective resolution (accounts for LOD)
@@ -4146,134 +4294,303 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 	mesh_data.chunk_index = chunk_index;
 	mesh_data.chunk_coord = chunk_coord;
 
+	// Calculate total Y voxels and surface band for HEIGHTMAP_FIRST mode
+	// Use cache_resolution (not eff_resolution) to match density cache coordinate space
+	int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * cache_resolution;
+	float eff_surface_band = get_effective_surface_band();
+
 	// Generate mesh using marching cubes for this chunk
-	for (int local_ix = 0; local_ix < chunk_voxels_x && !cancel_requested.load(); ++local_ix) {
-		for (int local_iy = 0; local_iy < chunk_voxels_y; ++local_iy) {
-			for (int local_iz = 0; local_iz < chunk_voxels_z; ++local_iz) {
-				int ix = start_ix + local_ix;
-				int iy = start_iy + local_iy;
-				int iz = start_iz + local_iz;
+	if (generation_mode == VOXELS_FIRST) {
+		// VOXELS_FIRST: iterate all Y voxels (original behavior)
+		for (int local_ix = 0; local_ix < chunk_voxels_x && !cancel_requested.load(); ++local_ix) {
+			for (int local_iy = 0; local_iy < chunk_voxels_y; ++local_iy) {
+				for (int local_iz = 0; local_iz < chunk_voxels_z; ++local_iz) {
+					int ix = start_ix + local_ix;
+					int iy = start_iy + local_iy;
+					int iz = start_iz + local_iz;
 
-				// Calculate the center position of the voxel
-				Vector3 center;
-				center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
-				center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
-				center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
+					// Calculate the center position of the voxel
+					Vector3 center;
+					center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * eff_voxel_size.x;
+					center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * eff_voxel_size.y;
+					center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * eff_voxel_size.z;
 
-				// Create marching cube vertices
-				Vector<Vector3> cube_vertices = create_cube_vertices(center);
-				std::vector<float> cube_values = get_cube_values_cached(ix, iy, iz);
+					// Create marching cube vertices
+					Vector<Vector3> cube_vertices = create_cube_vertices(center);
+					std::vector<float> cube_values = get_cube_values_cached(ix, iy, iz);
 
-				int lookup_index = get_lookup_index(cube_values, cutoff);
-				const auto &marching_triangles = Constants::get_marching_triangles();
+					int lookup_index = get_lookup_index(cube_values, cutoff);
+					const auto &marching_triangles = Constants::get_marching_triangles();
 
-				if (lookup_index >= marching_triangles.size()) {
+					if (lookup_index >= marching_triangles.size()) {
+						continue;
+					}
+
+					std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
+
+					// Biome id for texturing (<= 16 biomes supported; clamp to [0,15])
+					int biome_index_for_textures = 0;
+					if (biome_generator.is_valid()) {
+						biome_index_for_textures = CLAMP(biome_generator->get_biome_index_at(center.x, center.z), 0, 15);
+					}
+					Color custom0_color(static_cast<float>(biome_index_for_textures) / 255.0f, 0.0f, 0.0f, 0.0f);
+
+					// Calculate default color based on position or LOD visualization
+					// This will be overridden by per-vertex layer colors if biome system is active
+					int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
+					int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
+					int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
+					Color default_color;
+					if (show_lod_colors) {
+						default_color = get_lod_color(lod_level);
+					} else if (biome_generator.is_valid()) {
+						int biome_index = biome_generator->get_biome_index_at(center.x, center.z);
+						default_color = get_biome_debug_color(biome_index);
+					} else {
+						default_color = Color(
+								(center.x + total_voxels_x * 0.5f) / (float)total_voxels_x,
+								(center.y + total_voxels_y * 0.5f) / (float)total_voxels_y,
+								(center.z + total_voxels_z * 0.5f) / (float)total_voxels_z);
+					}
+
+					// Process triangles
+					for (size_t index = 0; index < triangles.size(); index += 3) {
+						int point_1 = triangles[index];
+						if (point_1 == -1)
+							continue;
+						int point_2 = triangles[index + 1];
+						if (point_2 == -1)
+							continue;
+						int point_3 = triangles[index + 2];
+						if (point_3 == -1)
+							continue;
+
+						int a0 = Constants::cornerIndexAFromEdge[point_1];
+						int b0 = Constants::cornerIndexBFromEdge[point_1];
+						int a1 = Constants::cornerIndexAFromEdge[point_2];
+						int b1 = Constants::cornerIndexBFromEdge[point_2];
+						int a2 = Constants::cornerIndexAFromEdge[point_3];
+						int b2 = Constants::cornerIndexBFromEdge[point_3];
+
+						Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
+						Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
+						Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
+
+						Vector3 vector_a = vertex3 - vertex1;
+						Vector3 vector_b = vertex2 - vertex1;
+						Vector3 normal = vector_a.cross(vector_b).normalized();
+
+						// Calculate per-vertex layer colors (if biome system is active)
+						// Each vertex gets colored based on its Y position and the biome layer at that height
+						Color color1 = default_color;
+						Color color2 = default_color;
+						Color color3 = default_color;
+
+						if (biome_generator.is_valid() && !show_lod_colors) {
+							// Query voxel type at each vertex's Y position for layer-based coloring
+							Ref<Voxel> voxel1 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex1.x),
+									static_cast<int>(vertex1.y),
+									static_cast<int>(vertex1.z));
+							if (voxel1.is_valid()) {
+								color1 = get_voxel_type_color(voxel1->get_type());
+							}
+
+							Ref<Voxel> voxel2 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex2.x),
+									static_cast<int>(vertex2.y),
+									static_cast<int>(vertex2.z));
+							if (voxel2.is_valid()) {
+								color2 = get_voxel_type_color(voxel2->get_type());
+							}
+
+							Ref<Voxel> voxel3 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex3.x),
+									static_cast<int>(vertex3.y),
+									static_cast<int>(vertex3.z));
+							if (voxel3.is_valid()) {
+								color3 = get_voxel_type_color(voxel3->get_type());
+							}
+						}
+
+						// Add vertices to mesh data
+						mesh_data.vertices.push_back(vertex1);
+						mesh_data.vertices.push_back(vertex2);
+						mesh_data.vertices.push_back(vertex3);
+
+						mesh_data.normals.push_back(normal);
+						mesh_data.normals.push_back(normal);
+						mesh_data.normals.push_back(normal);
+
+						mesh_data.colors.push_back(color1);
+						mesh_data.colors.push_back(color2);
+						mesh_data.colors.push_back(color3);
+
+						mesh_data.custom0.push_back(custom0_color);
+						mesh_data.custom0.push_back(custom0_color);
+						mesh_data.custom0.push_back(custom0_color);
+					}
+				}
+			}
+		}
+	} else {
+		// HEIGHTMAP_FIRST: iterate X-Z first, compute Y bounds from surface band
+		// All heightmap/cache lookups must use cache_resolution to match how caches were built
+		int chunk_voxels_y_cache = chunk_size * cache_resolution; // Y voxels in cache space
+		for (int local_ix = 0; local_ix < chunk_voxels_x && !cancel_requested.load(); ++local_ix) {
+			for (int local_iz = 0; local_iz < chunk_voxels_z && !cancel_requested.load(); ++local_iz) {
+				// Compute global grid indices for heightmap lookup (cache_resolution space)
+				// Scale local indices from eff_resolution to cache_resolution
+				int global_ix = chunk_coord.x * chunk_size * cache_resolution + (local_ix * cache_resolution / eff_resolution);
+				int global_iz = chunk_coord.z * chunk_size * cache_resolution + (local_iz * cache_resolution / eff_resolution);
+
+				// Get terrain height and compute Y bounds
+				float terrain_height_at_xz = get_height_at(global_ix, global_iz);
+				float y_min_world = terrain_height_at_xz - eff_surface_band;
+				float y_max_world = terrain_height_at_xz + eff_surface_band;
+
+				// Use cache_voxel_size.y to match density cache coordinate space
+				int iy_min = std::max(0, static_cast<int>(std::floor((y_min_world + physical_extent.y * 0.5f) / cache_voxel_size.y)));
+				int iy_max = std::min(total_voxels_y - 1, static_cast<int>(std::floor((y_max_world + physical_extent.y * 0.5f) / cache_voxel_size.y)));
+
+				// Convert global Y bounds to local chunk Y indices (all in cache_resolution space)
+				int chunk_start_iy = chunk_coord.y * chunk_size * cache_resolution;
+				int chunk_end_iy = chunk_start_iy + chunk_voxels_y_cache - 1;
+
+				// Clamp to chunk's local Y range (cache_resolution space)
+				int local_iy_min = std::max(0, iy_min - chunk_start_iy);
+				int local_iy_max = std::min(chunk_voxels_y_cache - 1, iy_max - chunk_start_iy);
+
+				// Skip if no Y overlap with this chunk
+				if (local_iy_min > local_iy_max) {
 					continue;
 				}
 
-				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
+				// Iterate in cache_resolution space for Y
+				for (int local_iy = local_iy_min; local_iy <= local_iy_max; ++local_iy) {
+					// Compute cache indices for density lookup (all in cache_resolution)
+					int ix = chunk_coord.x * chunk_size * cache_resolution + (local_ix * cache_resolution / eff_resolution);
+					int iy = chunk_coord.y * chunk_size * cache_resolution + local_iy; // already in cache space
+					int iz = chunk_coord.z * chunk_size * cache_resolution + (local_iz * cache_resolution / eff_resolution);
 
-				// Biome id for texturing (<= 16 biomes supported; clamp to [0,15])
-				int biome_index_for_textures = 0;
-				if (biome_generator.is_valid()) {
-					biome_index_for_textures = CLAMP(biome_generator->get_biome_index_at(center.x, center.z), 0, 15);
-				}
-				Color custom0_color(static_cast<float>(biome_index_for_textures) / 255.0f, 0.0f, 0.0f, 0.0f);
+					// Calculate the center position of the voxel (use cache_resolution for Y)
+					Vector3 center;
+					center.x = -physical_extent.x * 0.5f + (ix + 0.5f) * cache_voxel_size.x;
+					center.y = -physical_extent.y * 0.5f + (iy + 0.5f) * cache_voxel_size.y;
+					center.z = -physical_extent.z * 0.5f + (iz + 0.5f) * cache_voxel_size.z;
 
-				// Calculate default color based on position or LOD visualization
-				// This will be overridden by per-vertex layer colors if biome system is active
-				int total_voxels_x = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
-				int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
-				int total_voxels_z = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
-				Color default_color;
-				if (show_lod_colors) {
-					default_color = get_lod_color(lod_level);
-				} else if (biome_generator.is_valid()) {
-					int biome_index = biome_generator->get_biome_index_at(center.x, center.z);
-					default_color = get_biome_debug_color(biome_index);
-				} else {
-					default_color = Color(
-							(center.x + total_voxels_x * 0.5f) / (float)total_voxels_x,
-							(center.y + total_voxels_y * 0.5f) / (float)total_voxels_y,
-							(center.z + total_voxels_z * 0.5f) / (float)total_voxels_z);
-				}
+					// Create marching cube vertices
+					Vector<Vector3> cube_vertices = create_cube_vertices(center);
+					std::vector<float> cube_values = get_cube_values_cached(ix, iy, iz);
 
-				// Process triangles
-				for (size_t index = 0; index < triangles.size(); index += 3) {
-					int point_1 = triangles[index];
-					if (point_1 == -1)
+					int lookup_index = get_lookup_index(cube_values, cutoff);
+					const auto &marching_triangles = Constants::get_marching_triangles();
+
+					if (lookup_index >= marching_triangles.size()) {
 						continue;
-					int point_2 = triangles[index + 1];
-					if (point_2 == -1)
-						continue;
-					int point_3 = triangles[index + 2];
-					if (point_3 == -1)
-						continue;
-
-					int a0 = Constants::cornerIndexAFromEdge[point_1];
-					int b0 = Constants::cornerIndexBFromEdge[point_1];
-					int a1 = Constants::cornerIndexAFromEdge[point_2];
-					int b1 = Constants::cornerIndexBFromEdge[point_2];
-					int a2 = Constants::cornerIndexAFromEdge[point_3];
-					int b2 = Constants::cornerIndexBFromEdge[point_3];
-
-					Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
-					Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
-					Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
-
-					Vector3 vector_a = vertex3 - vertex1;
-					Vector3 vector_b = vertex2 - vertex1;
-					Vector3 normal = vector_a.cross(vector_b).normalized();
-
-					// Calculate per-vertex layer colors (if biome system is active)
-					// Each vertex gets colored based on its Y position and the biome layer at that height
-					Color color1 = default_color;
-					Color color2 = default_color;
-					Color color3 = default_color;
-
-					if (biome_generator.is_valid() && !show_lod_colors) {
-						// Query voxel type at each vertex's Y position for layer-based coloring
-						Ref<Voxel> voxel1 = biome_generator->get_voxel_at(
-								static_cast<int>(vertex1.x),
-								static_cast<int>(vertex1.y),
-								static_cast<int>(vertex1.z));
-						if (voxel1.is_valid()) {
-							color1 = get_voxel_type_color(voxel1->get_type());
-						}
-
-						Ref<Voxel> voxel2 = biome_generator->get_voxel_at(
-								static_cast<int>(vertex2.x),
-								static_cast<int>(vertex2.y),
-								static_cast<int>(vertex2.z));
-						if (voxel2.is_valid()) {
-							color2 = get_voxel_type_color(voxel2->get_type());
-						}
-
-						Ref<Voxel> voxel3 = biome_generator->get_voxel_at(
-								static_cast<int>(vertex3.x),
-								static_cast<int>(vertex3.y),
-								static_cast<int>(vertex3.z));
-						if (voxel3.is_valid()) {
-							color3 = get_voxel_type_color(voxel3->get_type());
-						}
 					}
 
-					// Add vertices to mesh data
-					mesh_data.vertices.push_back(vertex1);
-					mesh_data.vertices.push_back(vertex2);
-					mesh_data.vertices.push_back(vertex3);
+					std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
 
-					mesh_data.normals.push_back(normal);
-					mesh_data.normals.push_back(normal);
-					mesh_data.normals.push_back(normal);
+					// Biome id for texturing
+					int biome_index_for_textures = 0;
+					if (biome_generator.is_valid()) {
+						biome_index_for_textures = CLAMP(biome_generator->get_biome_index_at(center.x, center.z), 0, 15);
+					}
+					Color custom0_color(static_cast<float>(biome_index_for_textures) / 255.0f, 0.0f, 0.0f, 0.0f);
 
-					mesh_data.colors.push_back(color1);
-					mesh_data.colors.push_back(color2);
-					mesh_data.colors.push_back(color3);
+					// Calculate color based on biome or world position
+					int total_voxels_x_calc = std::max(1, world_size.x) * std::max(1, chunk_size) * eff_resolution;
+					int total_voxels_y_calc = std::max(1, world_size.y) * std::max(1, chunk_size) * eff_resolution;
+					int total_voxels_z_calc = std::max(1, world_size.z) * std::max(1, chunk_size) * eff_resolution;
+					Color default_color;
+					if (show_lod_colors) {
+						default_color = get_lod_color(lod_level);
+					} else if (biome_generator.is_valid()) {
+						int biome_index = biome_generator->get_biome_index_at(center.x, center.z);
+						default_color = get_biome_debug_color(biome_index);
+					} else {
+						default_color = Color(
+								(center.x + total_voxels_x_calc * 0.5f) / (float)total_voxels_x_calc,
+								(center.y + total_voxels_y_calc * 0.5f) / (float)total_voxels_y_calc,
+								(center.z + total_voxels_z_calc * 0.5f) / (float)total_voxels_z_calc);
+					}
 
-					mesh_data.custom0.push_back(custom0_color);
-					mesh_data.custom0.push_back(custom0_color);
-					mesh_data.custom0.push_back(custom0_color);
+					// Process triangles
+					for (size_t index = 0; index < triangles.size(); index += 3) {
+						int point_1 = triangles[index];
+						if (point_1 == -1)
+							continue;
+						int point_2 = triangles[index + 1];
+						if (point_2 == -1)
+							continue;
+						int point_3 = triangles[index + 2];
+						if (point_3 == -1)
+							continue;
+
+						int a0 = Constants::cornerIndexAFromEdge[point_1];
+						int b0 = Constants::cornerIndexBFromEdge[point_1];
+						int a1 = Constants::cornerIndexAFromEdge[point_2];
+						int b1 = Constants::cornerIndexBFromEdge[point_2];
+						int a2 = Constants::cornerIndexAFromEdge[point_3];
+						int b2 = Constants::cornerIndexBFromEdge[point_3];
+
+						Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
+						Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
+						Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
+
+						Vector3 vector_a = vertex3 - vertex1;
+						Vector3 vector_b = vertex2 - vertex1;
+						Vector3 normal = vector_a.cross(vector_b).normalized();
+
+						// Per-vertex layer colors
+						Color color1 = default_color;
+						Color color2 = default_color;
+						Color color3 = default_color;
+
+						if (biome_generator.is_valid() && !show_lod_colors) {
+							Ref<Voxel> voxel1 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex1.x),
+									static_cast<int>(vertex1.y),
+									static_cast<int>(vertex1.z));
+							if (voxel1.is_valid()) {
+								color1 = get_voxel_type_color(voxel1->get_type());
+							}
+
+							Ref<Voxel> voxel2 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex2.x),
+									static_cast<int>(vertex2.y),
+									static_cast<int>(vertex2.z));
+							if (voxel2.is_valid()) {
+								color2 = get_voxel_type_color(voxel2->get_type());
+							}
+
+							Ref<Voxel> voxel3 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex3.x),
+									static_cast<int>(vertex3.y),
+									static_cast<int>(vertex3.z));
+							if (voxel3.is_valid()) {
+								color3 = get_voxel_type_color(voxel3->get_type());
+							}
+						}
+
+						// Add vertices to mesh data
+						mesh_data.vertices.push_back(vertex1);
+						mesh_data.vertices.push_back(vertex2);
+						mesh_data.vertices.push_back(vertex3);
+
+						mesh_data.normals.push_back(normal);
+						mesh_data.normals.push_back(normal);
+						mesh_data.normals.push_back(normal);
+
+						mesh_data.colors.push_back(color1);
+						mesh_data.colors.push_back(color2);
+						mesh_data.colors.push_back(color3);
+
+						mesh_data.custom0.push_back(custom0_color);
+						mesh_data.custom0.push_back(custom0_color);
+						mesh_data.custom0.push_back(custom0_color);
+					}
 				}
 			}
 		}
@@ -4351,165 +4668,353 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 	// Check if we can use fast direct cache lookup (when chunk resolution matches cache resolution)
 	bool use_fast_path = (eff_resolution == cache_resolution);
 
+	// Diagnostic: log chunk-level resolution and cache alignment for debugging VOXELS_FIRST issues
+	log_message(String("Chunk sync diagnostics: idx={0}, coord=({1},{2},{3}), lod={4}, eff_res={5}, cache_res={6}, use_fast_path={7}, eff_voxel_size={8}, cache_voxel_size={9}")
+						.format(Array::make(chunk_index, chunk_coord.x, chunk_coord.y, chunk_coord.z, chunk_lod, eff_resolution, cache_resolution, use_fast_path ? "true" : "false", eff_voxel_size, cache_voxel_size)),
+			3);
+
 	// Prepare mesh data arrays
 	PackedVector3Array vertices;
 	PackedVector3Array normals;
 	PackedColorArray colors;
 	PackedColorArray custom0;
 
+	// Calculate total Y voxels and surface band for HEIGHTMAP_FIRST mode
+	// Use cache_resolution (not eff_resolution) to match density cache coordinate space
+	int total_voxels_y = std::max(1, world_size.y) * std::max(1, chunk_size) * cache_resolution;
+	float eff_surface_band = get_effective_surface_band();
+
 	// Generate mesh using marching cubes for this chunk
-	for (int local_ix = 0; local_ix < chunk_voxels_x; ++local_ix) {
-		for (int local_iy = 0; local_iy < chunk_voxels_y; ++local_iy) {
+	if (generation_mode == VOXELS_FIRST) {
+		// VOXELS_FIRST: iterate all Y voxels (original behavior)
+		for (int local_ix = 0; local_ix < chunk_voxels_x; ++local_ix) {
+			for (int local_iy = 0; local_iy < chunk_voxels_y; ++local_iy) {
+				for (int local_iz = 0; local_iz < chunk_voxels_z; ++local_iz) {
+					// Calculate the center position of the voxel (world-space coordinates)
+					Vector3 center;
+					center.x = -physical_extent.x * 0.5f + (chunk_coord.x * chunk_size + (local_ix + 0.5f) / static_cast<float>(eff_resolution));
+					center.y = -physical_extent.y * 0.5f + (chunk_coord.y * chunk_size + (local_iy + 0.5f) / static_cast<float>(eff_resolution));
+					center.z = -physical_extent.z * 0.5f + (chunk_coord.z * chunk_size + (local_iz + 0.5f) / static_cast<float>(eff_resolution));
+
+					// Create marching cube vertices using chunk's voxel size
+					Vector3 half_size = eff_voxel_size * 0.5f;
+					Vector<Vector3> cube_vertices = Vector<Vector3>{
+						Vector3(center.x - half_size.x, center.y - half_size.y, center.z - half_size.z),
+						Vector3(center.x + half_size.x, center.y - half_size.y, center.z - half_size.z),
+						Vector3(center.x + half_size.x, center.y + half_size.y, center.z - half_size.z),
+						Vector3(center.x - half_size.x, center.y + half_size.y, center.z - half_size.z),
+						Vector3(center.x - half_size.x, center.y - half_size.y, center.z + half_size.z),
+						Vector3(center.x + half_size.x, center.y - half_size.y, center.z + half_size.z),
+						Vector3(center.x + half_size.x, center.y + half_size.y, center.z + half_size.z),
+						Vector3(center.x - half_size.x, center.y + half_size.y, center.z + half_size.z),
+					};
+
+					// Sample density values - use fast path when resolution matches cache
+					std::vector<float> cube_values;
+					if (use_fast_path) {
+						// Fast path: direct cache lookup (no interpolation needed)
+						int ix = chunk_coord.x * chunk_size * eff_resolution + local_ix;
+						int iy = chunk_coord.y * chunk_size * eff_resolution + local_iy;
+						int iz = chunk_coord.z * chunk_size * eff_resolution + local_iz;
+						cube_values = get_cube_values_cached(ix, iy, iz);
+					} else {
+						// Slow path: trilinear interpolation for mismatched resolutions
+						cube_values = get_cube_values_at_world_position(center, half_size);
+					}
+
+					// DEBUG: Log first voxel of each chunk to diagnose empty meshes
+					if (local_ix == 0 && local_iy == 0 && local_iz == 0) {
+						log_message(String("Chunk ({0},{1},{2}): first voxel center=({3:.2f},{4:.2f},{5:.2f}) density=[{6:.2f},{7:.2f},{8:.2f},{9:.2f}] cutoff={10:.2f}")
+											.format(Array::make(chunk_coord.x, chunk_coord.y, chunk_coord.z,
+													center.x, center.y, center.z,
+													cube_values[0], cube_values[1], cube_values[2], cube_values[3],
+													cutoff)),
+								3);
+					}
+
+					int lookup_index = get_lookup_index(cube_values, cutoff);
+					const auto &marching_triangles = Constants::get_marching_triangles();
+
+					if (lookup_index >= marching_triangles.size()) {
+						continue;
+					}
+
+					std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
+
+					// Biome id for texturing (<= 16 biomes supported; clamp to [0,15])
+					int biome_index_for_textures = 0;
+					if (biome_generator.is_valid()) {
+						biome_index_for_textures = CLAMP(biome_generator->get_biome_index_at(center.x, center.z), 0, 15);
+					}
+					Color custom0_color(static_cast<float>(biome_index_for_textures) / 255.0f, 0.0f, 0.0f, 0.0f);
+
+					// Calculate color based on biome or world position for visualization
+					Color color;
+					if (show_lod_colors) {
+						color = get_lod_color(chunk_lod);
+					} else if (biome_generator.is_valid()) {
+						int biome_index = biome_generator->get_biome_index_at(center.x, center.z);
+						color = get_biome_debug_color(biome_index);
+					} else {
+						// Normalize world position to 0-1 range for color fallback
+						color = Color(
+								(center.x + physical_extent.x * 0.5f) / physical_extent.x,
+								(center.y + physical_extent.y * 0.5f) / physical_extent.y,
+								(center.z + physical_extent.z * 0.5f) / physical_extent.z);
+					}
+
+					// Process triangles
+					for (size_t index = 0; index < triangles.size(); index += 3) {
+						int point_1 = triangles[index];
+						if (point_1 == -1)
+							continue;
+						int point_2 = triangles[index + 1];
+						if (point_2 == -1)
+							continue;
+						int point_3 = triangles[index + 2];
+						if (point_3 == -1)
+							continue;
+
+						int a0 = Constants::cornerIndexAFromEdge[point_1];
+						int b0 = Constants::cornerIndexBFromEdge[point_1];
+						int a1 = Constants::cornerIndexAFromEdge[point_2];
+						int b1 = Constants::cornerIndexBFromEdge[point_2];
+						int a2 = Constants::cornerIndexAFromEdge[point_3];
+						int b2 = Constants::cornerIndexBFromEdge[point_3];
+
+						Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
+						Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
+						Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
+
+						Vector3 vector_a = vertex3 - vertex1;
+						Vector3 vector_b = vertex2 - vertex1;
+						Vector3 normal = vector_a.cross(vector_b).normalized();
+
+						// Calculate per-vertex layer colors (if biome system is active)
+						// Each vertex gets colored based on its Y position and the biome layer at that height
+						Color color1 = color;
+						Color color2 = color;
+						Color color3 = color;
+
+						if (biome_generator.is_valid() && !show_lod_colors) {
+							// Query voxel type at each vertex's Y position for layer-based coloring
+							Ref<Voxel> voxel1 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex1.x),
+									static_cast<int>(vertex1.y),
+									static_cast<int>(vertex1.z));
+							if (voxel1.is_valid()) {
+								color1 = get_voxel_type_color(voxel1->get_type());
+							}
+
+							Ref<Voxel> voxel2 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex2.x),
+									static_cast<int>(vertex2.y),
+									static_cast<int>(vertex2.z));
+							if (voxel2.is_valid()) {
+								color2 = get_voxel_type_color(voxel2->get_type());
+							}
+
+							Ref<Voxel> voxel3 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex3.x),
+									static_cast<int>(vertex3.y),
+									static_cast<int>(vertex3.z));
+							if (voxel3.is_valid()) {
+								color3 = get_voxel_type_color(voxel3->get_type());
+							}
+						}
+
+						// Add vertices to mesh data
+						vertices.push_back(vertex1);
+						vertices.push_back(vertex2);
+						vertices.push_back(vertex3);
+
+						normals.push_back(normal);
+						normals.push_back(normal);
+						normals.push_back(normal);
+
+						colors.push_back(color1);
+						colors.push_back(color2);
+						colors.push_back(color3);
+
+						custom0.push_back(custom0_color);
+						custom0.push_back(custom0_color);
+						custom0.push_back(custom0_color);
+					}
+				}
+			}
+		}
+	} else {
+		// HEIGHTMAP_FIRST: iterate X-Z first, compute Y bounds from surface band
+		// All heightmap/cache lookups must use cache_resolution to match how caches were built
+		int chunk_voxels_y_cache = chunk_size * cache_resolution; // Y voxels in cache space
+		for (int local_ix = 0; local_ix < chunk_voxels_x; ++local_ix) {
 			for (int local_iz = 0; local_iz < chunk_voxels_z; ++local_iz) {
-				// Calculate the center position of the voxel (world-space coordinates)
-				Vector3 center;
-				center.x = -physical_extent.x * 0.5f + (chunk_coord.x * chunk_size + (local_ix + 0.5f) / static_cast<float>(eff_resolution));
-				center.y = -physical_extent.y * 0.5f + (chunk_coord.y * chunk_size + (local_iy + 0.5f) / static_cast<float>(eff_resolution));
-				center.z = -physical_extent.z * 0.5f + (chunk_coord.z * chunk_size + (local_iz + 0.5f) / static_cast<float>(eff_resolution));
+				// Compute global grid indices for heightmap lookup (cache_resolution space)
+				// Scale local indices from eff_resolution to cache_resolution
+				int global_ix = chunk_coord.x * chunk_size * cache_resolution + (local_ix * cache_resolution / eff_resolution);
+				int global_iz = chunk_coord.z * chunk_size * cache_resolution + (local_iz * cache_resolution / eff_resolution);
 
-				// Create marching cube vertices using chunk's voxel size
-				Vector3 half_size = eff_voxel_size * 0.5f;
-				Vector<Vector3> cube_vertices = Vector<Vector3>{
-					Vector3(center.x - half_size.x, center.y - half_size.y, center.z - half_size.z),
-					Vector3(center.x + half_size.x, center.y - half_size.y, center.z - half_size.z),
-					Vector3(center.x + half_size.x, center.y + half_size.y, center.z - half_size.z),
-					Vector3(center.x - half_size.x, center.y + half_size.y, center.z - half_size.z),
-					Vector3(center.x - half_size.x, center.y - half_size.y, center.z + half_size.z),
-					Vector3(center.x + half_size.x, center.y - half_size.y, center.z + half_size.z),
-					Vector3(center.x + half_size.x, center.y + half_size.y, center.z + half_size.z),
-					Vector3(center.x - half_size.x, center.y + half_size.y, center.z + half_size.z),
-				};
+				// Get terrain height and compute Y bounds
+				float terrain_height_at_xz = get_height_at(global_ix, global_iz);
+				float y_min_world = terrain_height_at_xz - eff_surface_band;
+				float y_max_world = terrain_height_at_xz + eff_surface_band;
 
-				// Sample density values - use fast path when resolution matches cache
-				std::vector<float> cube_values;
-				if (use_fast_path) {
-					// Fast path: direct cache lookup (no interpolation needed)
-					int ix = chunk_coord.x * chunk_size * eff_resolution + local_ix;
-					int iy = chunk_coord.y * chunk_size * eff_resolution + local_iy;
-					int iz = chunk_coord.z * chunk_size * eff_resolution + local_iz;
-					cube_values = get_cube_values_cached(ix, iy, iz);
-				} else {
-					// Slow path: trilinear interpolation for mismatched resolutions
-					cube_values = get_cube_values_at_world_position(center, half_size);
-				}
+				// Use cache_voxel_size.y to match density cache coordinate space
+				int iy_min = std::max(0, static_cast<int>(std::floor((y_min_world + physical_extent.y * 0.5f) / cache_voxel_size.y)));
+				int iy_max = std::min(total_voxels_y - 1, static_cast<int>(std::floor((y_max_world + physical_extent.y * 0.5f) / cache_voxel_size.y)));
 
-				// DEBUG: Log first voxel of each chunk to diagnose empty meshes
-				if (local_ix == 0 && local_iy == 0 && local_iz == 0) {
-					log_message(String("Chunk ({0},{1},{2}): first voxel center=({3:.2f},{4:.2f},{5:.2f}) density=[{6:.2f},{7:.2f},{8:.2f},{9:.2f}] cutoff={10:.2f}")
-										.format(Array::make(chunk_coord.x, chunk_coord.y, chunk_coord.z,
-												center.x, center.y, center.z,
-												cube_values[0], cube_values[1], cube_values[2], cube_values[3],
-												cutoff)),
-							3);
-				}
+				// Convert global Y bounds to local chunk Y indices (all in cache_resolution space)
+				int chunk_start_iy = chunk_coord.y * chunk_size * cache_resolution;
+				int chunk_end_iy = chunk_start_iy + chunk_voxels_y_cache - 1;
 
-				int lookup_index = get_lookup_index(cube_values, cutoff);
-				const auto &marching_triangles = Constants::get_marching_triangles();
+				// Clamp to chunk's local Y range (cache_resolution space)
+				int local_iy_min = std::max(0, iy_min - chunk_start_iy);
+				int local_iy_max = std::min(chunk_voxels_y_cache - 1, iy_max - chunk_start_iy);
 
-				if (lookup_index >= marching_triangles.size()) {
+				// Skip if no Y overlap with this chunk
+				if (local_iy_min > local_iy_max) {
 					continue;
 				}
 
-				std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
+				// Iterate in cache_resolution space for Y, eff_resolution for mesh geometry
+				for (int local_iy = local_iy_min; local_iy <= local_iy_max; ++local_iy) {
+					// Calculate the center position of the voxel (world-space coordinates)
+					// Use cache_resolution for Y since we're iterating in cache space
+					Vector3 center;
+					center.x = -physical_extent.x * 0.5f + (chunk_coord.x * chunk_size + (local_ix + 0.5f) / static_cast<float>(eff_resolution));
+					center.y = -physical_extent.y * 0.5f + (chunk_coord.y * chunk_size + (local_iy + 0.5f) / static_cast<float>(cache_resolution));
+					center.z = -physical_extent.z * 0.5f + (chunk_coord.z * chunk_size + (local_iz + 0.5f) / static_cast<float>(eff_resolution));
 
-				// Biome id for texturing (<= 16 biomes supported; clamp to [0,15])
-				int biome_index_for_textures = 0;
-				if (biome_generator.is_valid()) {
-					biome_index_for_textures = CLAMP(biome_generator->get_biome_index_at(center.x, center.z), 0, 15);
-				}
-				Color custom0_color(static_cast<float>(biome_index_for_textures) / 255.0f, 0.0f, 0.0f, 0.0f);
+					// Create marching cube vertices using chunk's voxel size
+					Vector3 half_size = eff_voxel_size * 0.5f;
+					Vector<Vector3> cube_vertices = Vector<Vector3>{
+						Vector3(center.x - half_size.x, center.y - half_size.y, center.z - half_size.z),
+						Vector3(center.x + half_size.x, center.y - half_size.y, center.z - half_size.z),
+						Vector3(center.x + half_size.x, center.y + half_size.y, center.z - half_size.z),
+						Vector3(center.x - half_size.x, center.y + half_size.y, center.z - half_size.z),
+						Vector3(center.x - half_size.x, center.y - half_size.y, center.z + half_size.z),
+						Vector3(center.x + half_size.x, center.y - half_size.y, center.z + half_size.z),
+						Vector3(center.x + half_size.x, center.y + half_size.y, center.z + half_size.z),
+						Vector3(center.x - half_size.x, center.y + half_size.y, center.z + half_size.z),
+					};
 
-				// Calculate color based on biome or world position for visualization
-				Color color;
-				if (show_lod_colors) {
-					color = get_lod_color(chunk_lod);
-				} else if (biome_generator.is_valid()) {
-					int biome_index = biome_generator->get_biome_index_at(center.x, center.z);
-					color = get_biome_debug_color(biome_index);
-				} else {
-					// Normalize world position to 0-1 range for color fallback
-					color = Color(
-							(center.x + physical_extent.x * 0.5f) / physical_extent.x,
-							(center.y + physical_extent.y * 0.5f) / physical_extent.y,
-							(center.z + physical_extent.z * 0.5f) / physical_extent.z);
-				}
-
-				// Process triangles
-				for (size_t index = 0; index < triangles.size(); index += 3) {
-					int point_1 = triangles[index];
-					if (point_1 == -1)
-						continue;
-					int point_2 = triangles[index + 1];
-					if (point_2 == -1)
-						continue;
-					int point_3 = triangles[index + 2];
-					if (point_3 == -1)
-						continue;
-
-					int a0 = Constants::cornerIndexAFromEdge[point_1];
-					int b0 = Constants::cornerIndexBFromEdge[point_1];
-					int a1 = Constants::cornerIndexAFromEdge[point_2];
-					int b1 = Constants::cornerIndexBFromEdge[point_2];
-					int a2 = Constants::cornerIndexAFromEdge[point_3];
-					int b2 = Constants::cornerIndexBFromEdge[point_3];
-
-					Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
-					Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
-					Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
-
-					Vector3 vector_a = vertex3 - vertex1;
-					Vector3 vector_b = vertex2 - vertex1;
-					Vector3 normal = vector_a.cross(vector_b).normalized();
-
-					// Calculate per-vertex layer colors (if biome system is active)
-					// Each vertex gets colored based on its Y position and the biome layer at that height
-					Color color1 = color;
-					Color color2 = color;
-					Color color3 = color;
-
-					if (biome_generator.is_valid() && !show_lod_colors) {
-						// Query voxel type at each vertex's Y position for layer-based coloring
-						Ref<Voxel> voxel1 = biome_generator->get_voxel_at(
-								static_cast<int>(vertex1.x),
-								static_cast<int>(vertex1.y),
-								static_cast<int>(vertex1.z));
-						if (voxel1.is_valid()) {
-							color1 = get_voxel_type_color(voxel1->get_type());
-						}
-
-						Ref<Voxel> voxel2 = biome_generator->get_voxel_at(
-								static_cast<int>(vertex2.x),
-								static_cast<int>(vertex2.y),
-								static_cast<int>(vertex2.z));
-						if (voxel2.is_valid()) {
-							color2 = get_voxel_type_color(voxel2->get_type());
-						}
-
-						Ref<Voxel> voxel3 = biome_generator->get_voxel_at(
-								static_cast<int>(vertex3.x),
-								static_cast<int>(vertex3.y),
-								static_cast<int>(vertex3.z));
-						if (voxel3.is_valid()) {
-							color3 = get_voxel_type_color(voxel3->get_type());
-						}
+					// Sample density values - always use cache_resolution for cache lookups
+					std::vector<float> cube_values;
+					if (use_fast_path) {
+						// All cache lookups use cache_resolution indices
+						int ix = chunk_coord.x * chunk_size * cache_resolution + (local_ix * cache_resolution / eff_resolution);
+						int iy = chunk_coord.y * chunk_size * cache_resolution + local_iy; // already in cache space
+						int iz = chunk_coord.z * chunk_size * cache_resolution + (local_iz * cache_resolution / eff_resolution);
+						cube_values = get_cube_values_cached(ix, iy, iz);
+					} else {
+						cube_values = get_cube_values_at_world_position(center, half_size);
 					}
 
-					// Add vertices to mesh data
-					vertices.push_back(vertex1);
-					vertices.push_back(vertex2);
-					vertices.push_back(vertex3);
+					int lookup_index = get_lookup_index(cube_values, cutoff);
+					const auto &marching_triangles = Constants::get_marching_triangles();
 
-					normals.push_back(normal);
-					normals.push_back(normal);
-					normals.push_back(normal);
+					if (lookup_index >= marching_triangles.size()) {
+						continue;
+					}
 
-					colors.push_back(color1);
-					colors.push_back(color2);
-					colors.push_back(color3);
+					std::vector<int> triangles(marching_triangles[lookup_index].begin(), marching_triangles[lookup_index].end());
 
-					custom0.push_back(custom0_color);
-					custom0.push_back(custom0_color);
-					custom0.push_back(custom0_color);
+					// Biome id for texturing
+					int biome_index_for_textures = 0;
+					if (biome_generator.is_valid()) {
+						biome_index_for_textures = CLAMP(biome_generator->get_biome_index_at(center.x, center.z), 0, 15);
+					}
+					Color custom0_color(static_cast<float>(biome_index_for_textures) / 255.0f, 0.0f, 0.0f, 0.0f);
+
+					// Calculate color based on biome or world position
+					Color color;
+					if (show_lod_colors) {
+						color = get_lod_color(chunk_lod);
+					} else if (biome_generator.is_valid()) {
+						int biome_index = biome_generator->get_biome_index_at(center.x, center.z);
+						color = get_biome_debug_color(biome_index);
+					} else {
+						color = Color(
+								(center.x + physical_extent.x * 0.5f) / physical_extent.x,
+								(center.y + physical_extent.y * 0.5f) / physical_extent.y,
+								(center.z + physical_extent.z * 0.5f) / physical_extent.z);
+					}
+
+					// Process triangles
+					for (size_t index = 0; index < triangles.size(); index += 3) {
+						int point_1 = triangles[index];
+						if (point_1 == -1)
+							continue;
+						int point_2 = triangles[index + 1];
+						if (point_2 == -1)
+							continue;
+						int point_3 = triangles[index + 2];
+						if (point_3 == -1)
+							continue;
+
+						int a0 = Constants::cornerIndexAFromEdge[point_1];
+						int b0 = Constants::cornerIndexBFromEdge[point_1];
+						int a1 = Constants::cornerIndexAFromEdge[point_2];
+						int b1 = Constants::cornerIndexBFromEdge[point_2];
+						int a2 = Constants::cornerIndexAFromEdge[point_3];
+						int b2 = Constants::cornerIndexBFromEdge[point_3];
+
+						Vector3 vertex1 = interpolate(cube_vertices[a0], cube_values[a0], cube_vertices[b0], cube_values[b0]);
+						Vector3 vertex2 = interpolate(cube_vertices[a1], cube_values[a1], cube_vertices[b1], cube_values[b1]);
+						Vector3 vertex3 = interpolate(cube_vertices[a2], cube_values[a2], cube_vertices[b2], cube_values[b2]);
+
+						Vector3 vector_a = vertex3 - vertex1;
+						Vector3 vector_b = vertex2 - vertex1;
+						Vector3 normal = vector_a.cross(vector_b).normalized();
+
+						// Per-vertex layer colors
+						Color color1 = color;
+						Color color2 = color;
+						Color color3 = color;
+
+						if (biome_generator.is_valid() && !show_lod_colors) {
+							Ref<Voxel> voxel1 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex1.x),
+									static_cast<int>(vertex1.y),
+									static_cast<int>(vertex1.z));
+							if (voxel1.is_valid()) {
+								color1 = get_voxel_type_color(voxel1->get_type());
+							}
+
+							Ref<Voxel> voxel2 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex2.x),
+									static_cast<int>(vertex2.y),
+									static_cast<int>(vertex2.z));
+							if (voxel2.is_valid()) {
+								color2 = get_voxel_type_color(voxel2->get_type());
+							}
+
+							Ref<Voxel> voxel3 = biome_generator->get_voxel_at(
+									static_cast<int>(vertex3.x),
+									static_cast<int>(vertex3.y),
+									static_cast<int>(vertex3.z));
+							if (voxel3.is_valid()) {
+								color3 = get_voxel_type_color(voxel3->get_type());
+							}
+						}
+
+						// Add vertices to mesh data
+						vertices.push_back(vertex1);
+						vertices.push_back(vertex2);
+						vertices.push_back(vertex3);
+
+						normals.push_back(normal);
+						normals.push_back(normal);
+						normals.push_back(normal);
+
+						colors.push_back(color1);
+						colors.push_back(color2);
+						colors.push_back(color3);
+
+						custom0.push_back(custom0_color);
+						custom0.push_back(custom0_color);
+						custom0.push_back(custom0_color);
+					}
 				}
 			}
 		}
@@ -4559,24 +5064,30 @@ void VoxelGenerator::build_heightmap_cache() {
 	// Voxel size adjusted for effective resolution
 	float eff_voxel_size = 1.0f / static_cast<float>(std::max(1, eff_resolution));
 
-	// Sample terrain noise to build heightmap
+	// Sample terrain height using sample_base_height() which includes biome generator
+	// This ensures heightmap matches the density function used during mesh generation
+	float min_h = std::numeric_limits<float>::infinity();
+	float max_h = -std::numeric_limits<float>::infinity();
 	for (int iz = 0; iz < heightmap_size_z; ++iz) {
 		for (int ix = 0; ix < heightmap_size_x; ++ix) {
 			// Convert index to world X-Z position (center of voxel column)
 			float world_x = -physical_extent_x * 0.5f + (ix + 0.5f) * eff_voxel_size;
 			float world_z = -physical_extent_z * 0.5f + (iz + 0.5f) * eff_voxel_size;
 
-			// Calculate terrain height using 2D noise
-			float height = terrain_height;
-			if (terrain_noise.is_valid()) {
-				float noise_value = terrain_noise->get_noise_2d(world_x, world_z);
-				height += noise_value * terrain_amplitude;
-			}
+			// Use sample_base_height() for consistency with get_terrain_density()
+			float height = sample_base_height(world_x, world_z);
 
 			int index = heightmap_cache_index(ix, iz);
 			heightmap_cache[index] = height;
+			if (height < min_h)
+				min_h = height;
+			if (height > max_h)
+				max_h = height;
 		}
 	}
+
+	// Diagnostic summary of heightmap range
+	log_message(String("Heightmap cache range: min={0}, max={1}").format(Array::make(min_h, max_h)), 1);
 
 	log_message("Heightmap cache built successfully", 2);
 }
@@ -4594,7 +5105,7 @@ float VoxelGenerator::get_height_at(float fx, float fz) const {
 	if (heightmap_cache.empty() ||
 			fx < 0 || fx >= heightmap_size_x ||
 			fz < 0 || fz >= heightmap_size_z) {
-		// Fallback to direct calculation
+		// Fallback to direct calculation using sample_base_height() for consistency
 		int eff_resolution = get_effective_resolution();
 		float eff_voxel_size = 1.0f / static_cast<float>(std::max(1, eff_resolution));
 		float physical_extent_x = static_cast<float>(std::max(1, world_size.x) * std::max(1, chunk_size));
@@ -4603,11 +5114,8 @@ float VoxelGenerator::get_height_at(float fx, float fz) const {
 		float world_x = -physical_extent_x * 0.5f + (fx + 0.5f) * eff_voxel_size;
 		float world_z = -physical_extent_z * 0.5f + (fz + 0.5f) * eff_voxel_size;
 
-		float height = terrain_height;
-		if (terrain_noise.is_valid()) {
-			height += terrain_noise->get_noise_2d(world_x, world_z) * terrain_amplitude;
-		}
-		return height;
+		// Use sample_base_height() which includes biome generator for consistency
+		return sample_base_height(world_x, world_z);
 	}
 
 	return heightmap_cache[heightmap_cache_index(fx, fz)];
@@ -4832,8 +5340,8 @@ void VoxelGenerator::rebuild_debug_visualizations() {
 					float y_min_world = world_y_center - eff_surface_band;
 					float y_max_world = world_y_center + eff_surface_band;
 
-					int iy_min = std::max(0, static_cast<int>((y_min_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
-					int iy_max = std::min(total_voxels_y - 1, static_cast<int>((y_max_world + physical_extent.y * 0.5f) / eff_voxel_size.y));
+					int iy_min = std::max(0, static_cast<int>(std::floor((y_min_world + physical_extent.y * 0.5f) / eff_voxel_size.y)));
+					int iy_max = std::min(total_voxels_y - 1, static_cast<int>(std::floor((y_max_world + physical_extent.y * 0.5f) / eff_voxel_size.y)));
 
 					for (int iy = iy_min; iy <= iy_max; ++iy) {
 						if (cubes_vertex_count >= Constants::MAX_VERTICES || vertex_limit)
@@ -5172,6 +5680,14 @@ void VoxelGenerator::apply_pending_meshes() {
 
 				// Emit chunk_ready signal
 				emit_signal("chunk_ready", mesh_data.chunk_index, mesh_data.chunk_coord);
+
+				// If debug dump is enabled for this chunk, perform the dump now (main-thread safe)
+				if (debug_dump_chunk_enabled) {
+					if (debug_dump_chunk_coord.x == mesh_data.chunk_coord.x && debug_dump_chunk_coord.y == mesh_data.chunk_coord.y && debug_dump_chunk_coord.z == mesh_data.chunk_coord.z) {
+						// Dump densities for inspection on the main thread
+						dump_chunk_density_samples(mesh_data.chunk_index);
+					}
+				}
 
 				int completed = chunks_completed.fetch_add(1) + 1;
 

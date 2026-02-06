@@ -43,7 +43,6 @@ var voxel_generator: VoxelGenerator = null
 
 func _ready() -> void:
 	# Get references after node is in tree
-	#terrain_manager = get_node_or_null("/root/MultiTerrainManager")
 	terrain_manager = get_tree().root.find_child("MultiTerrainManager", true, false)
 	if terrain_manager == null:
 		push_error("[Picele] MultiTerrainManager not found as autoload")
@@ -54,7 +53,10 @@ func _ready() -> void:
 	# Lock mouse cursor to center of screen	
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	add_to_group("player")
-	global_position = Vector3(0.0, 200.0, 0.0)
+	
+	# NOTE: Set the global position in script that is using the player
+	#global_position = Vector3(0.0, 200.0, 0.0)
+	
 	# Ensure the raycast can hit world geometry (layer 1) while keeping existing masks
 	picele_ray_cast.set_collision_mask_value(1, true)
 

@@ -9,6 +9,8 @@ extends Node3D
 
 class_name P3_BiomeIntegrationExample
 
+@onready var picele: Picele = $Picele
+
 ## Scene references - initialized dynamically in _ready()
 var voxel_engine: VoxelEngine = null
 var voxel_generator: VoxelGenerator = null
@@ -51,8 +53,9 @@ func _ready() -> void:
 	setup_feature_system()
 	
 	# Set debug mode value
-	voxel_generator.set_debug_mode(2)
-	
+	voxel_generator.set_debug_mode(true)
+	voxel_generator.set_debug_verbosity(2)
+
 	# Assign generators to VoxelGenerator
 	voxel_generator.set_biome_generator(biome_generator)
 	voxel_generator.set_feature_generator(feature_generator)
@@ -62,6 +65,9 @@ func _ready() -> void:
 		add_child(voxel_generator)
 		voxel_generator.set_position(Vector3.ZERO)
 		print("✓ VoxelGenerator added to P3_BiomeIntegrationExample scene")
+	
+	# Position player
+	picele.global_position = Vector3(0.0, 25.0, 0.0)
 	
 	# Ensure this node is at origin and visible
 	set_position(Vector3.ZERO)
@@ -74,6 +80,8 @@ func _ready() -> void:
 	print("\n" + sep)
 	print("INTEGRATION EXAMPLE COMPLETE")
 	print(sep + "\n")
+	
+	verify_layer_placement()
 
 ## SETUP: Create biome generator with Y-range layers
 func setup_biome_system() -> void:
@@ -240,27 +248,28 @@ func generate_example_terrain() -> void:
 		return
 	
 	# Configure VoxelGenerator - MEDIUM test size for visibility
-	voxel_generator.set_world_size(Vector3i(10, 10, 10))  # 10x10x10 chunks only
-	voxel_generator.set_chunk_size(16)
-	voxel_generator.set_resolution(3)  # 1x resolution (no marching cubes detail yet)
-	voxel_generator.set_generation_mode(1)  # HEIGHTMAP_FIRST
+	voxel_generator.set_world_size(Vector3i(4, 4, 4))  # Chunks only
+	voxel_generator.set_chunk_size(8)
+	voxel_generator.set_resolution(1)
+	voxel_generator.set_generation_mode(1)  # VOXELS_FIRST = 0 or HEIGHTMAP_FIRST = 1
 	voxel_generator.set_surface_band(4.0)
-	voxel_generator.set_terrain_height(10.0)
-	voxel_generator.set_terrain_amplitude(15.0)
-	voxel_generator.set_rock_influence(0.5)
+	voxel_generator.set_terrain_height(10.0) # NOTE: This has no affect when using a BiomeGenerator
+	voxel_generator.set_terrain_amplitude(5.0)
+	voxel_generator.set_rock_influence(0.3)
+	voxel_generator.set_cutoff(5.0)
 	voxel_generator.set_seeder(12345)
-	voxel_generator.set_lod_level(3)
+	voxel_generator.set_lod_level(7)
 	voxel_generator.set_show_lod_colors(false)  # CHANGED: Allow biome layer colors to show
 	voxel_generator.set_show_voxel_grid(true)
 	voxel_generator.set_show_chunk_grid(true)
 	
 	print("  Configuration:")
-	print("    - World: 10x10x10 chunk")
-	print("    - Chunk size: 16 voxels")
+	print("    - World: 2 x 2 x 2 chunk")
+	print("    - Chunk size: 8 voxels")
 	print("    - Resolution: 3x")
-	print("    - Generation: HEIGHTMAP_FIRST")
-	print("    - Surface band: 4.0 units")
-	print("    - Terrain: height=10.0, amplitude=15.0")
+	print("    - Generation: VOXELS_FIRST")
+	print("    - Surface band: 2.0 units")
+	print("    - Terrain: height=3.0, amplitude=10.0")
 	
 	# Set up noise for terrain variation
 	var terrain_noise = NoiseGenerator.new()
@@ -348,7 +357,7 @@ func verify_layer_placement() -> void:
 			status = "✗"
 		
 		var pos_str = "(%d,%d,%d)" % [test.pos.x, test.pos.y, test.pos.z]
-		print("  %s | %s | %s | %s" % [pos_str.pad_zeros(15), test.expected.pad_zeros(8), actual.pad_zeros(8), status])
+		print("  %s | %s | %s | %s" % [pos_str, test.expected, actual, status])
 
 ## SETUP: Feature System with Underground Ores and Surface Features
 func setup_feature_system() -> void:

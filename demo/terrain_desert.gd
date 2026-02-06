@@ -13,7 +13,7 @@ func _ready() -> void:
 	# Connect to MultiTerrainManager signal for dynamic generator injection
 	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
 	if terrain_manager:
-		terrain_manager.connect("terrain_selected", Callable(self, "_on_terrain_selected"))
+		terrain_manager.connect("terrain_selected", Callable(self , "_on_terrain_selected"))
 	
 	# If already initialized on Desert, set up immediately
 	if terrain_manager and terrain_manager.current_terrain_name == "Desert":
@@ -168,7 +168,7 @@ func setup_biomes(biome_gen: BiomeGenerator) -> void:
 	# VoxelType: SAND=5
 	biome_gen.add_biome_extended(
 		"Desert",
-		0.15, 0.4, # height range (low to moderate elevation)
+		0.25, 0.45, # height range (low to moderate elevation)
 		0.7, 1.0, # temperature range (hot)
 		0.0, 0.2, # humidity range (dry)
 		[5], # surface blocks (SAND)
