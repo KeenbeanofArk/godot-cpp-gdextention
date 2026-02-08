@@ -74,9 +74,9 @@ func debug_print_forcefield_state():
 		if not root:
 			print("\n[ERROR] ForcefieldRoot not found after create_forcefield_nodes()")
 			print("[DEBUG] VoxelGenerator children: %d" % voxel_generator.get_child_count())
-			for i in range(voxel_generator.get_child_count()):
-				var child = voxel_generator.get_child(i)
-				print("  Child %d: %s" % [i, child.name])
+			#for i in range(voxel_generator.get_child_count()):
+				#var child = voxel_generator.get_child(i)
+				#print("  Child %d: %s" % [i, child.name])
 			return
 	
 	print("\nForcefieldRoot found: %s (in_tree: %s)" % [root.name, root.is_inside_tree()])

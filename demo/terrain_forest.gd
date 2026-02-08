@@ -41,10 +41,10 @@ func _setup_terrain_instance() -> void:
 	var world_manager = get_tree().get_first_node_in_group("world")
 	
 	# Enable the forcefield (if not already)
-	voxel_generator.forcefield_enabled = true
+	voxel_generator.forcefield_enabled = false
 	voxel_generator.forcefield_height = world_manager.WALL_HEIGHT if world_manager else 300
-	voxel_generator.forcefield_collision_enabled = true
-	voxel_generator.forcefield_detection_enabled = true
+	voxel_generator.forcefield_collision_enabled = false
+	voxel_generator.forcefield_detection_enabled = false
 	voxel_generator.forcefield_buffer = -1.0
 	voxel_generator.forcefield_detection_voxels = 10
 	
@@ -98,8 +98,8 @@ func _setup_terrain_instance() -> void:
 	voxel_generator.lod_distance_multiplier = 5.0
 	voxel_generator.show_lod_colors = false
 	voxel_generator.heightmap_vertex_limit = 534000000
-	voxel_generator.show_voxel_grid = false
-	voxel_generator.show_chunk_grid = false
+	voxel_generator.show_voxel_grid = true
+	voxel_generator.show_chunk_grid = true
 	
 	# Configure biome generator for forest
 	var biome_gen = BiomeGenerator.new()
@@ -198,8 +198,9 @@ func _process(delta: float) -> void:
 func _on_chunk_ready(_chunk_index: int, _coord: Vector3i) -> void:
 	pass
 
-func _on_progress(done: int, total: int) -> void:
-	print("[TerrainForest] Progress: %d/%d" % [done, total])
+func _on_progress(_done: int, _total: int) -> void:
+	pass
+	#print("[TerrainForest] Progress: %d/%d" % [done, total])
 
 func _on_complete() -> void:
 	print("[TerrainForest] Generation complete!")

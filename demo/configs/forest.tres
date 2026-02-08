@@ -6,11 +6,13 @@
 
 [resource]
 config_name = "Forest"
-world_size = Vector3i(12, 10, 12)
-resolution = 3
+world_size = Vector3i(30, 12, 30)
+resolution = 4
 seeder = 3456
 terrain_height = 6.0
 terrain_amplitude = 10.0
 noise_generator = SubResource("NoiseGenerator_nglur")
 biome_generator = SubResource("BiomeGenerator_k3ioj")
 rock_influence = 0.2
+sea_level = 1.0
+lod_levels = 4

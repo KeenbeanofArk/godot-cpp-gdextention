@@ -60,3 +60,7 @@ compile_commands.json
 # Cmake
 cmake-build*
 CMakeUserPresets.json
+
+# Claude Code temp files
+nul
+tmpclaude-*-cwd

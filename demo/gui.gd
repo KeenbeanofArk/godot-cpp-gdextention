@@ -13,6 +13,13 @@ var ui_bound_to_generator: bool = false
 # Get the player
 var player: Picele = null
 
+# Voxel position overlay state
+var show_position_overlay: bool = false
+
+# Voxel highlighting state
+var show_voxel_highlight: bool = true
+var voxel_highlight_label: Label3D = null
+
 # Color coding for terrains
 var terrain_colors: Dictionary = {
 	"Plains": Color(0.4, 0.8, 0.4), # Green Grass
@@ -82,6 +89,11 @@ var terrain_colors: Dictionary = {
 @onready var close_demo_button: Button = $DebugDisplay/DebugPanel/DebugContainer/CloseDemoButton
 @onready var fps_counter: Label = $FPSControl/FPS/FpsCounter
 @onready var cross_hair: Control = $CrossHair
+@onready var show_voxel_position: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/ShowVoxelPosition
+@onready var show_voxel_highlight_checkbox: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/ShowVoxelHighlight
+@onready var dump_chunk_density: CheckButton = $DebugDisplay/DebugPanel/DebugContainer/DumpChunkDensity
+@onready var voxel_position_control: Control = $VoxelPositionControl
+@onready var voxel_position_label: Label = $VoxelPositionControl/VoxelPositionPanel/VoxelPositionLabel
 
 @export_category("Debug Settings")
 @export var debug_show: bool = false
@@ -103,7 +115,7 @@ func _ready() -> void:
 		return
 		
 	# Connect to terrain selection signal
-	terrain_manager.connect("terrain_selected", Callable(self, "_on_terrain_selected"))
+	terrain_manager.connect("terrain_selected", Callable(self , "_on_terrain_selected"))
 	
 	# Initialize with first terrain
 	if not terrain_manager.terrain_registry.is_empty():
@@ -145,15 +157,23 @@ func _process(_delta: float) -> void:
 	# Update FPS counter
 	fps_counter.add_theme_font_size_override("font_size", 30)
 	fps_counter.text = "FPS: %d" % [Engine.get_frames_per_second()]
-	
+
 	# If debug GUI is visible, update terrain based on raycast
 	if debug_display.visible and terrain_manager:
 		var new_terrain = terrain_manager.get_terrain_from_raycast()
 		if new_terrain != current_terrain_name:
 			terrain_manager.switch_to_terrain(new_terrain)
-		
+
 		# Update visual feedback
 		update_visual_feedback()
+
+	# Update voxel position overlay if enabled
+	if show_position_overlay and voxel_position_control.visible:
+		update_voxel_position_display()
+
+	# Update voxel highlighting independently (doesn't require position overlay)
+	if show_voxel_highlight:
+		update_voxel_highlight()
 
 func update_visual_feedback() -> void:
 	if not terrain_manager or not subtitle:
@@ -169,6 +189,213 @@ func update_visual_feedback() -> void:
 	else:
 		subtitle.text = "[Looking at: %s] No collision" % current_terrain_name
 		subtitle.add_theme_color_override("font_color", Color.GRAY)
+
+func update_voxel_position_display() -> void:
+	if not terrain_manager or not current_voxel_generator:
+		voxel_position_label.text = "No terrain selected"
+		if voxel_highlight_label:
+			voxel_highlight_label.visible = false
+		return
+
+	var raycast_info = terrain_manager.get_raycast_info()
+
+	if not raycast_info.get("hit", false):
+		voxel_position_label.text = "No collision detected"
+		if voxel_highlight_label:
+			voxel_highlight_label.visible = false
+		return
+
+	var hit_pos = raycast_info["position"]
+
+	# Get generator parameters
+	var world_size = current_voxel_generator.world_size
+	var chunk_size = current_voxel_generator.chunk_size
+
+	# Calculate world extents
+	var world_extent_x = world_size.x * chunk_size
+	var world_extent_y = world_size.y * chunk_size
+	var world_extent_z = world_size.z * chunk_size
+
+	# Calculate chunk coordinate from world position
+	var chunk_coord = Vector3i(
+		floor((hit_pos.x + world_extent_x * 0.5) / chunk_size),
+		floor((hit_pos.y + world_extent_y * 0.5) / chunk_size),
+		floor((hit_pos.z + world_extent_z * 0.5) / chunk_size)
+	)
+
+	# Validate chunk coordinate is within bounds
+	if (chunk_coord.x < 0 or chunk_coord.x >= world_size.x or
+		chunk_coord.y < 0 or chunk_coord.y >= world_size.y or
+		chunk_coord.z < 0 or chunk_coord.z >= world_size.z):
+		voxel_position_label.text = "Outside world bounds\nWorld Pos: (%d, %d, %d)" % [
+			int(hit_pos.x), int(hit_pos.y), int(hit_pos.z)
+		]
+		return
+
+	# Calculate chunk index using formula: index = x + y * world_size.x + z * world_size.x * world_size.y
+	var chunk_index = chunk_coord.x + chunk_coord.y * world_size.x + chunk_coord.z * world_size.x * world_size.y
+
+	# Calculate chunk corner position
+	var corner = Vector3(
+		chunk_coord.x * chunk_size - world_extent_x * 0.5,
+		chunk_coord.y * chunk_size - world_extent_y * 0.5,
+		chunk_coord.z * chunk_size - world_extent_z * 0.5
+	)
+
+	# Calculate local voxel coordinate within chunk
+	var local_voxel = Vector3i(
+		floor(hit_pos.x - corner.x),
+		floor(hit_pos.y - corner.y),
+		floor(hit_pos.z - corner.z)
+	)
+
+	# Clamp local coordinates to chunk bounds
+	local_voxel.x = clamp(local_voxel.x, 0, chunk_size - 1)
+	local_voxel.y = clamp(local_voxel.y, 0, chunk_size - 1)
+	local_voxel.z = clamp(local_voxel.z, 0, chunk_size - 1)
+
+	# Format display text
+	voxel_position_label.text = """Raycast Target Position:
+
+Chunk Coord: (%d, %d, %d)
+Chunk Index: %d
+
+Local Voxel: (%d, %d, %d)
+World Pos: (%.1f, %.1f, %.1f)""" % [
+		chunk_coord.x, chunk_coord.y, chunk_coord.z,
+		chunk_index,
+		local_voxel.x, local_voxel.y, local_voxel.z,
+		hit_pos.x, hit_pos.y, hit_pos.z
+	]
+
+func update_voxel_highlight() -> void:
+	if not terrain_manager or not current_voxel_generator:
+		if voxel_highlight_label:
+			voxel_highlight_label.visible = false
+		return
+
+	var raycast_info = terrain_manager.get_raycast_info()
+
+	if not raycast_info.get("hit", false):
+		if voxel_highlight_label:
+			voxel_highlight_label.visible = false
+		var material = current_voxel_generator.terrain_material
+		if material is ShaderMaterial:
+			material.set_shader_parameter("highlight_enabled", false)
+		return
+
+	var hit_pos = raycast_info["position"]
+
+	# Get generator parameters
+	var world_size = current_voxel_generator.world_size
+	var chunk_size = current_voxel_generator.chunk_size
+
+	# Calculate world extents
+	var world_extent_x = world_size.x * chunk_size
+	var world_extent_y = world_size.y * chunk_size
+	var world_extent_z = world_size.z * chunk_size
+
+	# Calculate chunk coordinate from world position
+	var chunk_coord = Vector3i(
+		floor((hit_pos.x + world_extent_x * 0.5) / chunk_size),
+		floor((hit_pos.y + world_extent_y * 0.5) / chunk_size),
+		floor((hit_pos.z + world_extent_z * 0.5) / chunk_size)
+	)
+
+	# Validate chunk coordinate is within bounds
+	if (chunk_coord.x < 0 or chunk_coord.x >= world_size.x or
+		chunk_coord.y < 0 or chunk_coord.y >= world_size.y or
+		chunk_coord.z < 0 or chunk_coord.z >= world_size.z):
+		if voxel_highlight_label:
+			voxel_highlight_label.visible = false
+		var material = current_voxel_generator.terrain_material
+		if material is ShaderMaterial:
+			material.set_shader_parameter("highlight_enabled", false)
+		return
+
+	# Calculate chunk index
+	var chunk_index = chunk_coord.x + chunk_coord.y * world_size.x + chunk_coord.z * world_size.x * world_size.y
+
+	# Calculate chunk corner position
+	var corner = Vector3(
+		chunk_coord.x * chunk_size - world_extent_x * 0.5,
+		chunk_coord.y * chunk_size - world_extent_y * 0.5,
+		chunk_coord.z * chunk_size - world_extent_z * 0.5
+	)
+
+	# Calculate local voxel coordinate within chunk
+	var local_voxel = Vector3i(
+		floor(hit_pos.x - corner.x),
+		floor(hit_pos.y - corner.y),
+		floor(hit_pos.z - corner.z)
+	)
+
+	# Clamp local coordinates to chunk bounds
+	local_voxel.x = clamp(local_voxel.x, 0, chunk_size - 1)
+	local_voxel.y = clamp(local_voxel.y, 0, chunk_size - 1)
+	local_voxel.z = clamp(local_voxel.z, 0, chunk_size - 1)
+
+	# Update shader-based highlighting
+	var material = current_voxel_generator.terrain_material
+	if material is ShaderMaterial:
+		material.set_shader_parameter("highlight_world_position", hit_pos)
+		material.set_shader_parameter("highlight_enabled", true)
+
+	# Update Label3D
+	update_voxel_highlight_label(hit_pos, chunk_coord, chunk_index, local_voxel)
+
+
+func create_voxel_highlight_label() -> void:
+	if voxel_highlight_label:
+		return  # Already exists
+
+	voxel_highlight_label = Label3D.new()
+	voxel_highlight_label.name = "VoxelHighlightLabel"
+	voxel_highlight_label.text = "Voxel Info"
+	voxel_highlight_label.font_size = 18
+	voxel_highlight_label.modulate = Color(0.067, 0.636, 0.0, 1.0)  # Green
+	voxel_highlight_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	voxel_highlight_label.no_depth_test = true
+	voxel_highlight_label.visible = false
+
+	# Center the label text at the position
+	voxel_highlight_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	voxel_highlight_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+	# Adjust pixel size for better visibility at distance
+	voxel_highlight_label.pixel_size = 0.01
+
+	# Add outline for readability against terrain
+	voxel_highlight_label.outline_size = 8
+	voxel_highlight_label.outline_modulate = Color(0, 0, 0, 1)
+
+	# Add to scene root (not GUI canvas layer)
+	var scene_root = get_tree().root
+	scene_root.add_child(voxel_highlight_label)
+
+func remove_voxel_highlight_label() -> void:
+	if voxel_highlight_label:
+		voxel_highlight_label.queue_free()
+		voxel_highlight_label = null
+
+func update_voxel_highlight_label(hit_pos: Vector3, chunk_coord: Vector3i, chunk_index: int, local_voxel: Vector3i) -> void:
+	if not voxel_highlight_label:
+		return
+
+	# Position label at the hit voxel (small offset to stay above surface)
+	voxel_highlight_label.global_position = hit_pos + Vector3(0, 0.5, 0)
+	voxel_highlight_label.visible = true
+
+	# Format text with all requested information
+	voxel_highlight_label.text = """Chunk: (%d,%d,%d)
+Index: %d
+Local: (%d,%d,%d)
+World: (%.1f,%.1f,%.1f)""" % [
+		chunk_coord.x, chunk_coord.y, chunk_coord.z,
+		chunk_index,
+		local_voxel.x, local_voxel.y, local_voxel.z,
+		hit_pos.x, hit_pos.y, hit_pos.z
+	]
 
 func _on_terrain_selected(terrain_name: String, voxel_gen: VoxelGenerator) -> void:
 	current_terrain_name = terrain_name
@@ -389,6 +616,34 @@ func bind_debug_controls():
 	show_centers.text = "Show Centers"
 	show_centers.set_pressed(current_voxel_generator.show_centers)
 	show_centers.toggled.connect(func(pressed): current_voxel_generator.show_centers = pressed)
+
+	# Show Voxel Position toggle
+	show_voxel_position.text = "Show Voxel Position"
+	show_voxel_position.set_pressed(false)
+	show_voxel_position.toggled.connect(func(pressed):
+		show_position_overlay = pressed
+		voxel_position_control.visible = pressed
+	)
+
+	# Show Voxel Highlight toggle
+	show_voxel_highlight_checkbox.text = "Highlight Voxel (3D)"
+	show_voxel_highlight_checkbox.set_pressed(true)
+	show_voxel_highlight_checkbox.toggled.connect(func(pressed):
+		show_voxel_highlight = pressed
+		if pressed:
+			create_voxel_highlight_label()
+		else:
+			remove_voxel_highlight_label()
+		# Set shader highlight
+		var material = current_voxel_generator.terrain_material
+		if material is ShaderMaterial:
+			material.set_shader_parameter("highlight_enabled", pressed)
+	)
+
+	# Dump Chunk Density toggle
+	dump_chunk_density.text = "Dump Chunk Density"
+	dump_chunk_density.set_pressed(current_voxel_generator.debug_dump_chunk_enabled)
+	dump_chunk_density.toggled.connect(func(pressed): current_voxel_generator.debug_dump_chunk_enabled = pressed)
 
 	# Use Textures toggle
 	use_textures.text = "Use Textures"
@@ -680,7 +935,7 @@ func maybe_show_startup_load_dialog() -> void:
 	# When confirmed, call helper to prompt/compare params and load
 	# Use default dialog buttons (OK/Cancel) to remain compatible across Godot versions
 	dlg.popup_centered()
-	dlg.connect("confirmed", Callable(self, "_on_startup_load_confirmed").bind(list, maps))
+	dlg.connect("confirmed", Callable(self , "_on_startup_load_confirmed").bind(list, maps))
 	dlg.connect("close_requested", Callable(dlg, "queue_free"))
 
 
@@ -764,6 +1019,9 @@ func _prompt_and_load_map(map_name: String) -> void:
 	print("[GUI] Requested load from user://saved_maps/%s" % map_name)
 
 ## Find VoxelGenerator (deferred lookup to wait for scene tree initialization)
+func _exit_tree() -> void:
+	remove_voxel_highlight_label()
+
 func _find_voxel_generator() -> void:
 	current_voxel_generator = get_tree().root.find_child("VoxelGenerator", true, false)
 	if current_voxel_generator == null:

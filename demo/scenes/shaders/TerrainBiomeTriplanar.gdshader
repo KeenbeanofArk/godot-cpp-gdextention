@@ -7,6 +7,12 @@ uniform bool use_textures = false;
 // false = full 3-axis triplanar, true = cheaper 2-axis blend (fewer texture fetches)
 uniform bool triplanar_fast = false;
 
+// Voxel highlight overlay
+uniform bool highlight_enabled = false;
+uniform vec3 highlight_world_position = vec3(0.0);
+uniform float highlight_radius = 1.5;
+uniform vec4 highlight_color : source_color = vec4(1.0, 1.0, 0.0, 0.6);
+
 // Up to 16 biome layers: layer index 0..15
 uniform sampler2DArray biome_base_textures;
 uniform sampler2DArray biome_slope_textures;
@@ -199,6 +205,16 @@ void fragment() {
 				float slope_r = triplanar_roughness(biome_slope_roughness_textures, layer, v_world_pos, v_world_normal);
 				out_roughness = mix(base_r, slope_r, t);
 			}
+		}
+	}
+
+	// Apply voxel highlight if enabled
+	if (highlight_enabled) {
+		float dist = distance(v_world_pos, highlight_world_position);
+		if (dist < highlight_radius) {
+			float factor = 1.0 - (dist / highlight_radius);
+			factor = factor * factor; // Quadratic falloff for sharper edge
+			out_albedo = mix(out_albedo, highlight_color.rgb, factor * highlight_color.a);
 		}
 	}
 

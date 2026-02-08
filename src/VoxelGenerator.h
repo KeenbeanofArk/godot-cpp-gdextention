@@ -177,8 +177,15 @@ private:
 	// Debug: per-chunk density dump instrumentation
 	// When enabled, generator will emit DUMP_START/DUMP_SAMPLE/DUMP_END logs for a single chunk
 	// Enabled by default for development to capture chunk (1,0,0)
-	bool debug_dump_chunk_enabled = true;
+	bool debug_dump_chunk_enabled = false;
 	Vector3i debug_dump_chunk_coord = Vector3i(1, 0, 0);
+
+	// Voxel highlighting for debug visualization
+	bool voxel_highlight_enabled = false;
+	Vector3 highlight_position = Vector3(0, 0, 0);
+	Color highlight_color = Color(1.0f, 1.0f, 0.0f, 1.0f); // Bright yellow
+	float highlight_tolerance = 2.0f; // Distance tolerance for matching voxel (scaled for typical voxel sizes)
+	Vector3i highlighted_chunk_coord = Vector3i(-1, -1, -1); // Track which chunk
 
 	// Add a container for chunks, e.g.:
 	std::vector<Chunk *> chunks;
@@ -388,6 +395,18 @@ public:
 
 	// Trigger a density dump for a specific chunk (main-thread callable)
 	void dump_chunk_density_samples(int chunk_index) const;
+
+	// Voxel highlighting API
+	void set_voxel_highlight_enabled(bool enabled);
+	bool get_voxel_highlight_enabled() const;
+
+	void set_highlight_position(const Vector3 &position);
+	Vector3 get_highlight_position() const;
+
+	void set_highlight_color(const Color &color);
+	Color get_highlight_color() const;
+
+	void clear_highlight();
 
 	void debug_print_state();
 	void debug_draw_noise_slice(float y_level);

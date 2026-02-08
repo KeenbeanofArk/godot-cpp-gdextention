@@ -146,10 +146,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -300.0
-offset_top = -450.0
-offset_right = 500.0
-offset_bottom = 650.0
+offset_left = -329.0
+offset_top = -458.5
+offset_right = 543.0
+offset_bottom = 722.5
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_6lon5")
@@ -159,6 +159,7 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_bottom = 4.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 8
@@ -204,6 +205,21 @@ text = "Show Chunk Grids"
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Show Centers	"
+
+[node name="ShowVoxelPosition" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Show Voxel Position"
+
+[node name="ShowVoxelHighlight" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Highlight Voxel (3D)"
+
+[node name="DumpChunkDensity" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Dump Chunk Density"
 
 [node name="UseTextures" type="CheckButton" parent="DebugDisplay/DebugPanel/DebugContainer"]
 layout_mode = 2
@@ -476,6 +492,38 @@ offset_bottom = 5.0
 grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.8959682, 0, 0.012285085, 1)
+
+[node name="VoxelPositionControl" type="Control" parent="."]
+visible = false
+layout_mode = 3
+anchors_preset = 0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 436.0
+offset_bottom = 323.0
+metadata/_edit_group_ = true
+
+[node name="VoxelPositionPanel" type="Panel" parent="VoxelPositionControl"]
+self_modulate = Color(0.2, 0.447059, 1, 0.45098)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_80edf")
+
+[node name="VoxelPositionLabel" type="Label" parent="VoxelPositionControl/VoxelPositionPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 20
+text = "No collision"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [connection signal="pressed" from="TerraformSettings/TerraformPanel/TerraformContainer/ExitButton" to="." method="_on_exit_button_pressed"]
 [connection signal="pressed" from="DebugDisplay/DebugPanel/DebugContainer/SaveMapButton" to="." method="_on_save_map_button_pressed"]

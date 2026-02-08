@@ -169,6 +169,19 @@ void VoxelGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_debug_dump_chunk_coord"), &VoxelGenerator::get_debug_dump_chunk_coord);
 	ClassDB::bind_method(D_METHOD("dump_chunk_density_samples", "chunk_index"), &VoxelGenerator::dump_chunk_density_samples);
 
+	// Voxel highlighting bindings
+	ClassDB::bind_method(D_METHOD("set_voxel_highlight_enabled", "enabled"), &VoxelGenerator::set_voxel_highlight_enabled);
+	ClassDB::bind_method(D_METHOD("get_voxel_highlight_enabled"), &VoxelGenerator::get_voxel_highlight_enabled);
+	ClassDB::bind_method(D_METHOD("set_highlight_position", "position"), &VoxelGenerator::set_highlight_position);
+	ClassDB::bind_method(D_METHOD("get_highlight_position"), &VoxelGenerator::get_highlight_position);
+	ClassDB::bind_method(D_METHOD("set_highlight_color", "color"), &VoxelGenerator::set_highlight_color);
+	ClassDB::bind_method(D_METHOD("get_highlight_color"), &VoxelGenerator::get_highlight_color);
+	ClassDB::bind_method(D_METHOD("clear_highlight"), &VoxelGenerator::clear_highlight);
+
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "voxel_highlight_enabled"), "set_voxel_highlight_enabled", "get_voxel_highlight_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "highlight_position"), "set_highlight_position", "get_highlight_position");
+	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "highlight_color"), "set_highlight_color", "get_highlight_color");
+
 	ClassDB::bind_method(D_METHOD("debug_print_state"), &VoxelGenerator::debug_print_state);
 	ClassDB::bind_method(D_METHOD("debug_draw_noise_slice", "y_level"), &VoxelGenerator::debug_draw_noise_slice);
 	ClassDB::bind_method(D_METHOD("log_message", "message", "verbosity_level"), &VoxelGenerator::log_message, DEFVAL(1));
@@ -308,6 +321,8 @@ void VoxelGenerator::_bind_methods() {
 	ADD_GROUP("Debug Settings", "debug_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_mode"), "set_debug_mode", "get_debug_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "debug_verbosity", PROPERTY_HINT_RANGE, "0,3,1"), "set_debug_verbosity", "get_debug_verbosity");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_dump_chunk_enabled"), "set_debug_dump_chunk_enabled", "get_debug_dump_chunk_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3I, "debug_dump_chunk_coord"), "set_debug_dump_chunk_coord", "get_debug_dump_chunk_coord");
 
 	ADD_GROUP("Async Generation", "async_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_chunks_per_frame", PROPERTY_HINT_RANGE, "1,32,1"), "set_max_chunks_per_frame", "get_max_chunks_per_frame");
@@ -748,7 +763,7 @@ void VoxelGenerator::load_map(const String &dir, const String &map_name, bool st
 		// Restore auto_generate flag directly (do not call setter to avoid generate())
 		auto_generate = prev_auto;
 		log_message("generator_params applied; chunks recreated to match saved layout", 1);
-		
+
 		// ==================== CRITICAL: Rebuild density cache BEFORE loading terrain edits ====================
 		// The density cache MUST be built at the current (loaded) resolution and parameters
 		// so that terrain_edits (which are stored as voxel-space indices) are applied to the correct density grid.
@@ -762,7 +777,8 @@ void VoxelGenerator::load_map(const String &dir, const String &map_name, bool st
 		}
 		cache_is_valid = true;
 		log_message(String("Density cache rebuilt: resolution={0}, cache_resolution={1}, mode={2}")
-			.format(Array::make(get_effective_resolution(), cache_resolution, generation_mode == VOXELS_FIRST ? "VOXELS_FIRST" : "HEIGHTMAP_FIRST")), 2);
+							.format(Array::make(get_effective_resolution(), cache_resolution, generation_mode == VOXELS_FIRST ? "VOXELS_FIRST" : "HEIGHTMAP_FIRST")),
+				2);
 	}
 
 	// Load terrain edits
@@ -784,7 +800,7 @@ void VoxelGenerator::load_map(const String &dir, const String &map_name, bool st
 		edit_count = static_cast<int>(edits.size());
 		log_message(String("Loaded {0} terrain edits into terrain_edits map").format(Array::make(edit_count)), 2);
 	}
-	
+
 	// Mark all chunks as dirty so they will regenerate with the loaded edits applied
 	mark_all_chunks_dirty();
 	log_message("All chunks marked dirty for regeneration with loaded edits", 2);
@@ -928,7 +944,8 @@ void VoxelGenerator::load_map(const String &dir, const String &map_name, bool st
 
 	log_message(String("Loaded map from: {0}").format(Array::make(String(in_dir.string().c_str()))), 1);
 	log_message(String("Load complete: edits={0}, cache_valid={1}, cache_resolution={2}, effective_resolution={3}")
-		.format(Array::make(edit_count, cache_is_valid ? "yes" : "no", cache_resolution, get_effective_resolution())), 1);
+						.format(Array::make(edit_count, cache_is_valid ? "yes" : "no", cache_resolution, get_effective_resolution())),
+			1);
 }
 
 void VoxelGenerator::calculate_world_size() {
@@ -2457,7 +2474,7 @@ float VoxelGenerator::get_terrain_density(const Vector3 &pos) const {
 	//   If Y is below surface (Y < height): density is negative (solid)
 	//   If Y is above surface (Y > height): density is positive (air)
 	float base_density = pos.y - height + rocky_detail;
-	
+
 	// DIAGNOSTIC: Log critical test position to verify density gradient
 	const float world_height_extent = static_cast<float>(std::max(1, world_size.y) * std::max(1, chunk_size));
 	if (debug_verbosity >= 3 && std::abs(pos.x) < 1.0f && std::abs(pos.z) < 1.0f) {
@@ -2465,7 +2482,8 @@ float VoxelGenerator::get_terrain_density(const Vector3 &pos) const {
 		static int logged_count = 0;
 		if (logged_count < 20) {
 			log_message(String("DENSITY_CHECK: pos=({0:.1f},{1:.1f},{2:.1f}) height={3:.1f} extent={4:.1f} cutoff={5:.1f} density={6:.2f}")
-				.format(Array::make(pos.x, pos.y, pos.z, height, world_height_extent, cutoff, base_density)), 3);
+								.format(Array::make(pos.x, pos.y, pos.z, height, world_height_extent, cutoff, base_density)),
+					3);
 			logged_count++;
 		}
 	}
@@ -2511,11 +2529,12 @@ float VoxelGenerator::sample_raw_base_height(float world_x, float world_z) const
 		// BiomeGenerator outputs 0-100 range; transform to world-centered coordinates
 		float biome_height = biome_generator->get_blended_height_at(world_x, world_z);
 		height = ((biome_height / 100.0f) - 0.5f) * world_height_extent;
-		
+
 		// DIAGNOSTIC: Log height scaling
 		if (debug_verbosity >= 3 && (static_cast<int>(world_x) % 8 == 0 && static_cast<int>(world_z) % 8 == 0)) {
 			log_message(String("HEIGHT_CALC: x={0:.1f} z={1:.1f} biome_height={2:.1f} world_extent={3:.1f} final_height={4:.1f}")
-				.format(Array::make(world_x, world_z, biome_height, world_height_extent, height)), 3);
+								.format(Array::make(world_x, world_z, biome_height, world_height_extent, height)),
+					3);
 		}
 	} else {
 		// Fallback: use terrain_height as a world-space offset (already in world coordinates)
@@ -2642,6 +2661,86 @@ void VoxelGenerator::set_debug_dump_chunk_coord(const Vector3i &coord) {
 
 Vector3i VoxelGenerator::get_debug_dump_chunk_coord() const {
 	return debug_dump_chunk_coord;
+}
+
+// ---------------- Voxel Highlighting Methods ----------------
+void VoxelGenerator::set_voxel_highlight_enabled(bool enabled) {
+	if (voxel_highlight_enabled == enabled) {
+		return;
+	}
+	voxel_highlight_enabled = enabled;
+
+	// Mark affected chunk dirty when toggling
+	if (highlighted_chunk_coord.x >= 0 && highlighted_chunk_coord.x < world_size.x &&
+			highlighted_chunk_coord.y >= 0 && highlighted_chunk_coord.y < world_size.y &&
+			highlighted_chunk_coord.z >= 0 && highlighted_chunk_coord.z < world_size.z) {
+		mark_chunk_dirty(highlighted_chunk_coord);
+	}
+}
+
+bool VoxelGenerator::get_voxel_highlight_enabled() const {
+	return voxel_highlight_enabled;
+}
+
+void VoxelGenerator::set_highlight_position(const Vector3 &position) {
+	Vector3i old_chunk = highlighted_chunk_coord;
+	highlight_position = position;
+
+	// Calculate which chunk contains this world position
+	float world_extent_x = static_cast<float>(world_size.x * chunk_size);
+	float world_extent_y = static_cast<float>(world_size.y * chunk_size);
+	float world_extent_z = static_cast<float>(world_size.z * chunk_size);
+
+	highlighted_chunk_coord = Vector3i(
+			static_cast<int>(floor((position.x + world_extent_x * 0.5f) / chunk_size)),
+			static_cast<int>(floor((position.y + world_extent_y * 0.5f) / chunk_size)),
+			static_cast<int>(floor((position.z + world_extent_z * 0.5f) / chunk_size)));
+
+	// Mark old chunk dirty if it changed
+	if (old_chunk != highlighted_chunk_coord &&
+			old_chunk.x >= 0 && old_chunk.x < world_size.x &&
+			old_chunk.y >= 0 && old_chunk.y < world_size.y &&
+			old_chunk.z >= 0 && old_chunk.z < world_size.z) {
+		mark_chunk_dirty(old_chunk);
+	}
+
+	// Mark new chunk dirty
+	if (highlighted_chunk_coord.x >= 0 && highlighted_chunk_coord.x < world_size.x &&
+			highlighted_chunk_coord.y >= 0 && highlighted_chunk_coord.y < world_size.y &&
+			highlighted_chunk_coord.z >= 0 && highlighted_chunk_coord.z < world_size.z) {
+		mark_chunk_dirty(highlighted_chunk_coord);
+	}
+}
+
+Vector3 VoxelGenerator::get_highlight_position() const {
+	return highlight_position;
+}
+
+void VoxelGenerator::set_highlight_color(const Color &color) {
+	highlight_color = color;
+
+	// Mark highlighted chunk dirty to update color
+	if (voxel_highlight_enabled &&
+			highlighted_chunk_coord.x >= 0 && highlighted_chunk_coord.x < world_size.x &&
+			highlighted_chunk_coord.y >= 0 && highlighted_chunk_coord.y < world_size.y &&
+			highlighted_chunk_coord.z >= 0 && highlighted_chunk_coord.z < world_size.z) {
+		mark_chunk_dirty(highlighted_chunk_coord);
+	}
+}
+
+Color VoxelGenerator::get_highlight_color() const {
+	return highlight_color;
+}
+
+void VoxelGenerator::clear_highlight() {
+	if (highlighted_chunk_coord.x >= 0 && highlighted_chunk_coord.x < world_size.x &&
+			highlighted_chunk_coord.y >= 0 && highlighted_chunk_coord.y < world_size.y &&
+			highlighted_chunk_coord.z >= 0 && highlighted_chunk_coord.z < world_size.z) {
+		mark_chunk_dirty(highlighted_chunk_coord);
+	}
+
+	voxel_highlight_enabled = false;
+	highlighted_chunk_coord = Vector3i(-1, -1, -1);
 }
 
 void VoxelGenerator::dump_chunk_density_samples(int chunk_index) const {
@@ -3655,7 +3754,8 @@ void VoxelGenerator::build_density_cache() {
 		// Diagnostic summary of density cache range
 		float world_extent_y = static_cast<float>(world_size.y * chunk_size);
 		log_message(String("Density cache range: min={0}, max={1} | World Y extent={2} | Cutoff={3} | World size.y={4} | Chunk size={5}")
-			.format(Array::make(min_density, max_density, world_extent_y, cutoff, world_size.y, chunk_size)), 1);
+							.format(Array::make(min_density, max_density, world_extent_y, cutoff, world_size.y, chunk_size)),
+				1);
 	}
 
 	log_message("Density cache built successfully", 2);
@@ -4413,6 +4513,28 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 							}
 						}
 
+						// Apply voxel highlighting if enabled
+						if (voxel_highlight_enabled) {
+							// Scale tolerance with effective voxel size for better detection across LOD levels
+							float scaled_tolerance = highlight_tolerance * eff_voxel_size.x;
+
+							// Check distance for each vertex of the triangle
+							bool v1_highlighted = vertex1.distance_to(highlight_position) < scaled_tolerance;
+							bool v2_highlighted = vertex2.distance_to(highlight_position) < scaled_tolerance;
+							bool v3_highlighted = vertex3.distance_to(highlight_position) < scaled_tolerance;
+
+							// If any vertex is near highlight, brighten it
+							if (v1_highlighted) {
+								color1 = highlight_color;
+							}
+							if (v2_highlighted) {
+								color2 = highlight_color;
+							}
+							if (v3_highlighted) {
+								color3 = highlight_color;
+							}
+						}
+
 						// Add vertices to mesh data
 						mesh_data.vertices.push_back(vertex1);
 						mesh_data.vertices.push_back(vertex2);
@@ -4571,6 +4693,28 @@ void VoxelGenerator::generate_chunk_mesh_internal(int chunk_index) {
 									static_cast<int>(vertex3.z));
 							if (voxel3.is_valid()) {
 								color3 = get_voxel_type_color(voxel3->get_type());
+							}
+						}
+
+						// Apply voxel highlighting if enabled
+						if (voxel_highlight_enabled) {
+							// Scale tolerance with effective voxel size for better detection across LOD levels
+							float scaled_tolerance = highlight_tolerance * eff_voxel_size.x;
+
+							// Check distance for each vertex of the triangle
+							bool v1_highlighted = vertex1.distance_to(highlight_position) < scaled_tolerance;
+							bool v2_highlighted = vertex2.distance_to(highlight_position) < scaled_tolerance;
+							bool v3_highlighted = vertex3.distance_to(highlight_position) < scaled_tolerance;
+
+							// If any vertex is near highlight, brighten it
+							if (v1_highlighted) {
+								color1 = highlight_color;
+							}
+							if (v2_highlighted) {
+								color2 = highlight_color;
+							}
+							if (v3_highlighted) {
+								color3 = highlight_color;
 							}
 						}
 
@@ -4823,6 +4967,28 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 							}
 						}
 
+						// Apply voxel highlighting if enabled
+						if (voxel_highlight_enabled) {
+							// Scale tolerance with effective voxel size for better detection across LOD levels
+							float scaled_tolerance = highlight_tolerance * eff_voxel_size.x;
+
+							// Check distance for each vertex of the triangle
+							bool v1_highlighted = vertex1.distance_to(highlight_position) < scaled_tolerance;
+							bool v2_highlighted = vertex2.distance_to(highlight_position) < scaled_tolerance;
+							bool v3_highlighted = vertex3.distance_to(highlight_position) < scaled_tolerance;
+
+							// If any vertex is near highlight, brighten it
+							if (v1_highlighted) {
+								color1 = highlight_color;
+							}
+							if (v2_highlighted) {
+								color2 = highlight_color;
+							}
+							if (v3_highlighted) {
+								color3 = highlight_color;
+							}
+						}
+
 						// Add vertices to mesh data
 						vertices.push_back(vertex1);
 						vertices.push_back(vertex2);
@@ -4995,6 +5161,28 @@ void VoxelGenerator::generate_chunk_mesh_sync(int chunk_index, int override_lod)
 									static_cast<int>(vertex3.z));
 							if (voxel3.is_valid()) {
 								color3 = get_voxel_type_color(voxel3->get_type());
+							}
+						}
+
+						// Apply voxel highlighting if enabled
+						if (voxel_highlight_enabled) {
+							// Scale tolerance with effective voxel size for better detection across LOD levels
+							float scaled_tolerance = highlight_tolerance * eff_voxel_size.x;
+
+							// Check distance for each vertex of the triangle
+							bool v1_highlighted = vertex1.distance_to(highlight_position) < scaled_tolerance;
+							bool v2_highlighted = vertex2.distance_to(highlight_position) < scaled_tolerance;
+							bool v3_highlighted = vertex3.distance_to(highlight_position) < scaled_tolerance;
+
+							// If any vertex is near highlight, brighten it
+							if (v1_highlighted) {
+								color1 = highlight_color;
+							}
+							if (v2_highlighted) {
+								color2 = highlight_color;
+							}
+							if (v3_highlighted) {
+								color3 = highlight_color;
 							}
 						}
 

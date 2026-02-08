@@ -20,7 +20,7 @@ config/icon="res://icon.svg"
 StartupState="*res://startup_state.gd"
 TerrainLoader="*res://terrain_loader.gd"
 MultiTerrainManager="*res://multi_terrain_manager.gd"
-RunDumpAutorun="*res://tools/run_dump_autorun.gd"
+RunDumpAutorun="res://tools/run_dump_autorun.gd"
 
 [display]
 

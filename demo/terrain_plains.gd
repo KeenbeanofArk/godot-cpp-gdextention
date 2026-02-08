@@ -19,7 +19,7 @@ func _ready() -> void:
 	if terrain_manager and terrain_manager.current_terrain_name == "Plains":
 		voxel_generator = terrain_manager.current_voxel_generator
 		_setup_terrain_instance()
-		
+	
 	picele.global_position = Vector3(0.0, 25.0, 0.0)
 
 func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> void:
@@ -101,19 +101,19 @@ func _setup_terrain_instance() -> void:
 	voxel_generator.lod_distance_multiplier = 5.0
 	voxel_generator.show_lod_colors = false
 	voxel_generator.heightmap_vertex_limit = 534000000
-	voxel_generator.show_voxel_grid = false
-	voxel_generator.show_chunk_grid = false
+	voxel_generator.show_voxel_grid = true
+	voxel_generator.show_chunk_grid = true
 		
 	# Configure terrain - Plains
-	voxel_generator.terrain_height = 4.0
-	voxel_generator.terrain_amplitude = 5.0
+	#voxel_generator.terrain_height = 4.0
+	#voxel_generator.terrain_amplitude = 5.0
 	voxel_generator.rock_influence = 0.1
 	voxel_generator.cutoff = 0.1
 	
 	# Configure biome generator for Plains
 	var biome_gen = BiomeGenerator.new()
 	biome_gen.seed = 12345 # no verbose
-	biome_gen.sea_level = 1.0 # no verbose
+	biome_gen.sea_level = 0.0 # no verbose
 	setup_biomes(biome_gen)
 
 	# Connect to signals

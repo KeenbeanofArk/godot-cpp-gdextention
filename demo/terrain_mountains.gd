@@ -20,6 +20,8 @@ func _ready() -> void:
 		voxel_generator = terrain_manager.current_voxel_generator
 		_setup_terrain_instance()
 
+	picele.global_position = Vector3(0.0, 25.0, 0.0)
+
 func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> void:
 	# Only initialize if this is the Mountains terrain
 	if terrain_name == "Mountains":
@@ -41,10 +43,10 @@ func _setup_terrain_instance() -> void:
 	var world_manager = get_tree().get_first_node_in_group("world")
 	
 	# Enable the forcefield (if not already)
-	voxel_generator.forcefield_enabled = true
+	voxel_generator.forcefield_enabled = false
 	voxel_generator.forcefield_height = world_manager.WALL_HEIGHT if world_manager else 300
-	voxel_generator.forcefield_collision_enabled = true
-	voxel_generator.forcefield_detection_enabled = true
+	voxel_generator.forcefield_collision_enabled = false
+	voxel_generator.forcefield_detection_enabled = false
 	voxel_generator.forcefield_buffer = -1.0
 	voxel_generator.forcefield_detection_voxels = 10
 	
@@ -99,12 +101,12 @@ func _setup_terrain_instance() -> void:
 	voxel_generator.lod_distance_multiplier = 5.0
 	voxel_generator.show_lod_colors = false
 	voxel_generator.heightmap_vertex_limit = 534000000
-	voxel_generator.show_voxel_grid = false
-	voxel_generator.show_chunk_grid = false
+	voxel_generator.show_voxel_grid = true
+	voxel_generator.show_chunk_grid = true
 		
 	# Configure terrain - Mountains have dramatic height
-	voxel_generator.terrain_height = 80.0
-	voxel_generator.terrain_amplitude = 0.5
+	#voxel_generator.terrain_height = 80.0
+	#voxel_generator.terrain_amplitude = 0.5
 	voxel_generator.rock_influence = 0.4
 	voxel_generator.cutoff = 0.1
 	
@@ -162,10 +164,10 @@ func setup_biomes(biome_gen: BiomeGenerator):
 		"Mountains",
 		0.55,
 		0.85,
-		0.0,
-		0.5,
+		0.1,
+		0.3,
 		0.2,
-		0.8,
+		0.5,
 		stone,
 		stone,
 		2,
