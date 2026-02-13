@@ -1,11 +1,16 @@
-[gd_resource type="TerrainConfig" format=3 uid="uid://mountains001"]
+[gd_resource type="TerrainConfig" load_steps=3 format=3 uid="uid://mountains001"]
+
+[sub_resource type="BiomeGenerator" id="BiomeGenerator_sccci"]
+
+[sub_resource type="NoiseGenerator" id="NoiseGenerator_dhiai"]
 
 [resource]
 config_name = "Mountains"
 world_size = Vector3i(12, 10, 12)
-chunk_size = 8
 resolution = 3
 seeder = 5678
 terrain_height = 12.0
 terrain_amplitude = 16.0
+noise_generator = SubResource("NoiseGenerator_dhiai")
+biome_generator = SubResource("BiomeGenerator_sccci")
 rock_influence = 0.5

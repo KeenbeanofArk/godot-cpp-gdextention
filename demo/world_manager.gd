@@ -9,18 +9,22 @@ class_name WorldManager
 @onready var terrain_multi_biome: Node3D = $TerrainMultiBiome
 
 # World settings
-const WORLD_SIZE: int = 15 # In Chunks
-const WORLD_DEPTH: int = 10 # In Chunks
+const WORLD_SIZE: int = 25 # In Chunks
+const WORLD_DEPTH: int = 12 # In Chunks
 const WALL_HEIGHT: float = 100.0
 
 # Currently active terrain name
 var active_terrain: String = "Plains"
+var startup_state: Node = null
+var terrain_manager: Node = null
 
 func _ready():
+	# Find StartupState in the scene
+	startup_state = get_tree().root.find_child("StartupState", true, false)
+	
 	# Get the pending terrain from startup state (if any)
-	var ss = get_node_or_null("/root/StartupState")
-	if ss and ss.has_method("get_pending_terrain"):
-		var pending = ss.get_pending_terrain()
+	if startup_state and startup_state.has_method("get_pending_terrain"):
+		var pending = startup_state.get_pending_terrain()
 		if pending != "":
 			active_terrain = pending
 	
@@ -29,8 +33,10 @@ func _ready():
 	
 	print("[WorldManager] Active terrain: %s" % active_terrain)
 	
+	# Find MultiTerrainManager in the scene
+	terrain_manager = get_tree().root.find_child("MultiTerrainManager", true, false)
+	
 	# Initialize MultiTerrainManager - it will handle loading and generating terrain
-	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
 	if terrain_manager:
 		terrain_manager.initialize()
 		

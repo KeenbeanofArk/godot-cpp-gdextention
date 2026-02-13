@@ -7,7 +7,7 @@ func _ready():
 	voxel_generator.world_size = Vector3i(10, 3, 10)
 	voxel_generator.chunk_size = 8
 	voxel_generator.resolution = 4
-	voxel_generator.generation_mode = 1  # HEIGHTMAP_FIRST (optimized)
+	voxel_generator.generation_mode = 1 # HEIGHTMAP_FIRST (optimized)
 	voxel_generator.surface_band = 4.0
 	voxel_generator.lod_level = 0
 	voxel_generator.auto_generate = false

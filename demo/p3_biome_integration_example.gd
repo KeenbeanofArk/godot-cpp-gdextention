@@ -11,6 +11,15 @@ class_name P3_BiomeIntegrationExample
 
 @onready var picele: Picele = $Picele
 
+# World settings
+@export_category("World Settings")
+
+@export var WORLD_SIZE: int = 1 # In Chunks x, z coords
+@export var WORLD_DEPTH: int = 1 # In Chunks y coords
+@export var CHUNK_SIZE: int = 8 # In voxels
+@export var RESOLUTION: int = 1
+@export var WALL_HEIGHT: float = 100.0
+
 ## Scene references - initialized dynamically in _ready()
 var voxel_engine: VoxelEngine = null
 var voxel_generator: VoxelGenerator = null
@@ -45,13 +54,13 @@ func _ready() -> void:
 	else:
 		push_error("VoxelEngine does not have create_generator() method")
 		return
-	
+
 	# Create and configure biome generator
 	setup_biome_system()
 	
 	# Create and configure feature generator
 	setup_feature_system()
-	
+
 	# Set debug mode value
 	voxel_generator.set_debug_mode(true)
 	voxel_generator.set_debug_verbosity(2)
@@ -59,21 +68,24 @@ func _ready() -> void:
 	# Assign generators to VoxelGenerator
 	voxel_generator.set_biome_generator(biome_generator)
 	voxel_generator.set_feature_generator(feature_generator)
-	
+
 	# Make VoxelGenerator visible in the scene by adding as child
 	if voxel_generator.get_parent() == null:
 		add_child(voxel_generator)
 		voxel_generator.set_position(Vector3.ZERO)
 		print("✓ VoxelGenerator added to P3_BiomeIntegrationExample scene")
-	
+
 	# Position player
-	picele.global_position = Vector3(0.0, 10.0, 0.0)
-	
+	picele.global_position = Vector3(0.0, 8.0, 0.0)
+
 	# Ensure this node is at origin and visible
 	set_position(Vector3.ZERO)
 	set_visible(true)
 	print("✓ P3_BiomeIntegrationExample positioned at origin (0,0,0)")
-	
+
+	# Demonstrate VoxelRegistry and VoxelMaterialLibrary usage
+	demonstrate_voxel_system()
+
 	# Generate example terrain
 	generate_example_terrain()
 	
@@ -125,23 +137,23 @@ func setup_biome_system() -> void:
 
 ## Create Plains biome: Grass → Dirt → Sand → Stone → Bedrock
 func _create_plains_biome() -> void:
-	var surface_blocks = PackedInt32Array([2, 1])  # GRASS, DIRT
+	var surface_blocks = PackedInt32Array([2, 1]) # GRASS, DIRT
 	
 	var subsurface_layers = [
 		{
-			"block_type": 1,  # DIRT
+			"block_type": 1, # DIRT
 			"y_min": 30,
 			"y_max": 50,
 			"density": 0.85
 		},
 		{
-			"block_type": 5,  # SAND
+			"block_type": 5, # SAND
 			"y_min": 15,
 			"y_max": 30,
 			"density": 0.7
 		},
 		{
-			"block_type": 3,  # STONE
+			"block_type": 3, # STONE
 			"y_min": 5,
 			"y_max": 15,
 			"density": 0.95
@@ -150,13 +162,13 @@ func _create_plains_biome() -> void:
 	
 	biome_generator.add_biome_with_y_ranges(
 		"Plains",
-		-5.0, 20.0,  # height range (low, rolling)
-		-0.5, 0.5,  # temperature: temperate
-		0.0, 1.0,  # humidity: moist
+		-5.0, 20.0, # height range (low, rolling)
+		-0.5, 0.5, # temperature: temperate
+		0.0, 1.0, # humidity: moist
 		surface_blocks,
 		subsurface_layers,
-		3,  # bedrock_block = STONE
-		3  # filler_block = STONE
+		3, # bedrock_block = STONE
+		3 # filler_block = STONE
 	)
 	print("  ✓ Created Plains biome")
 	print("    - Surface: Grass/Dirt")
@@ -166,23 +178,23 @@ func _create_plains_biome() -> void:
 
 ## Create Mountain biome: Stone → Stone with ore → Bedrock
 func _create_mountain_biome() -> void:
-	var surface_blocks = PackedInt32Array([3])  # STONE
+	var surface_blocks = PackedInt32Array([3]) # STONE
 	
 	var subsurface_layers = [
 		{
-			"block_type": 3,  # STONE
+			"block_type": 3, # STONE
 			"y_min": 40,
 			"y_max": 80,
 			"density": 1.0
 		},
 		{
-			"block_type": 9,  # COAL (ore)
+			"block_type": 9, # COAL (ore)
 			"y_min": 20,
 			"y_max": 40,
-			"density": 0.15  # Sparse ore vein
+			"density": 0.15 # Sparse ore vein
 		},
 		{
-			"block_type": 3,  # STONE
+			"block_type": 3, # STONE
 			"y_min": 10,
 			"y_max": 20,
 			"density": 0.9
@@ -191,13 +203,13 @@ func _create_mountain_biome() -> void:
 	
 	biome_generator.add_biome_with_y_ranges(
 		"Mountain",
-		25.0, 65.0,  # height range (high, steep)
-		-1.0, 0.0,  # temperature: cold
-		-1.0, 0.0,  # humidity: dry
+		25.0, 65.0, # height range (high, steep)
+		-1.0, 0.0, # temperature: cold
+		-1.0, 0.0, # humidity: dry
 		surface_blocks,
 		subsurface_layers,
-		3,  # bedrock_block = STONE
-		3  # filler_block = STONE
+		3, # bedrock_block = STONE
+		3 # filler_block = STONE
 	)
 	print("  ✓ Created Mountain biome")
 	print("    - Surface: Stone")
@@ -207,17 +219,17 @@ func _create_mountain_biome() -> void:
 
 ## Create Desert biome: Sand → Sand → Stone → Bedrock
 func _create_desert_biome() -> void:
-	var surface_blocks = PackedInt32Array([5])  # SAND
+	var surface_blocks = PackedInt32Array([5]) # SAND
 	
 	var subsurface_layers = [
 		{
-			"block_type": 5,  # SAND
+			"block_type": 5, # SAND
 			"y_min": 20,
 			"y_max": 50,
 			"density": 1.0
 		},
 		{
-			"block_type": 3,  # STONE (bedrock under desert)
+			"block_type": 3, # STONE (bedrock under desert)
 			"y_min": 5,
 			"y_max": 20,
 			"density": 0.95
@@ -226,13 +238,13 @@ func _create_desert_biome() -> void:
 	
 	biome_generator.add_biome_with_y_ranges(
 		"Desert",
-		5.0, 20.0,  # height range (low, flat)
-		0.5, 1.0,  # temperature: hot
-		-1.0, 0.0,  # humidity: dry
+		5.0, 20.0, # height range (low, flat)
+		0.5, 1.0, # temperature: hot
+		-1.0, 0.0, # humidity: dry
 		surface_blocks,
 		subsurface_layers,
-		3,  # bedrock_block = STONE
-		3  # filler_block = STONE
+		3, # bedrock_block = STONE
+		3 # filler_block = STONE
 	)
 	print("  ✓ Created Desert biome")
 	print("    - Surface: Sand")
@@ -248,10 +260,10 @@ func generate_example_terrain() -> void:
 		return
 	
 	# Configure VoxelGenerator - MEDIUM test size for visibility
-	voxel_generator.set_world_size(Vector3i(4, 4, 4))  # Chunks only
-	voxel_generator.set_chunk_size(8)
-	voxel_generator.set_resolution(1)
-	voxel_generator.set_generation_mode(1)  # VOXELS_FIRST = 0 or HEIGHTMAP_FIRST = 1
+	voxel_generator.set_world_size(Vector3i(WORLD_SIZE, WORLD_DEPTH, WORLD_SIZE)) # Chunks only
+	voxel_generator.set_chunk_size(CHUNK_SIZE)
+	voxel_generator.set_resolution(RESOLUTION)
+	voxel_generator.set_generation_mode(1) # VOXELS_FIRST = 0 or HEIGHTMAP_FIRST = 1
 	voxel_generator.set_surface_band(4.0)
 	voxel_generator.set_terrain_height(10.0) # NOTE: This has no affect when using a BiomeGenerator
 	voxel_generator.set_terrain_amplitude(5.0)
@@ -259,17 +271,17 @@ func generate_example_terrain() -> void:
 	voxel_generator.set_cutoff(5.0)
 	voxel_generator.set_seeder(12345)
 	voxel_generator.set_lod_level(7)
-	voxel_generator.set_show_lod_colors(false)  # CHANGED: Allow biome layer colors to show
+	voxel_generator.set_show_lod_colors(false) # CHANGED: Allow biome layer colors to show
 	voxel_generator.set_show_voxel_grid(true)
 	voxel_generator.set_show_chunk_grid(true)
 	
 	print("  Configuration:")
-	print("    - World: 2 x 2 x 2 chunk")
-	print("    - Chunk size: 8 voxels")
-	print("    - Resolution: 3x")
-	print("    - Generation: VOXELS_FIRST")
-	print("    - Surface band: 2.0 units")
-	print("    - Terrain: height=3.0, amplitude=10.0")
+	print("    - World: %d x %d x %d chunk" % [WORLD_SIZE, WORLD_DEPTH, WORLD_SIZE])
+	print("    - Chunk size: %d voxels" % [CHUNK_SIZE])
+	print("    - Resolution: %dx" % [RESOLUTION])
+	print("    - Generation: HEIGHTMAP_FIRST")
+	print("    - Surface band: 4.0 units")
+	print("    - Terrain: height=3.0, amplitude=5.0")
 	
 	# Set up noise for terrain variation
 	var terrain_noise = NoiseGenerator.new()
@@ -369,13 +381,13 @@ func setup_feature_system() -> void:
 	# Underground Features (with LOW spawn probabilities)
 	print("  Underground Features:")
 	print("    - Iron ore: 8% probability, Y -100 to 20, cluster size 3")
-	feature_generator.add_ore_rule(9, 0.08, -100, 20, 3)  # Iron ore (voxel type 9)
+	feature_generator.add_ore_rule(9, 0.08, -100, 20, 3) # Iron ore (voxel type 9)
 	
 	print("    - Coal ore: 6% probability, Y -80 to 30, cluster size 4")
-	feature_generator.add_ore_rule(9, 0.06, -80, 30, 4)  # Coal ore (voxel type 9)
+	feature_generator.add_ore_rule(9, 0.06, -80, 30, 4) # Coal ore (voxel type 9)
 	
 	# Surface Features (Plains biome only, with LOW spawn probabilities)
-	var plains_biome = PackedInt32Array([0])  # Biome index 0 = Plains
+	var plains_biome = PackedInt32Array([0]) # Biome index 0 = Plains
 	
 	print("\n  Surface Features (Plains Biome Only):")
 	print("    - Trees: 3% probability, Y 0-100")
@@ -385,6 +397,87 @@ func setup_feature_system() -> void:
 	feature_generator.add_rock_rule(0.05, plains_biome, 0, 100)
 	
 	print("\n  ✓ Feature system ready with %d rules (seed=99)\n" % feature_generator.get_rule_count())
+
+# ============================================================================
+# DEMONSTRATION: VoxelRegistry and VoxelMaterialLibrary
+# ============================================================================
+
+## Demonstrate VoxelRegistry and VoxelMaterialLibrary usage
+func demonstrate_voxel_system() -> void:
+	print("\n[DEMONSTRATION] VoxelRegistry & VoxelMaterialLibrary\n")
+
+	demonstrate_voxel_registry()
+	demonstrate_voxel_material_library()
+	demonstrate_voxel_full_info()
+
+# Demonstrate querying the VoxelRegistry for voxel properties
+func demonstrate_voxel_registry() -> void:
+	var registry = VoxelRegistry.get_default()
+
+	print("=== VoxelRegistry Demonstration ===")
+	print("Total voxel types: %d\n" % registry.get_voxel_count())
+	print("Voxel Type Properties:")
+
+	var all_type_ids = registry.get_all_type_ids()
+	for type_id in all_type_ids:
+		var name = registry.get_voxel_name(type_id)
+		var hardness = registry.get_hardness(type_id)
+		var is_solid = registry.is_solid(type_id)
+		var is_transparent = registry.is_transparent(type_id)
+		var is_liquid = registry.is_liquid(type_id)
+		var material_id = registry.get_material_id(type_id)
+		var light_emission = registry.get_light_emission(type_id)
+
+		print("  [%d] %s - hardness: %.2f, solid: %s, transparent: %s, liquid: %s, material_id: %d, emission: %.2f" % [
+			type_id, name, hardness, is_solid, is_transparent, is_liquid, material_id, light_emission
+		])
+
+# Demonstrate accessing material rendering properties
+func demonstrate_voxel_material_library() -> void:
+	var library = VoxelMaterialLibrary.get_default()
+
+	print("\n=== VoxelMaterialLibrary Demonstration ===")
+	print("Total materials: %d\n" % library.get_material_count())
+	print("Material Rendering Properties:")
+
+	var all_material_ids = library.get_all_material_ids()
+	for material_id in all_material_ids:
+		var material = library.get_material(material_id)
+		if material:
+			var name = material.get_material_name()
+			var color = material.get_color_tint()
+			var emission = material.get_emission_strength()
+			var roughness = material.get_roughness()
+			var metallic = material.get_metallic()
+
+			print("  [%d] %s - color: %s, emission: %.2f, roughness: %.2f, metallic: %.2f" % [
+				material_id, name, color, emission, roughness, metallic
+			])
+
+# Demonstrate linking voxel types to materials
+func demonstrate_voxel_full_info() -> void:
+	var registry = VoxelRegistry.get_default()
+	var library = VoxelMaterialLibrary.get_default()
+
+	print("\n=== Complete Voxel Type Information ===")
+	print("Linking Voxel Types → Materials:\n")
+
+	var all_type_ids = registry.get_all_type_ids()
+	for type_id in all_type_ids:
+		var name = registry.get_voxel_name(type_id)
+		var material_id = registry.get_material_id(type_id)
+		var material = library.get_material(material_id)
+
+		if material:
+			var material_name = material.get_material_name()
+			var color = material.get_color_tint()
+			print("  Voxel '%s' (id %d) uses Material '%s' (id %d) with color %s" % [
+				name, type_id, material_name, material_id, color
+			])
+		else:
+			print("  Voxel '%s' (id %d) references material_id %d, but material not found" % [
+				name, type_id, material_id
+			])
 
 func _voxel_type_name(voxel_type: int) -> String:
 	match voxel_type:

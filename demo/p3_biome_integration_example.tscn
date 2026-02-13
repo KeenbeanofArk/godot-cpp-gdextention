@@ -23,6 +23,8 @@ sky = SubResource("Sky_tlwt5")
 
 [node name="P3BiomeIntegration" type="Node3D"]
 script = ExtResource("1_jvaau")
+WORLD_SIZE = 30
+WORLD_DEPTH = 16
 
 [node name="WorldCamera" type="Camera3D" parent="."]
 transform = Transform3D(-0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, -0.70710677, -40, 0, -40)

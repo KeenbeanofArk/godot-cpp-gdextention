@@ -274,12 +274,12 @@ func update_voxel_highlight() -> void:
 			voxel_highlight_label.visible = false
 		return
 
+	var material = current_voxel_generator.terrain_material
 	var raycast_info = terrain_manager.get_raycast_info()
 
 	if not raycast_info.get("hit", false):
 		if voxel_highlight_label:
 			voxel_highlight_label.visible = false
-		var material = current_voxel_generator.terrain_material
 		if material is ShaderMaterial:
 			material.set_shader_parameter("highlight_enabled", false)
 		return
@@ -308,7 +308,6 @@ func update_voxel_highlight() -> void:
 		chunk_coord.z < 0 or chunk_coord.z >= world_size.z):
 		if voxel_highlight_label:
 			voxel_highlight_label.visible = false
-		var material = current_voxel_generator.terrain_material
 		if material is ShaderMaterial:
 			material.set_shader_parameter("highlight_enabled", false)
 		return
@@ -336,7 +335,6 @@ func update_voxel_highlight() -> void:
 	local_voxel.z = clamp(local_voxel.z, 0, chunk_size - 1)
 
 	# Update shader-based highlighting
-	var material = current_voxel_generator.terrain_material
 	if material is ShaderMaterial:
 		material.set_shader_parameter("highlight_world_position", hit_pos)
 		material.set_shader_parameter("highlight_enabled", true)
@@ -347,13 +345,13 @@ func update_voxel_highlight() -> void:
 
 func create_voxel_highlight_label() -> void:
 	if voxel_highlight_label:
-		return  # Already exists
+		return # Already exists
 
 	voxel_highlight_label = Label3D.new()
 	voxel_highlight_label.name = "VoxelHighlightLabel"
 	voxel_highlight_label.text = "Voxel Info"
 	voxel_highlight_label.font_size = 18
-	voxel_highlight_label.modulate = Color(0.067, 0.636, 0.0, 1.0)  # Green
+	voxel_highlight_label.modulate = Color(0.067, 0.636, 0.0, 1.0) # Green
 	voxel_highlight_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	voxel_highlight_label.no_depth_test = true
 	voxel_highlight_label.visible = false

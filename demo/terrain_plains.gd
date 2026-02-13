@@ -2,7 +2,7 @@ extends Node3D
 
 @onready var picele: CharacterBody3D = $"../Picele"
 
-var custom_distances = PackedFloat64Array([20, 40, 80, 160, 320, 640, 1280, 2560])
+var custom_distances = PackedFloat64Array([16, 32, 64, 128, 256, 512, 1024, 2048])
 var t := 1.0
 var voxel_generator: VoxelGenerator
 var _pending_generation: bool = false # Flag to track if generation was requested but pending
@@ -19,7 +19,7 @@ func _ready() -> void:
 	if terrain_manager and terrain_manager.current_terrain_name == "Plains":
 		voxel_generator = terrain_manager.current_voxel_generator
 		_setup_terrain_instance()
-	
+
 	picele.global_position = Vector3(0.0, 25.0, 0.0)
 
 func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> void:
@@ -103,14 +103,8 @@ func _setup_terrain_instance() -> void:
 	voxel_generator.heightmap_vertex_limit = 534000000
 	voxel_generator.show_voxel_grid = true
 	voxel_generator.show_chunk_grid = true
-		
-	# Configure terrain - Plains
-	#voxel_generator.terrain_height = 4.0
-	#voxel_generator.terrain_amplitude = 5.0
-	voxel_generator.rock_influence = 0.1
-	voxel_generator.cutoff = 0.1
 	
-	# Configure biome generator for Plains
+	# Configure biome generator for plains
 	var biome_gen = BiomeGenerator.new()
 	biome_gen.seed = 12345 # no verbose
 	biome_gen.sea_level = 0.0 # no verbose
@@ -140,78 +134,82 @@ func generate_plains() -> void:
 		world = get_tree().get_root().get_child(0) if get_tree().get_root().get_child_count() > 0 else null
 	if world:
 		var central_gui = world.get_node_or_null("CentralDebugGUI")
-		if central_gui and central_gui.has_method("create_debug_ui"):
-			central_gui.create_debug_ui()
+		if central_gui and central_gui.has_method("initialize_from_voxel_generator"):
+			central_gui.initialize_from_voxel_generator(voxel_generator)
 		
 func _on_chunk_ready(_chunk_index: int, _chunk_coord: Vector3i):
 	pass
 	#print("Chunk %s ready" % chunk_coord)
 
-func _on_progress(_completed: int, _total: int):
+func _on_progress(_completed: int, _total: int) -> void:
 	pass
 	#print("Progress: %d/%d" % [completed, total])
 	
-func _on_complete():
+func _on_complete() -> void:
 	pass
 	#print("Chunks complete")
 
-func setup_biomes(biome_gen: BiomeGenerator):
-	# Plains
-	var grass: Array[int] = [Voxel.GRASS]
-	var dirt: Array[int] = [Voxel.DIRT]
+func setup_biomes(biome_gen: BiomeGenerator) -> void:
+	# Clear existing biomes
+	biome_gen.clear_biomes()
 	
-	# Use normalized height range (0.0 - 1.0) to match BiomeGenerator API
+	# Create noise generators for biome selection
+	var height_noise = NoiseGenerator.new()
+	height_noise.set_seed(biome_gen.seed)
+	height_noise.set_octaves(4)
+	height_noise.set_period(50.0)
+	height_noise.set_persistence(0.5)
+	height_noise.set_lacunarity(2.0)
+	
+	var temp_noise = NoiseGenerator.new()
+	temp_noise.set_seed(biome_gen.seed + 1)
+	temp_noise.set_octaves(3)
+	temp_noise.set_period(80.0)
+	temp_noise.set_persistence(0.4)
+	temp_noise.set_lacunarity(2.2)
+	
+	var humidity_noise = NoiseGenerator.new()
+	humidity_noise.set_seed(biome_gen.seed + 2)
+	humidity_noise.set_octaves(3)
+	humidity_noise.set_period(60.0)
+	humidity_noise.set_persistence(0.5)
+	humidity_noise.set_lacunarity(2.0)
+	
+	biome_gen.set_height_noise(height_noise)
+	biome_gen.set_temperature_noise(temp_noise)
+	biome_gen.set_humidity_noise(humidity_noise)
+	
+	# Plains biome: moderate temperature, moderate humidity, flat terrain
+	# VoxelType: GRASS=2, DIRT=1
 	biome_gen.add_biome_extended(
 		"Plains",
-		0.35, # Min height
-		0.55, # Max height
-		0.3, # Min temp
+		0.25, # Min height
+		0.40, # Max height
+		0.25, # Min temp
 		0.4, # Max temp
 		0.2, # Min humidity
 		0.4, # Max humidity
-		grass, # Surface Blocks Array
-		dirt, # Sub-surface Blocks Array
+		[2], # surface blocks (GRASS)
+		[1], # subsurface blocks (DIRT)
 		3, # Depth
-		Voxel.STONE, # Bedrock block
-		Voxel.STONE # Filler Block
+		3, # bedrock (STONE)
+		3 # Filler (STONE)
 		)
 
-
+	# Assign biome generator to voxel generator
 	voxel_generator.biome_generator = biome_gen
 
-	# Print sampled biome height range for debugging (normalized units)
-	_print_biome_height_range(biome_gen, 8, 10.0)
+	print("[TerrainPlains] Plains biome configured")
 
 func _process(delta: float) -> void:
 	# Check if generator is valid before accessing it
 	if not voxel_generator or not is_instance_valid(voxel_generator):
 		return
 	
-	voxel_generator.lod_reference_position = picele.global_position
-	var changed_count = voxel_generator.update_chunks_lod()
-	if changed_count > 0:
-		voxel_generator.regenerate_dirty_chunks()
-	
 	t += delta
+	# Animate forcefield parameter
+	voxel_generator.set_forcefield_shader_param("time", t)
 	
-	# Oscillate brightness uniform if shader exposes one
-	# NOTE: There is no brightness in the shader
-	var brightness = 0.5 + 0.5 * sin(t * 2.0)
-	voxel_generator.set_forcefield_shader_param("u_brightness", brightness)
-
-func _print_biome_height_range(biome_gen: BiomeGenerator, samples: int = 8, spacing: float = 10.0) -> void:
-	if not biome_gen:
-		print("No biome generator to sample")
-		return
-	var min_h := 1e9
-	var max_h := -1e9
-	for i in range(-samples, samples):
-		for j in range(-samples, samples):
-			var x = float(i) * spacing
-			var z = float(j) * spacing
-			var h = biome_gen.get_blended_height_at(x, z)
-			min_h = min(min_h, h)
-			max_h = max(max_h, h)
-			
-	print("[TerrainMountains] Biome Height Range: Min = %.2f, Max = %.2f" % [min_h, max_h])
-	print("[TerrainMountains] Biome Generator Details: ", biome_gen)
+	# Update LOD reference position
+	if picele:
+		voxel_generator.lod_reference_position = picele.global_position

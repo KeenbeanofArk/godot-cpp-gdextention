@@ -69,7 +69,6 @@ directional_shadow_max_distance = 1.0
 [node name="VoxelGenerator" type="VoxelGenerator" parent="Terrain"]
 world_size = Vector3i(5, 3, 5)
 seeder = 2012940166
-generation_mode = 1
 terrain_noise = SubResource("NoiseGenerator_aqk2v")
 detail_noise = SubResource("NoiseGenerator_dwbse")
 biome_generator = SubResource("BiomeGenerator_gbfbk")

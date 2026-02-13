@@ -20,6 +20,8 @@ func _ready() -> void:
 		voxel_generator = terrain_manager.current_voxel_generator
 		_setup_terrain_instance()
 
+	picele.global_position = Vector3(0.0, 25.0, 0.0)
+	
 func _on_terrain_selected(terrain_name: String, generator: VoxelGenerator) -> void:
 	# Only initialize if this is the Forest terrain
 	if terrain_name == "Forest":
@@ -57,13 +59,14 @@ func _setup_terrain_instance() -> void:
 		mat.shader = shader_res
 
 		# Assign the ShaderMaterial to the VoxelGenerator forcefield (C++ binding)
+		# This calls `VoxelGenerator::set_forcefield_shader_material(Ref<ShaderMaterial>)` exposed in C++
 		voxel_generator.set_forcefield_shader_material(mat)
 		
 		# Set shader parameters - forest-themed green color
 		voxel_generator.set_forcefield_shader_param("u_color", Color(0.2, 0.8, 0.3))
 		voxel_generator.set_forcefield_shader_param("u_time_scale", 1.5)
 		voxel_generator.set_forcefield_shader_param("base_alpha", 0.0)
-		
+
 		# Shared terrain material (shader reads biome id from CUSTOM0)
 	voxel_generator.terrain_material = preload("res://scenes/shaders/TerrainBiomeTriplanar.tres")
 	var terrain_mat := voxel_generator.terrain_material
@@ -75,7 +78,7 @@ func _setup_terrain_instance() -> void:
 	voxel_generator.debug_mode = true
 	voxel_generator.debug_verbosity = 2
 	voxel_generator.visualize_noise_values = false
-	voxel_generator.auto_generate = false
+	voxel_generator.auto_generate = false # Make sure this is false before setting world_size
 	
 	# Load terrain configuration from resource and apply to generator
 	var forest_config = TerrainLoader.get_config("Forest")
@@ -103,10 +106,10 @@ func _setup_terrain_instance() -> void:
 	
 	# Configure biome generator for forest
 	var biome_gen = BiomeGenerator.new()
-	biome_gen.seed = 44004
-	biome_gen.sea_level = 1.0
+	biome_gen.seed = 44004 # no verbose
+	biome_gen.sea_level = 0.0 # no verbose
 	setup_biomes(biome_gen)
-	
+
 	# Connect to signals
 	voxel_generator.chunk_ready.connect(_on_chunk_ready)
 	voxel_generator.generation_progress.connect(_on_progress)
@@ -133,6 +136,18 @@ func generate_forest() -> void:
 		var central_gui = world.get_node_or_null("CentralDebugGUI")
 		if central_gui and central_gui.has_method("initialize_from_voxel_generator"):
 			central_gui.initialize_from_voxel_generator(voxel_generator)
+		
+func _on_chunk_ready(_chunk_index: int, _chunk_coord: Vector3i):
+	pass
+	#print("Chunk %s ready" % chunk_coord)
+
+func _on_progress(_completed: int, _total: int) -> void:
+	pass
+	#print("Progress: %d/%d" % [completed, total])
+	
+func _on_complete() -> void:
+	pass
+	#print("Chunks complete")
 
 func setup_biomes(biome_gen: BiomeGenerator) -> void:
 	# Clear existing biomes
@@ -142,7 +157,7 @@ func setup_biomes(biome_gen: BiomeGenerator) -> void:
 	var height_noise = NoiseGenerator.new()
 	height_noise.set_seed(biome_gen.seed)
 	height_noise.set_octaves(4)
-	height_noise.set_period(50.0)
+	height_noise.set_period(75.0)
 	height_noise.set_persistence(0.5)
 	height_noise.set_lacunarity(2.0)
 	
@@ -194,13 +209,3 @@ func _process(delta: float) -> void:
 	# Update LOD reference position
 	if picele:
 		voxel_generator.lod_reference_position = picele.global_position
-
-func _on_chunk_ready(_chunk_index: int, _coord: Vector3i) -> void:
-	pass
-
-func _on_progress(_done: int, _total: int) -> void:
-	pass
-	#print("[TerrainForest] Progress: %d/%d" % [done, total])
-
-func _on_complete() -> void:
-	print("[TerrainForest] Generation complete!")
