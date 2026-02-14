@@ -1,0 +1,342 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="NoiseGenerator" inherits="Resource" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Noise generator for terrain height and density sampling using Godot's Noise system.
+	</brief_description>
+	<description>
+		[b]NoiseGenerator[/b] is a wrapper around Godot's [Noise] class that provides convenient configuration for terrain generation. It handles both 2D (height) and 3D (density) noise sampling with customizable parameters.
+
+		[b]Key Features:[/b]
+		[ul]
+		[li]2D noise for base terrain height sampling[/li]
+		[li]3D noise for detailed terrain density/caves[/li]
+		[li]Configurable octaves, persistence, lacunarity, and period[/li]
+		[li]Seed-based deterministic generation[/li]
+		[li]Serializable to .tres for reusable presets[/li]
+		[/ul]
+
+		[b]Typical Usage:[/b]
+		[code]
+		# Create and configure for base terrain
+		var terrain_noise = NoiseGenerator.new()
+		terrain_noise.set_period(64.0)      # Feature wavelength
+		terrain_noise.set_octaves(6)         # Detail layers
+		terrain_noise.set_persistence(0.5)  # Amplitude decay per octave
+		terrain_noise.set_lacunarity(2.0)   # Frequency multiplier per octave
+		terrain_noise.set_seed(42)
+
+		generator.set_terrain_noise(terrain_noise)
+
+		# Create for detail/rocky features
+		var detail_noise = NoiseGenerator.new()
+		detail_noise.set_period(16.0)
+		detail_noise.set_octaves(4)
+		generator.set_detail_noise(detail_noise)
+		[/code]
+
+		[b]Noise Parameters Explained:[/b]
+		[ul]
+		[li][b]seed:[/b] Random seed. Same seed = same noise pattern. Change for different terrain.[/li]
+		[li][b]period:[/b] Wavelength of noise features (in voxels). Larger = bigger mountains/features.[/li]
+		[li][b]octaves:[/b] Number of noise layers combined. More = more detail but slower.[/li]
+		[li][b]persistence:[/b] How much each octave contributes. 0.0-1.0. Higher = rougher terrain.[/li]
+		[li][b]lacunarity:[/b] Frequency multiplier per octave. Typical: 2.0. Controls fine detail scale.[/li]
+		[/ul]
+
+		[b]Related Classes:[/b]
+		[ul]
+		[li][VoxelGenerator] - Uses this for terrain height and detail[/li]
+		[li][TerrainConfig] - Can reference a NoiseGenerator preset[/li]
+		[li][Noise] - Godot's built-in noise class (wrapped by this)[/li]
+		[/ul]
+	</description>
+	<tutorials>
+		<link title="Getting Started">res://doc_classes/guides/GettingStarted.md</link>
+		<link title="Terrain Generation">res://doc_classes/guides/TerrainGeneration.md</link>
+	</tutorials>
+	<methods>
+		<method name="get_noise_3d" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<param index="1" name="y" type="float" />
+			<param index="2" name="z" type="float" />
+			<description>
+				Samples 3D noise at world coordinates.
+
+				[b]Parameters:[/b]
+				[code]x, y, z[/code] - World position to sample.
+
+				[b]Return Value:[/b]
+				Noise value (typically -1.0 to 1.0).
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]Use Case:[/b]
+				Used for density fields and detailed terrain features.
+
+				[b]Example:[/b]
+				[code]
+				var noise_val = terrain_noise.get_noise_3d(100.0, 20.0, 150.0)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_noise_2d]
+			</description>
+		</method>
+		<method name="get_noise_2d" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<param index="1" name="z" type="float" />
+			<description>
+				Samples 2D noise at horizontal coordinates (ignores Y).
+
+				[b]Parameters:[/b]
+				[code]x, z[/code] - Horizontal world position.
+
+				[b]Return Value:[/b]
+				Noise value (typically -1.0 to 1.0).
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]Use Case:[/b]
+				Used for heightmap generation and terrain base height.
+
+				[b]Example:[/b]
+				[code]
+				var height = terrain_noise.get_noise_2d(100.0, 150.0)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_noise_3d]
+			</description>
+		</method>
+		<method name="set_seed">
+			<return type="void" />
+			<param index="0" name="p_seed" type="int" />
+			<description>
+				Sets the random seed for reproducible noise.
+
+				[b]Parameters:[/b]
+				[code]p_seed[/code] - Seed integer (default varies). Same seed produces identical noise pattern.
+
+				[b]Effect:[/b]
+				Seeds the internal Godot Noise object. Change this to get different terrain with same octaves/period.
+
+				[b]Example:[/b]
+				[code]
+				var noise1 = NoiseGenerator.new()
+				noise1.set_seed(42)
+				noise1.set_period(64.0)
+
+				var noise2 = NoiseGenerator.new()
+				noise2.set_seed(43)  # Different seed, different pattern
+				noise2.set_period(64.0)  # But same scale
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_seed]
+			</description>
+		</method>
+		<method name="get_seed" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current seed.
+
+				[b]See Also:[/b]
+				[method set_seed]
+			</description>
+		</method>
+		<method name="set_noise">
+			<return type="void" />
+			<param index="0" name="p_noise" type="Ref&lt;Noise&gt;" />
+			<description>
+				Sets the underlying Godot [Noise] object.
+
+				[b]Parameters:[/b]
+				[code]p_noise[/code] - A Godot Noise resource (FastNoiseLite, etc.).
+
+				[b]Effect:[/b]
+				Allows using custom Noise implementations. Advanced usage.
+
+				[b]Example:[/b]
+				[code]
+				var custom_noise = FastNoiseLite.new()
+				custom_noise.set_noise_type(FastNoiseLite.TYPE_PERLIN)
+				generator.set_noise(custom_noise)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_noise]
+			</description>
+		</method>
+		<method name="get_noise" qualifiers="const">
+			<return type="Ref&lt;Noise&gt;" />
+			<description>
+				Returns the underlying Godot Noise object.
+
+				[b]See Also:[/b]
+				[method set_noise]
+			</description>
+		</method>
+		<method name="set_octaves">
+			<return type="void" />
+			<param index="0" name="p_octaves" type="int" />
+			<description>
+				Sets the number of noise octaves (detail layers).
+
+				[b]Parameters:[/b]
+				[code]p_octaves[/code] - Number of layers. Default varies. Typical range: 1-8.
+
+				[b]Effect:[/b]
+				Each octave adds finer detail. More octaves = more detailed terrain but slower generation.
+				[ul]
+				[li]1 octave: Smooth, simple terrain[/li]
+				[li]4 octaves: Good balance of detail and speed[/li]
+				[li]8+ octaves: Very detailed but slow[/li]
+				[/ul]
+
+				[b]Example:[/b]
+				[code]
+				# For large-scale mountains
+				terrain_noise.set_octaves(8)
+
+				# For smaller, faster terrain
+				detail_noise.set_octaves(3)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_octaves], [method set_persistence]
+			</description>
+		</method>
+		<method name="get_octaves" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current number of octaves.
+
+				[b]See Also:[/b]
+				[method set_octaves]
+			</description>
+		</method>
+		<method name="set_period">
+			<return type="void" />
+			<param index="0" name="p_period" type="float" />
+			<description>
+				Sets the period (wavelength) of the base noise frequency.
+
+				[b]Parameters:[/b]
+				[code]p_period[/code] - Period in world units. Default varies. Typical: 16.0-256.0.
+
+				[b]Effect:[/b]
+				Controls the scale of terrain features:
+				[ul]
+				[li]Small period (16.0): Detailed, rough terrain[/li]
+				[li]Medium period (64.0): Balanced mountains and valleys[/li]
+				[li]Large period (200.0): Vast, gentle rolling hills[/li]
+				[/ul]
+
+				[b]Example:[/b]
+				[code]
+				# Large mountains
+				terrain_noise.set_period(100.0)
+
+				# Fine detail
+				detail_noise.set_period(16.0)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_period], [method set_lacunarity]
+			</description>
+		</method>
+		<method name="get_period" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current period.
+
+				[b]See Also:[/b]
+				[method set_period]
+			</description>
+		</method>
+		<method name="set_persistence">
+			<return type="void" />
+			<param index="0" name="p_persistence" type="float" />
+			<description>
+				Sets the persistence factor (amplitude decay per octave).
+
+				[b]Parameters:[/b]
+				[code]p_persistence[/code] - Factor 0.0-1.0. Default varies.
+
+				[b]Effect:[/b]
+				Controls how much each octave contributes:
+				[ul]
+				[li]Low (0.2): Fine detail fades quickly, smooth terrain[/li]
+				[li]Medium (0.5): Balanced detail contribution[/li]
+				[li]High (0.8): Fine detail dominates, very rough terrain[/li]
+				[/ul]
+
+				[b]Example:[/b]
+				[code]
+				# Smooth terrain
+				terrain_noise.set_persistence(0.3)
+
+				# Very rocky detail
+				detail_noise.set_persistence(0.7)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_persistence], [method set_octaves]
+			</description>
+		</method>
+		<method name="get_persistence" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current persistence.
+
+				[b]See Also:[/b]
+				[method set_persistence]
+			</description>
+		</method>
+		<method name="set_lacunarity">
+			<return type="void" />
+			<param index="0" name="p_lacunarity" type="float" />
+			<description>
+				Sets the lacunarity (frequency multiplier per octave).
+
+				[b]Parameters:[/b]
+				[code]p_lacunarity[/code] - Multiplier. Default 2.0. Typical: 1.5-3.0.
+
+				[b]Effect:[/b]
+				Controls how quickly frequency increases between octaves:
+				[ul]
+				[li]Low (1.5): Gradual frequency increase, smoother transition[/li]
+				[li]Standard (2.0): Each octave twice the frequency[/li]
+				[li]High (3.0): Rapid frequency increase, varied detail scales[/li]
+				[/ul]
+
+				[b]Example:[/b]
+				[code]
+				terrain_noise.set_lacunarity(2.0)  # Standard
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_lacunarity], [method set_period]
+			</description>
+		</method>
+		<method name="get_lacunarity" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current lacunarity.
+
+				[b]See Also:[/b]
+				[method set_lacunarity]
+			</description>
+		</method>
+	</methods>
+	<members>
+	</members>
+	<signals>
+	</signals>
+	<constants>
+	</constants>
+</class>

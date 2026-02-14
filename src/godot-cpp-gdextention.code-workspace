@@ -73,6 +73,6 @@
 			"xutility": "cpp",
 			"shared_mutex": "cpp"
 		},
-		"godotTools.editorPath.godot4": "c:\\dev\\Godot Files\\Godot_v4.5.1-stable_mono_win64\\Godot_v4.5.1-stable_mono_win64\\Godot_v4.5.1-stable_mono_win64_console.exe"
+		"godotTools.editorPath.godot4": "C:\\dev\\Godot Files\\Godot_v4.6-stable_mono_win64\\Godot_v4.6-stable_mono_win64_console.exe"
 	}
 }

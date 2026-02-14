@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3 uid="uid://etd11wxpmror"]
+[gd_scene format=3 uid="uid://etd11wxpmror"]
 
 [ext_resource type="Script" uid="uid://dj7xxa148a2fy" path="res://world_manager.gd" id="1_fj7yv"]
 [ext_resource type="Script" uid="uid://gdi5e7som4a" path="res://terrain_plains.gd" id="2_036b0"]
@@ -27,62 +27,62 @@ sky_material = SubResource("ShaderMaterial_pkg7o")
 background_mode = 2
 sky = SubResource("Sky_tlwt5")
 
-[node name="World" type="Node3D" groups=["world"]]
+[node name="World" type="Node3D" unique_id=375442590 groups=["world"]]
 script = ExtResource("1_fj7yv")
 
-[node name="Lighting" type="Node3D" parent="."]
+[node name="Lighting" type="Node3D" parent="." unique_id=9276000]
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="Lighting"]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="Lighting" unique_id=409330689]
 environment = SubResource("Environment_aqk2v")
 
-[node name="Sun" type="DirectionalLight3D" parent="Lighting"]
+[node name="Sun" type="DirectionalLight3D" parent="Lighting" unique_id=1745579050]
 transform = Transform3D(-0.5976251, -0.24376634, 0.7638208, 0, 0.9526615, 0.30403307, -0.8017757, 0.1816978, -0.5693344, -10000, 10000, -10000)
 shadow_enabled = true
 
-[node name="VoxelEngine" type="VoxelEngine" parent="."]
+[node name="VoxelEngine" type="VoxelEngine" parent="." unique_id=735657705]
 
-[node name="Plains" type="Node3D" parent="."]
+[node name="Plains" type="Node3D" parent="." unique_id=1734590347]
 visible = false
 script = ExtResource("2_036b0")
 
-[node name="DebugForceField" type="Node3D" parent="Plains"]
+[node name="DebugForceField" type="Node3D" parent="Plains" unique_id=1902087413]
 script = ExtResource("8_wse8f")
 
-[node name="Mountains" type="Node3D" parent="."]
+[node name="Mountains" type="Node3D" parent="." unique_id=255354640]
 visible = false
 script = ExtResource("9_mountains")
 
-[node name="DebugForceField" type="Node3D" parent="Mountains"]
+[node name="DebugForceField" type="Node3D" parent="Mountains" unique_id=810636383]
 script = ExtResource("8_wse8f")
 
-[node name="Desert" type="Node3D" parent="."]
+[node name="Desert" type="Node3D" parent="." unique_id=659783003]
 visible = false
 script = ExtResource("10_desert")
 
-[node name="DebugForceField" type="Node3D" parent="Desert"]
+[node name="DebugForceField" type="Node3D" parent="Desert" unique_id=1992675924]
 script = ExtResource("8_wse8f")
 
-[node name="Forest" type="Node3D" parent="."]
+[node name="Forest" type="Node3D" parent="." unique_id=425732327]
 visible = false
 script = ExtResource("11_forest")
 
-[node name="DebugForceField" type="Node3D" parent="Forest"]
+[node name="DebugForceField" type="Node3D" parent="Forest" unique_id=190927780]
 script = ExtResource("8_wse8f")
 
-[node name="Swamp" type="Node3D" parent="."]
+[node name="Swamp" type="Node3D" parent="." unique_id=526395217]
 visible = false
 
-[node name="DebugForceField" type="Node3D" parent="Swamp"]
+[node name="DebugForceField" type="Node3D" parent="Swamp" unique_id=165754262]
 script = ExtResource("8_wse8f")
 
-[node name="TerrainMultiBiome" type="Node3D" parent="."]
+[node name="TerrainMultiBiome" type="Node3D" parent="." unique_id=1712616897]
 visible = false
 script = ExtResource("12_multibiome")
 
-[node name="CentralDebugGUI" parent="." instance=ExtResource("3_tlwt5")]
+[node name="CentralDebugGUI" parent="." unique_id=456134957 instance=ExtResource("3_tlwt5")]
 
-[node name="Picele" parent="." instance=ExtResource("2_tlwt5")]
+[node name="Picele" parent="." unique_id=712741053 instance=ExtResource("2_tlwt5")]
 
-[node name="WorldCamera" type="Camera3D" parent="."]
+[node name="WorldCamera" type="Camera3D" parent="." unique_id=1704132209]
 transform = Transform3D(-0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, -0.70710677, -40, 0, -40)
 fov = 26.8

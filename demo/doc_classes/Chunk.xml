@@ -1,0 +1,432 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="Chunk" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Individual voxel terrain chunk with mesh and collision management.
+	</brief_description>
+	<description>
+		[b]Chunk[/b] represents a single cubic block of terrain within the voxel world. Chunks are subdivided units of the larger terrain grid, each containing voxel data and optionally rendering/collision geometry.
+
+		[b]Architecture:[/b]
+		- Chunks are arranged in a [code]world_size[/code] grid
+		- Each chunk is [code]chunk_size × chunk_size × chunk_size[/code] voxels
+		- Owned by [VoxelGenerator], not directly instantiated by users
+		- Contains voxel data, mesh instance, and collision body
+
+		[b]Key Features:[/b]
+		[ul]
+		[li]Stores voxel grid (chunk_size³ voxels)[/li]
+		[li]Manages MeshInstance3D for rendering[/li]
+		[li]Manages StaticBody3D and CollisionShape3D for physics[/li]
+		[li]Thread-safe voxel access via mutex[/li]
+		[li]LOD level tracking for distance-based detail[/li]
+		[li]Mesh readiness state for async generation[/li]
+		[/ul]
+
+		[b]Internal Details:[/b]
+		Chunks are managed internally by VoxelGenerator and automatically created, updated, and destroyed as needed. Users typically don't instantiate Chunk directly. However, some advanced use cases may access chunk properties for debugging or optimization.
+
+		[b]Related Classes:[/b]
+		[ul]
+		[li][VoxelGenerator] - Creates and manages chunks[/li]
+		[li][Voxel] - Individual voxel within a chunk[/li]
+		[li][BiomeGenerator] - Determines voxel types in chunks[/li]
+		[/ul]
+
+		[b]Note:[/b]
+		Chunk is primarily an internal implementation detail. Most game logic should interact with [VoxelGenerator] instead of Chunk directly.
+	</description>
+	<tutorials>
+		<link title="Getting Started">res://doc_classes/guides/GettingStarted.md</link>
+		<link title="Debugging">res://doc_classes/guides/Debugging.md</link>
+	</tutorials>
+	<methods>
+		<method name="generate">
+			<return type="void" />
+			<description>
+				Generates the chunk's voxel data (internal use).
+
+				[b]Note:[/b]
+				This is called internally by VoxelGenerator. Not typically called directly.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+			</description>
+		</method>
+		<method name="set_biome_generator">
+			<return type="void" />
+			<param index="0" name="generator" type="Ref&lt;BiomeGenerator&gt;" />
+			<description>
+				Sets the biome generator for this chunk.
+
+				[b]Parameters:[/b]
+				[code]generator[/code] - [BiomeGenerator] instance for voxel determination.
+
+				[b]Note:[/b]
+				Automatically called by VoxelGenerator.
+
+				[b]See Also:[/b]
+				[method get_biome_generator]
+			</description>
+		</method>
+		<method name="get_biome_generator" qualifiers="const">
+			<return type="Ref&lt;BiomeGenerator&gt;" />
+			<description>
+				Returns the biome generator used by this chunk.
+
+				[b]See Also:[/b]
+				[method set_biome_generator]
+			</description>
+		</method>
+		<method name="set_voxel">
+			<return type="void" />
+			<param index="0" name="local_pos" type="Vector3i" />
+			<param index="1" name="type" type="int" />
+			<description>
+				Sets a voxel type at a local chunk position.
+
+				[b]Parameters:[/b]
+				[code]local_pos[/code] - Position relative to chunk origin (0,0,0 to chunk_size-1 for each component)
+				[code]type[/code] - Voxel type ID
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread (internally synchronized via mutex).
+
+				[b]Performance:[/b]
+				O(1) operation.
+
+				[b]Example:[/b]
+				[code]
+				chunk.set_voxel(Vector3i(4, 4, 4), STONE_VOXEL)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_voxel]
+			</description>
+		</method>
+		<method name="get_voxel" qualifiers="const">
+			<return type="Ref&lt;Voxel&gt;" />
+			<param index="0" name="local_pos" type="Vector3i" />
+			<description>
+				Gets the voxel at a local chunk position.
+
+				[b]Parameters:[/b]
+				[code]local_pos[/code] - Position relative to chunk origin.
+
+				[b]Return Value:[/b]
+				[Voxel] object with type and material info.
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]Example:[/b]
+				[code]
+				var voxel = chunk.get_voxel(Vector3i(4, 4, 4))
+				print("Voxel type: ", voxel.voxel_type)
+				[/code]
+
+				[b]See Also:[/b]
+				[method set_voxel]
+			</description>
+		</method>
+		<method name="set_chunk_coord">
+			<return type="void" />
+			<param index="0" name="coord" type="Vector3i" />
+			<description>
+				Sets the chunk's grid coordinate (debug use).
+
+				[b]Parameters:[/b]
+				[code]coord[/code] - 3D grid position (e.g., Vector3i(1, 0, 1) for chunk at grid position 1,0,1).
+
+				[b]Note:[/b]
+				Automatically set by VoxelGenerator. Exposed for debugging only.
+
+				[b]See Also:[/b]
+				[method get_chunk_coord]
+			</description>
+		</method>
+		<method name="get_chunk_coord" qualifiers="const">
+			<return type="Vector3i" />
+			<description>
+				Returns the chunk's grid coordinate.
+
+				[b]Return Value:[/b]
+				3D grid position.
+
+				[b]Example:[/b]
+				[code]
+				var coord = chunk.get_chunk_coord()
+				print("Chunk at grid: ", coord)
+				[/code]
+
+				[b]See Also:[/b]
+				[method set_chunk_coord]
+			</description>
+		</method>
+		<method name="apply_mesh_data">
+			<return type="void" />
+			<param index="0" name="vertices" type="PackedVector3Array" />
+			<param index="1" name="normals" type="PackedVector3Array" />
+			<param index="2" name="colors" type="PackedColorArray" />
+			<param index="3" name="custom0" type="PackedColorArray" />
+			<description>
+				Applies mesh geometry data to the chunk (main thread only).
+
+				[b]Parameters:[/b]
+				[code]vertices[/code] - Array of vertex positions
+				[code]normals[/code] - Array of vertex normals
+				[code]colors[/code] - Array of vertex colors (RGBA)
+				[code]custom0[/code] - Custom per-vertex data (e.g., biome ID)
+
+				[b]Effect:[/b]
+				Creates MeshInstance3D with the provided mesh data.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread only.
+
+				[b]Note:[/b]
+				Internally called by VoxelGenerator after async mesh generation on worker threads.
+
+				[b]See Also:[/b]
+				[method clear_mesh], [method is_mesh_ready]
+			</description>
+		</method>
+		<method name="set_terrain_material">
+			<return type="void" />
+			<param index="0" name="material" type="Ref&lt;Material&gt;" />
+			<description>
+				Sets the material applied to the chunk mesh.
+
+				[b]Parameters:[/b]
+				[code]material[/code] - [Material] resource (StandardMaterial3D, ShaderMaterial, etc.).
+
+				[b]Effect:[/b]
+				Sets the rendering material for this chunk's mesh.
+
+				[b]See Also:[/b]
+				[method get_terrain_material]
+			</description>
+		</method>
+		<method name="get_terrain_material" qualifiers="const">
+			<return type="Ref&lt;Material&gt;" />
+			<description>
+				Returns the material applied to this chunk.
+
+				[b]See Also:[/b]
+				[method set_terrain_material]
+			</description>
+		</method>
+		<method name="clear_mesh">
+			<return type="void" />
+			<description>
+				Removes the mesh instance (unrender the chunk).
+
+				[b]Effect:[/b]
+				Deletes MeshInstance3D, making chunk invisible.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+
+				[b]See Also:[/b]
+				[method apply_mesh_data], [method is_mesh_ready]
+			</description>
+		</method>
+		<method name="is_mesh_ready" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Checks if mesh data has been applied.
+
+				[b]Return Value:[/b]
+				true if mesh is ready for rendering, false if still pending.
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]Example:[/b]
+				[code]
+				if chunk.is_mesh_ready():
+					print("Chunk is visible")
+				[/code]
+
+				[b]See Also:[/b]
+				[method apply_mesh_data]
+			</description>
+		</method>
+		<method name="update_collision_shape">
+			<return type="void" />
+			<param index="0" name="mesh" type="Ref&lt;ArrayMesh&gt;" />
+			<description>
+				Updates the collision shape from mesh geometry.
+
+				[b]Parameters:[/b]
+				[code]mesh[/code] - ArrayMesh to extract collision from.
+
+				[b]Effect:[/b]
+				Creates StaticBody3D with collision shape matching mesh. Enables physics interaction with terrain.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+
+				[b]See Also:[/b]
+				[method clear_collision_shape]
+			</description>
+		</method>
+		<method name="clear_collision_shape">
+			<return type="void" />
+			<description>
+				Removes the collision shape (disables physics).
+
+				[b]Effect:[/b]
+				Deletes StaticBody3D and CollisionShape3D.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+
+				[b]See Also:[/b]
+				[method update_collision_shape]
+			</description>
+		</method>
+		<method name="set_chunk_size">
+			<return type="void" />
+			<param index="0" name="p_chunk_size" type="int" />
+			<description>
+				Sets the chunk size (voxels per edge) for this chunk.
+
+				[b]Parameters:[/b]
+				[code]p_chunk_size[/code] - Size (4, 8, 16, 32, or 64 typical).
+
+				[b]Note:[/b]
+				Automatically set by VoxelGenerator. Not typically called manually.
+
+				[b]See Also:[/b]
+				[method get_chunk_size], [method get_default_chunk_size]
+			</description>
+		</method>
+		<method name="get_chunk_size" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the chunk size (voxels per edge).
+
+				[b]Example:[/b]
+				[code]
+				var size = chunk.get_chunk_size()  # e.g., 8
+				var total_voxels = size * size * size  # 512 for size 8
+				[/code]
+
+				[b]See Also:[/b]
+				[method set_chunk_size]
+			</description>
+		</method>
+		<method name="get_default_chunk_size" qualifiers="static">
+			<return type="int" />
+			<description>
+				Returns the default chunk size used for new chunks.
+
+				[b]Return Value:[/b]
+				Default size (typically 8).
+
+				[b]See Also:[/b]
+				[method set_default_chunk_size]
+			</description>
+		</method>
+		<method name="set_default_chunk_size" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="p_chunk_size" type="int" />
+			<description>
+				Sets the default chunk size for all new chunks.
+
+				[b]Parameters:[/b]
+				[code]p_chunk_size[/code] - New default size.
+
+				[b]Note:[/b]
+				Must be set before generating chunks.
+
+				[b]See Also:[/b]
+				[method get_default_chunk_size]
+			</description>
+		</method>
+		<method name="rebuild_mesh">
+			<return type="void" />
+			<description>
+				Rebuilds the mesh from current voxel data (internal use).
+
+				[b]Note:[/b]
+				Internally called during generation. Advanced use only.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+			</description>
+		</method>
+		<method name="update_lod">
+			<return type="void" />
+			<param index="0" name="camera_position" type="Vector3" />
+			<description>
+				Updates LOD level based on distance from camera (debug use).
+
+				[b]Parameters:[/b]
+				[code]camera_position[/code] - Camera/player position for distance calculation.
+
+				[b]Effect:[/b]
+				Calculates appropriate LOD and marks dirty if changed.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+
+				[b]See Also:[/b]
+				[method set_current_lod_level]
+			</description>
+		</method>
+		<method name="is_voxel_solid" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="local_pos" type="Vector3i" />
+			<description>
+				Checks if a voxel is solid (non-air).
+
+				[b]Parameters:[/b]
+				[code]local_pos[/code] - Local position.
+
+				[b]Return Value:[/b]
+				true if voxel type != AIR.
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]See Also:[/b]
+				[method get_voxel]
+			</description>
+		</method>
+		<method name="set_current_lod_level">
+			<return type="void" />
+			<param index="0" name="lod" type="int" />
+			<description>
+				Sets the current LOD level for this chunk (0-7).
+
+				[b]Parameters:[/b]
+				[code]lod[/code] - LOD level (0=highest detail, 7=lowest).
+
+				[b]Effect:[/b]
+				Used for mesh generation detail. Marks chunk dirty if changed.
+
+				[b]See Also:[/b]
+				[method get_current_lod_level]
+			</description>
+		</method>
+		<method name="get_current_lod_level" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current LOD level.
+
+				[b]Return Value:[/b]
+				LOD level (0-7).
+
+				[b]See Also:[/b]
+				[method set_current_lod_level]
+			</description>
+		</method>
+	</methods>
+	<members>
+	</members>
+	<signals>
+	</signals>
+	<constants>
+	</constants>
+</class>

@@ -1,0 +1,2392 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="VoxelGenerator" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Core voxel terrain generation engine with async support, LOD system, and terraforming capabilities.
+	</brief_description>
+	<description>
+		[b]VoxelGenerator[/b] is the core engine for procedural voxel terrain generation. It manages chunk-based terrain, asynchronous mesh generation, level-of-detail (LOD) systems, biome integration, terrain editing, and world boundary management (forcefields).
+
+		[b]Key Features:[/b]
+		[ul]
+		[li][b]Procedural Generation:[/b] Noise-based terrain with configurable amplitude, height, and detail[/li]
+		[li][b]Async Generation:[/b] Non-blocking mesh generation via WorkerThreadPool for smooth gameplay[/li]
+		[li][b]LOD System:[/b] Global and per-chunk distance-based LOD for performance optimization[/li]
+		[li][b]Generation Modes:[/b] VOXELS_FIRST (full 3D) or HEIGHTMAP_FIRST (optimized 2D→3D)[/li]
+		[li][b]Biome System:[/b] Multi-biome terrain with height, temperature, humidity blending[/li]
+		[li][b]Feature Placement:[/b] Decorations, ores, trees, and other features via FeatureGenerator[/li]
+		[li][b]Terraforming:[/b] Runtime terrain editing (dig/build spheres) with persistence[/li]
+		[li][b]Forcefields:[/b] World boundary walls (6 directions) with collision and detection[/li]
+		[li][b]Terrain Persistence:[/b] Save/load maps with terrain edits, background writer thread[/li]
+		[li][b]Debug &amp; Visualization:[/b] Noise visualization, voxel highlighting, LOD colors, chunk grid[/li]
+		[/ul]
+
+		[b]Architecture Overview:[/b]
+		The VoxelGenerator divides the world into chunks arranged in a 3D grid. Each chunk contains voxels (small cube volumes) whose type is determined by:
+		1. Procedural density evaluation (terrain_noise + detail_noise)
+		2. Biome assignment based on height/temperature/humidity
+		3. Features placed by FeatureGenerator (ores, trees, etc.)
+		4. Runtime terrain edits (dig/build operations)
+
+		Terrain is generated as mesh data via Marching Cubes isosurface extraction, either synchronously or asynchronously via WorkerThreadPool.
+
+		[b]Usage Workflow:[/b]
+		[code]
+		func _ready():
+			var generator = VoxelGenerator.new()
+			add_child(generator)
+
+			# Configure world
+			generator.set_world_size(Vector3i(16, 16, 16))
+			generator.set_chunk_size(8)
+			generator.set_resolution(2)
+
+			# Configure noise
+			var noise = NoiseGenerator.new()
+			noise.set_period(64.0)
+			noise.set_octaves(6)
+			generator.set_terrain_noise(noise)
+
+			# Configure biome
+			var biome_gen = BiomeGenerator.new()
+			# ... setup biomes ...
+			generator.set_biome_generator(biome_gen)
+
+			# Generate asynchronously with progress
+			generator.generation_started.connect(_on_generation_started)
+			generator.generation_progress.connect(_on_generation_progress)
+			generator.generation_completed.connect(_on_generation_completed)
+			generator.generate_async()
+
+		func _on_generation_completed():
+			print("Terrain generation complete!")
+		[/code]
+
+		[b]Key Concepts:[/b]
+		[ul]
+		[li][b]Chunk:[/b] A cubic subdivision of terrain. Default 8×8×8 voxels. Chunks are independently generated and cached.[/li]
+		[li][b]LOD (Level of Detail):[/b] Resolution reduction for distant chunks. LOD 0 = high detail, LOD 7 = lowest detail.[/li]
+		[li][b]Density:[/b] Scalar value at each corner point. Negative = solid, positive = air. Marching Cubes extracts surface where density = cutoff.[/li]
+		[li][b]Terrain Edits:[/b] Persistent modifications (dig/build) stored separately from procedural density.[/li]
+		[li][b]Biome:[/b] Region with specific terrain characteristics (materials, noise scale, feature density).[/li]
+		[li][b]Generation Mode:[/b] VOXELS_FIRST = full 3D density evaluation (flexible but slow). HEIGHTMAP_FIRST = 2D heightmap + surface band (fast).[/li]
+		[/ul]
+
+		[b]Related Classes:[/b]
+		[ul]
+		[li][VoxelEngine] - High-level facade for lifecycle management[/li]
+		[li][TerrainConfig] - Serializable terrain configuration presets[/li]
+		[li][Chunk] - Individual terrain chunk representation[/li]
+		[li][NoiseGenerator] - Noise configuration wrapper[/li]
+		[li][BiomeGenerator] - Biome system with layering[/li]
+		[li][FeatureGenerator] - Feature/decoration placement rules[/li]
+		[/ul]
+	</description>
+	<tutorials>
+		<link title="Getting Started">res://doc_classes/guides/GettingStarted.md</link>
+		<link title="Terrain Generation">res://doc_classes/guides/TerrainGeneration.md</link>
+		<link title="LOD System">res://doc_classes/guides/TerrainGeneration.md#lod-system</link>
+		<link title="Biome System">res://doc_classes/guides/BiomeSystem.md</link>
+		<link title="Async Generation">res://doc_classes/guides/AsyncGeneration.md</link>
+		<link title="Terraforming">res://doc_classes/guides/Terraforming.md</link>
+		<link title="Forcefields">res://doc_classes/guides/Forcefields.md</link>
+		<link title="Debugging">res://doc_classes/guides/Debugging.md</link>
+	</tutorials>
+	<methods>
+		<method name="generate">
+			<return type="void" />
+			<description>
+				Generates the entire terrain synchronously (blocking call). All chunks are generated sequentially on the main thread.
+
+				[b]Behavior:[/b]
+				[ol]
+				[li]Builds density cache (samples all corner points)[/li]
+				[li]Generates mesh for each chunk via Marching Cubes[/li]
+				[li]Applies biome colors and features[/li]
+				[li]Creates MeshInstance3D children for visible geometry[/li]
+				[/ol]
+
+				[b]Thread Safety:[/b]
+				Must be called from the main thread. Blocks the thread until complete.
+
+				[b]Performance:[/b]
+				For large worlds (16×16×16 or more), this can take several seconds. Consider [method generate_async] instead.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_world_size(Vector3i(8, 8, 8))
+				generator.generate()  # Synchronous - waits until done
+				print("Generation complete")
+				[/code]
+
+				[b]See Also:[/b]
+				[method generate_async], [method cancel_generation], [method is_generating]
+			</description>
+		</method>
+		<method name="generate_async">
+			<return type="void" />
+			<description>
+				Generates terrain asynchronously using WorkerThreadPool. Non-blocking - returns immediately while background threads do the work.
+
+				[b]Behavior:[/b]
+				[ol]
+				[li]Spawns worker threads via WorkerThreadPool[/li]
+				[li]Worker threads generate chunk meshes in parallel[/li]
+				[li]Main thread applies pending meshes via [method _process] (up to max_chunks_per_frame per frame)[/li]
+				[li]Signals emitted during progression[/li]
+				[/ol]
+
+				[b]Thread Safety:[/b]
+				Safe to call from main thread. Worker threads handle mesh generation. Main thread applies results.
+
+				[b]Performance:[/b]
+				Optimal for gameplay. Distributes work across frames to maintain smooth framerate.
+
+				[b]Signals Emitted:[/b]
+				- [signal generation_started] - when generation begins
+				- [signal generation_progress] - periodically during generation (every signal_every_n_chunks)
+				- [signal generation_completed] - when all meshes are applied
+
+				[b]Example:[/b]
+				[code]
+				generator.generation_completed.connect(_on_gen_done)
+				generator.generate_async()
+
+				func _on_gen_done():
+					print("Async generation complete")
+				[/code]
+
+				[b]See Also:[/b]
+				[method generate], [method cancel_generation], [method is_generating]
+			</description>
+		</method>
+		<method name="cancel_generation">
+			<return type="void" />
+			<description>
+				Cancels an in-progress async generation. Safe to call if no generation is running.
+
+				[b]Effect:[/b]
+				- Stops worker threads from generating new chunks
+				- Clears pending mesh queue
+				- Emits [signal generation_cancelled]
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]Note:[/b]
+				Chunks already completed will remain rendered. Only future work is cancelled.
+
+				[b]Example:[/b]
+				[code]
+				if generator.is_generating():
+					generator.cancel_generation()
+				[/code]
+
+				[b]See Also:[/b]
+				[method generate_async], [method is_generating]
+			</description>
+		</method>
+		<method name="is_generating" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns true if generation is currently in progress.
+
+				[b]Return Value:[/b]
+				True if async generation is active, false otherwise.
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]Example:[/b]
+				[code]
+				if generator.is_generating():
+					print("Still generating...")
+				else:
+					print("Generation done")
+				[/code]
+
+				[b]See Also:[/b]
+				[method generate_async], [method cancel_generation]
+			</description>
+		</method>
+		<method name="set_generation_mode">
+			<return type="void" />
+			<param index="0" name="value" type="int" />
+			<description>
+				Sets the terrain generation mode: VOXELS_FIRST (0) or HEIGHTMAP_FIRST (1).
+
+				[b]Modes:[/b]
+				[code]VOXELS_FIRST (0)[/code] - Full 3D density evaluation. Evaluate noise at every corner point. Supports complex overhangs and caves. slower.
+				[code]HEIGHTMAP_FIRST (1)[/code] - Optimize for surface-focused terrain: Generate 2D heightmap, then evaluate density only in a surface band. Much faster for typical landscapes.
+
+				[b]Parameters:[/b]
+				[code]value[/code] - 0 for VOXELS_FIRST, 1 for HEIGHTMAP_FIRST
+
+				[b]Thread Safety:[/b]
+				Must be called when generation is not in progress.
+
+				[b]Performance Impact:[/b]
+				HEIGHTMAP_FIRST is 2-4× faster for typical terrain but cannot generate caves above surface band.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_generation_mode(1)  # Use fast heightmap mode
+				generator.generate_async()
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_generation_mode], [method set_surface_band], [method set_lod_level]
+			</description>
+		</method>
+		<method name="get_generation_mode" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current generation mode (0 = VOXELS_FIRST, 1 = HEIGHTMAP_FIRST).
+
+				[b]See Also:[/b]
+				[method set_generation_mode]
+			</description>
+		</method>
+		<method name="set_lod_level">
+			<return type="void" />
+			<param index="0" name="value" type="int" />
+			<description>
+				Sets the global LOD (Level of Detail) level (0-7).
+
+				[b]LOD Levels:[/b]
+				[code]0[/code] = Highest detail (all samples)
+				[code]1[/code] = 1 sample per 2 corners (reduce resolution by ×2)
+				[code]7[/code] = Lowest detail (sparse sampling)
+
+				Lower LOD = more detailed but slower. Higher LOD = faster but blockier.
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Integer 0-7
+
+				[b]Thread Safety:[/b]
+				Can be set during generation. Takes effect on next chunk regeneration.
+
+				[b]Performance:[/b]
+				Each LOD level reduces mesh generation time roughly by 2×. Useful for preview or distant chunks.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_lod_level(3)  # Moderate detail
+				generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_lod_level], [method set_enable_distance_lod], [method update_chunks_lod]
+			</description>
+		</method>
+		<method name="get_lod_level" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current global LOD level (0-7).
+
+				[b]See Also:[/b]
+				[method set_lod_level]
+			</description>
+		</method>
+		<method name="set_surface_band">
+			<return type="void" />
+			<param index="0" name="value" type="float" />
+			<description>
+				Sets the vertical band thickness around heightmap surface (HEIGHTMAP_FIRST mode only).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Height in world units (default 4.0). Only samples density within ±band around heightmap surface.
+
+				[b]Effect:[/b]
+				Larger band = more voxels evaluated = slower but better for caves/overhangs. Smaller band = faster but may miss underground features.
+
+				[b]Thread Safety:[/b]
+				Can be set anytime. Takes effect on next chunk regeneration.
+
+				[b]Note:[/b]
+				Only applies in HEIGHTMAP_FIRST mode. Ignored in VOXELS_FIRST.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_generation_mode(1)  # HEIGHTMAP_FIRST
+				generator.set_surface_band(6.0)   # Larger band for more detail
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_surface_band], [method set_generation_mode]
+			</description>
+		</method>
+		<method name="get_surface_band" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current surface band thickness.
+
+				[b]See Also:[/b]
+				[method set_surface_band]
+			</description>
+		</method>
+		<method name="set_enable_distance_lod">
+			<return type="void" />
+			<param index="0" name="value" type="bool" />
+			<description>
+				Enables or disables per-chunk distance-based LOD.
+
+				[b]Parameters:[/b]
+				[code]value[/code] - true to enable distance LOD, false to use global LOD for all chunks
+
+				[b]Behavior:[/b]
+				When enabled, each chunk's LOD is computed based on its distance from [member lod_reference_position]. Chunks closer to the reference use finer LOD, distant chunks use coarser LOD.
+
+				[b]Thread Safety:[/b]
+				Can be changed anytime. Call [method update_chunks_lod] to recompute.
+
+				[b]Performance:[/b]
+				Significantly improves framerate for large worlds (16×16×16+) by prioritizing detail near player/camera.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_enable_distance_lod(true)
+				generator.set_lod_reference_position(player.get_global_position())
+				generator.update_chunks_lod()
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_enable_distance_lod], [method set_lod_reference_position], [method set_lod_distances], [method update_chunks_lod]
+			</description>
+		</method>
+		<method name="get_enable_distance_lod" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether distance-based LOD is enabled.
+
+				[b]See Also:[/b]
+				[method set_enable_distance_lod]
+			</description>
+		</method>
+		<method name="set_lod_reference_position">
+			<return type="void" />
+			<param index="0" name="value" type="Vector3" />
+			<description>
+				Sets the reference position for distance-based LOD calculations (typically player/camera position).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - World position to measure distance from
+
+				[b]Effect:[/b]
+				Used with [method update_chunks_lod] to compute per-chunk LOD based on distance. Call this in _process() with player position for dynamic LOD.
+
+				[b]Thread Safety:[/b]
+				Safe to call anytime.
+
+				[b]Example:[/b]
+				[code]
+				func _process(delta):
+					if generator.get_enable_distance_lod():
+						generator.set_lod_reference_position(player.get_global_position())
+						if generator.update_chunks_lod() > 0:
+							# Some chunks changed LOD, they'll regenerate
+							pass
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_lod_reference_position], [method set_lod_distances], [method update_chunks_lod]
+			</description>
+		</method>
+		<method name="get_lod_reference_position" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				Returns the current LOD reference position.
+
+				[b]See Also:[/b]
+				[method set_lod_reference_position]
+			</description>
+		</method>
+		<method name="set_lod_distances">
+			<return type="void" />
+			<param index="0" name="value" type="PackedFloat64Array" />
+			<description>
+				Sets the distance thresholds for LOD levels (0-7).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Array of 8 float values. value[0] = max distance for LOD 0, value[1] = max distance for LOD 1, etc.
+
+				[b]Behavior:[/b]
+				- If chunk distance ≤ value[0]: LOD 0 (high detail)
+				- If chunk distance ≤ value[1]: LOD 1
+				- ... and so on ...
+				- If chunk distance > value[7]: LOD 7 (lowest detail)
+
+				[b]Default Formula:[/b]
+				By default, distances follow: value[n] = chunk_size × (2 ^ n) × lod_distance_multiplier
+
+				[b]Thread Safety:[/b]
+				Safe to call anytime.
+
+				[b]Example:[/b]
+				[code]
+				var distances = PackedFloat64Array([32, 64, 128, 256, 512, 1024, 2048, 4096])
+				generator.set_lod_distances(distances)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_lod_distances], [method reset_lod_distances_to_default], [method update_chunks_lod]
+			</description>
+		</method>
+		<method name="get_lod_distances" qualifiers="const">
+			<return type="PackedFloat64Array" />
+			<description>
+				Returns the current LOD distance thresholds (array of 8 values).
+
+				[b]See Also:[/b]
+				[method set_lod_distances]
+			</description>
+		</method>
+		<method name="reset_lod_distances_to_default">
+			<return type="void" />
+			<description>
+				Resets LOD distance thresholds to algorithmically calculated defaults based on chunk_size.
+
+				[b]Thread Safety:[/b]
+				Safe to call anytime.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_lod_distances([...custom values...])
+				# ... later ...
+				generator.reset_lod_distances_to_default()  # Back to defaults
+				[/code]
+
+				[b]See Also:[/b]
+				[method set_lod_distances], [method get_lod_distances]
+			</description>
+		</method>
+		<method name="update_chunks_lod">
+			<return type="int" />
+			<description>
+				Updates per-chunk LOD levels based on distance from reference position. Marks chunks that changed LOD as dirty.
+
+				[b]Return Value:[/b]
+				Number of chunks that changed LOD and were marked dirty (need regeneration).
+
+				[b]Behavior:[/b]
+				- Computes distance from each chunk center to [member lod_reference_position]
+				- Assigns LOD level based on [member lod_distances]
+				- Marks changed chunks as dirty
+				- Returns count of changed chunks
+
+				[b]Thread Safety:[/b]
+				Safe to call frequently (e.g., per frame).
+
+				[b]Performance:[/b]
+				O(num_chunks) calculation. Cheap unless many chunks change LOD.
+
+				[b]Example:[/b]
+				[code]
+				var changed = generator.update_chunks_lod()
+				if changed > 0:
+					print("Updated LOD for ", changed, " chunks")
+					generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method set_lod_reference_position], [method set_lod_distances], [method mark_chunk_dirty]
+			</description>
+		</method>
+		<method name="calculate_chunk_lod" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="chunk_index" type="int" />
+			<description>
+				Calculates the LOD level for a specific chunk based on distance (if distance LOD enabled).
+
+				[b]Parameters:[/b]
+				[code]chunk_index[/code] - Linear chunk index (0 to num_chunks - 1)
+
+				[b]Return Value:[/b]
+				LOD level (0-7). Returns global lod_level if distance LOD disabled.
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]Example:[/b]
+				[code]
+				var lod = generator.calculate_chunk_lod(5)
+				print("Chunk 5 LOD: ", lod)
+				[/code]
+
+				[b]See Also:[/b]
+				[method set_enable_distance_lod], [method set_lod_level]
+			</description>
+		</method>
+		<method name="set_terrain_noise">
+			<return type="void" />
+			<param index="0" name="p_noise" type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Sets the noise generator for base terrain height generation.
+
+				[b]Parameters:[/b]
+				[code]p_noise[/code] - A [NoiseGenerator] resource configured with desired noise parameters.
+
+				[b]Effect:[/b]
+				This noise determines the primary shape of terrain (mountains, valleys, plains). Call [method regenerate_dirty_chunks] or regenerate to apply changes.
+
+				[b]Default:[/b]
+				Must be explicitly set before generation. No default noise is configured.
+
+				[b]Example:[/b]
+				[code]
+				var noise = NoiseGenerator.new()
+				noise.set_period(64.0)
+				noise.set_octaves(6)
+				generator.set_terrain_noise(noise)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_terrain_noise], [method set_detail_noise], [method NoiseGenerator]
+			</description>
+		</method>
+		<method name="get_terrain_noise" qualifiers="const">
+			<return type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Returns the currently set terrain noise generator.
+
+				[b]See Also:[/b]
+				[method set_terrain_noise]
+			</description>
+		</method>
+		<method name="set_detail_noise">
+			<return type="void" />
+			<param index="0" name="p_noise" type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Sets the noise generator for detail (rocky) features.
+
+				[b]Parameters:[/b]
+				[code]p_noise[/code] - A [NoiseGenerator] resource for 3D rocky detail.
+
+				[b]Effect:[/b]
+				Applied with [member rock_influence] factor to add surface variation and caves. Lower frequencies create rough surfaces, higher frequencies create fine detail.
+
+				[b]Example:[/b]
+				[code]
+				var detail_noise = NoiseGenerator.new()
+				detail_noise.set_period(16.0)
+				detail_noise.set_octaves(4)
+				generator.set_detail_noise(detail_noise)
+				generator.set_rock_influence(0.4)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_detail_noise], [method set_terrain_noise], [method set_rock_influence]
+			</description>
+		</method>
+		<method name="get_detail_noise" qualifiers="const">
+			<return type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Returns the currently set detail noise generator.
+
+				[b]See Also:[/b]
+				[method set_detail_noise]
+			</description>
+		</method>
+		<method name="set_rock_influence">
+			<return type="void" />
+			<param index="0" name="value" type="float" />
+			<description>
+				Sets the strength of detail noise influence (0.0-1.0).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Blending factor. 0.0 = no detail, 1.0 = full detail applied. Default 0.3.
+
+				[b]Effect:[/b]
+				Multiplier for how much the detail_noise affects terrain. Higher values create more jagged, cave-filled terrain.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_rock_influence(0.2)  # Subtle surface texture
+				generator.set_rock_influence(0.7)  # Very rocky, many caves
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_rock_influence], [method set_detail_noise]
+			</description>
+		</method>
+		<method name="get_rock_influence" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current rock influence factor (0.0-1.0).
+
+				[b]See Also:[/b]
+				[method set_rock_influence]
+			</description>
+		</method>
+		<method name="set_terrain_height">
+			<return type="void" />
+			<param index="0" name="value" type="float" />
+			<description>
+				Sets the base terrain height (center height of terrain in world units).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Height offset. Default 4.0.
+
+				[b]Effect:[/b]
+				This is the Y-coordinate around which terrain oscillates. Higher values shift terrain up. Used with [member terrain_amplitude] to define elevation range.
+
+				[b]Range:[/b]
+				terrain_min = terrain_height - terrain_amplitude
+				terrain_max = terrain_height + terrain_amplitude
+
+				[b]Example:[/b]
+				[code]
+				generator.set_terrain_height(10.0)   # Center at Y=10
+				generator.set_terrain_amplitude(15.0) # Range: Y=-5 to Y=25
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_terrain_height], [method set_terrain_amplitude]
+			</description>
+		</method>
+		<method name="get_terrain_height" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current base terrain height.
+
+				[b]See Also:[/b]
+				[method set_terrain_height]
+			</description>
+		</method>
+		<method name="set_terrain_amplitude">
+			<return type="void" />
+			<param index="0" name="value" type="float" />
+			<description>
+				Sets the height variation range (±amplitude from base height).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Range in world units. Default 8.0.
+
+				[b]Effect:[/b]
+				Combined with [member terrain_height]. Larger amplitudes create more dramatic height variation.
+
+				[b]Example:[/b]
+				[code]
+				# Flat terrain
+				generator.set_terrain_amplitude(1.0)
+
+				# Mountainous terrain
+				generator.set_terrain_amplitude(20.0)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_terrain_amplitude], [method set_terrain_height]
+			</description>
+		</method>
+		<method name="get_terrain_amplitude" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current terrain amplitude.
+
+				[b]See Also:[/b]
+				[method set_terrain_amplitude]
+			</description>
+		</method>
+		<method name="set_biome_generator">
+			<return type="void" />
+			<param index="0" name="p_generator" type="Ref&lt;BiomeGenerator&gt;" />
+			<description>
+				Sets the biome generator that determines voxel types based on height/temperature/humidity.
+
+				[b]Parameters:[/b]
+				[code]p_generator[/code] - A [BiomeGenerator] resource with configured biomes.
+
+				[b]Effect:[/b]
+				The biome generator is consulted during chunk generation to assign voxel types (sand, stone, grass, etc.) based on position and biome characteristics. Essential for terrain variety.
+
+				[b]Example:[/b]
+				[code]
+				var biome_gen = BiomeGenerator.new()
+				# Configure biomes...
+				biome_gen.add_biome("grass", 2.0, 8.0, ...)
+				biome_gen.add_biome("desert", -1.0, 2.0, ...)
+				generator.set_biome_generator(biome_gen)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_biome_generator], [method set_feature_generator], [method BiomeGenerator]
+			</description>
+		</method>
+		<method name="get_biome_generator" qualifiers="const">
+			<return type="Ref&lt;BiomeGenerator&gt;" />
+			<description>
+				Returns the currently set biome generator.
+
+				[b]See Also:[/b]
+				[method set_biome_generator]
+			</description>
+		</method>
+		<method name="set_feature_generator">
+			<return type="void" />
+			<param index="0" name="p_generator" type="Ref&lt;FeatureGenerator&gt;" />
+			<description>
+				Sets the feature generator that places decorations, ores, trees, etc.
+
+				[b]Parameters:[/b]
+				[code]p_generator[/code] - A [FeatureGenerator] resource with configured placement rules.
+
+				[b]Effect:[/b]
+				After biome terrain is generated, features are placed according to rules (probability, biome filters, height ranges, clustering).
+
+				[b]Example:[/b]
+				[code]
+				var feature_gen = FeatureGenerator.new()
+				feature_gen.add_ore_rule(VOXEL_IRON, 0.3, 2, 50)  # Iron ore
+				feature_gen.add_tree_rule(0.1, [BIOME_FOREST], 5, 20)  # Trees in forests
+				generator.set_feature_generator(feature_gen)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_feature_generator], [method set_biome_generator], [method FeatureGenerator]
+			</description>
+		</method>
+		<method name="get_feature_generator" qualifiers="const">
+			<return type="Ref&lt;FeatureGenerator&gt;" />
+			<description>
+				Returns the currently set feature generator.
+
+				[b]See Also:[/b]
+				[method set_feature_generator]
+			</description>
+		</method>
+		<method name="set_resolution">
+			<return type="void" />
+			<param index="0" name="value" type="int" />
+			<description>
+				Sets the sampling resolution (samples per voxel edge).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Integer ≥ 1. Default 1. Higher = more detail but slower.
+
+				[b]Effect:[/b]
+				Resolution 1 = one sample per voxel corner (standard marching cubes). Resolution 2 = four samples per edge (more accurate surface). Resolution 3+ = even finer detail at significant cost.
+
+				[b]Performance:[/b]
+				Each increment roughly 2× slower due to more density evaluations.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_resolution(1)  # Fast, blocky
+				generator.set_resolution(3)  # Slow, very smooth
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_resolution], [method set_lod_level]
+			</description>
+		</method>
+		<method name="get_resolution" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current sampling resolution.
+
+				[b]See Also:[/b]
+				[method set_resolution]
+			</description>
+		</method>
+		<method name="set_cutoff">
+			<return type="void" />
+			<param index="0" name="value" type="float" />
+			<description>
+				Sets the density cutoff threshold for marching cubes (where surface is extracted).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Threshold density. Default 0.0.
+
+				[b]Effect:[/b]
+				Marching cubes generates surface where density crosses this threshold. Negative density = solid, positive = air. Raising cutoff (negative direction) creates more solid terrain; lowering it creates more air.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_cutoff(-0.5)   # More solid terrain
+				generator.set_cutoff(0.0)    # Balanced
+				generator.set_cutoff(0.5)    # More hollow/air
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_cutoff]
+			</description>
+		</method>
+		<method name="get_cutoff" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current density cutoff threshold.
+
+				[b]See Also:[/b]
+				[method set_cutoff]
+			</description>
+		</method>
+		<method name="set_seeder">
+			<return type="void" />
+			<param index="0" name="value" type="int" />
+			<description>
+				Sets the random seed for noise generation and feature placement.
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Seed integer (default 1240). Same seed produces identical terrain.
+
+				[b]Effect:[/b]
+				Used by noise generators and randomization functions. Changing seed changes terrain while keeping structure similar.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_seeder(42)  # Deterministic terrain
+				generator.set_randomizer(false)
+				generator.generate()
+
+				# Generate again - identical result
+				generator.generate()
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_seeder], [method set_randomizer]
+			</description>
+		</method>
+		<method name="get_seeder" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current random seed.
+
+				[b]See Also:[/b]
+				[method set_seeder]
+			</description>
+		</method>
+		<method name="set_randomizer">
+			<return type="bool" />
+			<param index="0" name="value" type="bool" />
+			<description>
+				Enables/disables random seed variation.
+
+				[b]Parameters:[/b]
+				[code]value[/code] - true to randomize seed each generation, false to use fixed [member seeder].
+
+				[b]Effect:[/b]
+				When enabled, seed is randomized before each generate() call, creating different terrain. When disabled, same seed used = same terrain (unless other parameters change).
+
+				[b]Example:[/b]
+				[code]
+				generator.set_randomizer(true)
+				generator.generate()  # Random terrain #1
+				generator.generate()  # Random terrain #2 (different)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_randomizer], [method set_seeder]
+			</description>
+		</method>
+		<method name="get_randomizer" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether random seed variation is enabled.
+
+				[b]See Also:[/b]
+				[method set_randomizer]
+			</description>
+		</method>
+		<method name="set_world_size">
+			<return type="void" />
+			<param index="0" name="value" type="Vector3i" />
+			<description>
+				Sets the world grid dimensions (in chunks).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Grid size. E.g., Vector3i(16, 16, 16) = 16×16×16 chunks.
+
+				[b]Effect:[/b]
+				Total voxels = world_size × chunk_size. For example, 16 chunks × 8 voxels = 128 voxel units per dimension.
+
+				[b]Thread Safety:[/b]
+				Cannot be changed after first generation (world_size_finalized flag prevents drift). Call [method reset] to allow new size.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_world_size(Vector3i(8, 8, 8))   # 512 chunks total
+				generator.set_chunk_size(8)
+				generator.generate()
+				# Now world_size_finalized = true, can't change size
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_world_size], [method set_chunk_size], [method reset]
+			</description>
+		</method>
+		<method name="get_world_size" qualifiers="const">
+			<return type="Vector3i" />
+			<description>
+				Returns the current world grid dimensions (in chunks).
+
+				[b]See Also:[/b]
+				[method set_world_size]
+			</description>
+		</method>
+		<method name="set_chunk_size">
+			<return type="void" />
+			<param index="0" name="value" type="int" />
+			<description>
+				Sets the chunk dimensions (voxels per chunk edge).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Size. Default 8. Common values: 4, 8, 16, 32, 64. Must be within Constants::MIN_CHUNK_SIZE to Constants::MAX_CHUNK_SIZE.
+
+				[b]Effect:[/b]
+				- Chunk 8×8×8 = 512 voxels per chunk
+				- Chunk 16×16×16 = 4096 voxels per chunk
+				- Larger chunks = fewer total chunks but slower individual chunk generation.
+
+				[b]Thread Safety:[/b]
+				Should be set before first generation.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_chunk_size(8)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_chunk_size], [method set_world_size]
+			</description>
+		</method>
+		<method name="get_chunk_size" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current chunk size (voxels per edge).
+
+				[b]See Also:[/b]
+				[method set_chunk_size]
+			</description>
+		</method>
+		<method name="set_show_centers">
+			<return type="void" />
+			<param index="0" name="value" type="bool" />
+			<description>
+				Enables debug visualization of chunk centers.
+
+				[b]Effect:[/b]
+				When enabled, small cubes are drawn at the center of each chunk for visual debugging.
+
+				[b]Performance:[/b]
+				Minimal overhead. Enable only for debugging.
+
+				[b]See Also:[/b]
+				[method get_show_centers], [method set_show_voxel_grid], [method set_show_chunk_grid], [method set_show_lod_colors]
+			</description>
+		</method>
+		<method name="get_show_centers" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether chunk center visualization is enabled.
+
+				[b]See Also:[/b]
+				[method set_show_centers]
+			</description>
+		</method>
+		<method name="set_show_voxel_grid">
+			<return type="void" />
+			<param index="0" name="value" type="bool" />
+			<description>
+				Enables debug visualization of voxel grid lines.
+
+				[b]Effect:[/b]
+				When enabled, a 3D grid is rendered showing voxel boundaries.
+
+				[b]Performance:[/b]
+				Can be slow for large worlds. Use only for small debug sessions.
+
+				[b]See Also:[/b]
+				[method get_show_voxel_grid], [method set_show_chunk_grid], [method set_show_centers]
+			</description>
+		</method>
+		<method name="get_show_voxel_grid" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether voxel grid visualization is enabled.
+
+				[b]See Also:[/b]
+				[method set_show_voxel_grid]
+			</description>
+		</method>
+		<method name="set_show_chunk_grid">
+			<return type="void" />
+			<param index="0" name="value" type="bool" />
+			<description>
+				Enables debug visualization of chunk grid boundaries.
+
+				[b]Effect:[/b]
+				When enabled, wireframe boxes are drawn around each chunk.
+
+				[b]Performance:[/b]
+				Lightweight visualization. Good for spatial debugging without overwhelming detail.
+
+				[b]See Also:[/b]
+				[method get_show_chunk_grid], [method set_show_voxel_grid], [method set_show_centers]
+			</description>
+		</method>
+		<method name="get_show_chunk_grid" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether chunk grid visualization is enabled.
+
+				[b]See Also:[/b]
+				[method set_show_chunk_grid]
+			</description>
+		</method>
+		<method name="set_vertex_limit">
+			<return type="void" />
+			<param index="0" name="value" type="bool" />
+			<description>
+				Enables/disables vertex count limits per chunk.
+
+				[b]Parameters:[/b]
+				[code]value[/code] - true to cap vertices, false for unlimited.
+
+				[b]Effect:[/b]
+				When enabled, mesh generation stops if vertex limit reached (prevents degenerate meshes). For most cases, leave enabled.
+
+				[b]See Also:[/b]
+				[method get_vertex_limit]
+			</description>
+		</method>
+		<method name="get_vertex_limit" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether vertex limiting is enabled.
+
+				[b]See Also:[/b]
+				[method set_vertex_limit]
+			</description>
+		</method>
+		<method name="set_max_chunks_per_frame">
+			<return type="void" />
+			<param index="0" name="value" type="int" />
+			<description>
+				Sets the maximum number of chunks to apply mesh per frame during async generation (1-32).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Chunk count. Default 4.
+
+				[b]Effect:[/b]
+				Higher = faster streaming but more frame stuttering. Lower = smoother but slower streaming. Tune based on frame budget and hardware.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_max_chunks_per_frame(2)   # Conservative, very smooth
+				generator.set_max_chunks_per_frame(8)   # Aggressive, faster generation
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_max_chunks_per_frame], [method set_signal_every_n_chunks]
+			</description>
+		</method>
+		<method name="get_max_chunks_per_frame" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current max chunks per frame setting.
+
+				[b]See Also:[/b]
+				[method set_max_chunks_per_frame]
+			</description>
+		</method>
+		<method name="set_signal_every_n_chunks">
+			<return type="void" />
+			<param index="0" name="value" type="int" />
+			<description>
+				Sets the signal emission frequency during async generation (1-64).
+
+				[b]Parameters:[/b]
+				[code]value[/code] - Signal every N chunks completed. Default 8.
+
+				[b]Effect:[/b]
+				Lower = more frequent progress updates (more signals, finer granularity). Higher = fewer signals (less overhead, coarser updates).
+
+				[b]Example:[/b]
+				[code]
+				generator.set_signal_every_n_chunks(1)   # Signal per chunk
+				generator.set_signal_every_n_chunks(16)  # Signal every 16 chunks
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_signal_every_n_chunks], [signal generation_progress]
+			</description>
+		</method>
+		<method name="get_signal_every_n_chunks" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current signal frequency setting.
+
+				[b]See Also:[/b]
+				[method set_signal_every_n_chunks]
+			</description>
+		</method>
+		<method name="mark_chunk_dirty">
+			<return type="void" />
+			<param index="0" name="chunk_coord" type="Vector3i" />
+			<description>
+				Marks a specific chunk as needing regeneration.
+
+				[b]Parameters:[/b]
+				[code]chunk_coord[/code] - 3D grid coordinate (e.g., Vector3i(0, 0, 0) for first chunk).
+
+				[b]Effect:[/b]
+				Sets dirty flag. Call [method regenerate_dirty_chunks] to update.
+
+				[b]Use Case:[/b]
+				After calling [method modify_terrain] or changing biome/feature settings locally, mark affected chunks dirty.
+
+				[b]Example:[/b]
+				[code]
+				generator.modify_terrain(Vector3(50, 10, 50), 5.0, -1.0)  # Dig sphere
+				generator.mark_chunk_dirty(Vector3i(6, 1, 6))  # Mark affected chunk
+				generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method is_chunk_dirty], [method mark_all_chunks_dirty], [method regenerate_dirty_chunks]
+			</description>
+		</method>
+		<method name="mark_all_chunks_dirty">
+			<return type="void" />
+			<description>
+				Marks all chunks as needing regeneration.
+
+				[b]Effect:[/b]
+				Sets dirty flag on every chunk. Call [method regenerate_dirty_chunks] to update all.
+
+				[b]Use Case:[/b]
+				After global changes (changing noise, terrain height, etc.) to force complete regeneration.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_terrain_height(15.0)
+				generator.mark_all_chunks_dirty()
+				generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method mark_chunk_dirty], [method regenerate_dirty_chunks]
+			</description>
+		</method>
+		<method name="is_chunk_dirty" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="chunk_coord" type="Vector3i" />
+			<description>
+				Checks if a chunk is marked as dirty (needs regeneration).
+
+				[b]Parameters:[/b]
+				[code]chunk_coord[/code] - 3D grid coordinate.
+
+				[b]Return Value:[/b]
+				true if chunk is dirty, false otherwise.
+
+				[b]Example:[/b]
+				[code]
+				if generator.is_chunk_dirty(Vector3i(5, 0, 5)):
+					print("Chunk needs regeneration")
+				[/code]
+
+				[b]See Also:[/b]
+				[method mark_chunk_dirty], [method regenerate_dirty_chunks]
+			</description>
+		</method>
+		<method name="regenerate_dirty_chunks">
+			<return type="void" />
+			<description>
+				Regenerates all chunks marked as dirty (incremental update).
+
+				[b]Behavior:[/b]
+				Triggers async generation for only dirt chunks. Much faster than full [method generate].
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+
+				[b]Example:[/b]
+				[code]
+				generator.modify_terrain(center, radius, delta)
+				generator.mark_chunk_dirty(chunk_coord)
+				generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method mark_chunk_dirty], [method mark_all_chunks_dirty], [method generate_async]
+			</description>
+		</method>
+		<method name="invalidate_density_region">
+			<return type="void" />
+			<param index="0" name="min_voxel" type="Vector3i" />
+			<param index="1" name="max_voxel" type="Vector3i" />
+			<description>
+				Invalidates cached density values in a region (call after terrain edits).
+
+				[b]Parameters:[/b]
+				[code]min_voxel[/code], [code]max_voxel[/code] - Bounding box of affected area.
+
+				[b]Effect:[/b]
+				Clears density cache for the region so next access recomputes from edits. Important for terraforming to avoid stale cache.
+
+				[b]Thread Safety:[/b]
+				Safe to call anytime.
+
+				[b]Example:[/b]
+				[code]
+				generator.modify_terrain(center, radius, delta)
+				generator.invalidate_density_region(center - radius, center + radius)
+				[/code]
+
+				[b]See Also:[/b]
+				[method modify_terrain], [method regenerate_dirty_chunks]
+			</description>
+		</method>
+		<method name="modify_terrain">
+			<return type="void" />
+			<param index="0" name="center" type="Vector3" />
+			<param index="1" name="radius" type="float" />
+			<param index="2" name="delta" type="float" />
+			<description>
+				Modifies terrain in a spherical region with smooth falloff.
+
+				[b]Parameters:[/b]
+				[code]center[/code] - World position of edit sphere center.
+				[code]radius[/code] - Radius of effect (world units).
+				[code]delta[/code] - Density change. Negative = dig (remove terrain), positive = build (add terrain). Typical range: ±1.0.
+
+				[b]Effect:[/b]
+				Applies smooth falloff from center outward. Density at center = delta, fades to 0 at radius boundary. Changes are persistent across regenerations.
+
+				[b]Thread Safety:[/b]
+				Safe to call anytime. Mutations are thread-safe via internal mutex.
+
+				[b]Performance:[/b]
+				Each call modifies affected voxels. Multiple edits can be accumulated efficiently.
+
+				[b]Example:[/b]
+				[code]
+				# Dig a hole
+				generator.modify_terrain(Vector3(50, 20, 50), 10.0, -2.0)
+
+				# Build terrain
+				generator.modify_terrain(Vector3(60, 20, 60), 5.0, 1.5)
+
+				# Regenerate to see changes
+				generator.mark_all_chunks_dirty()
+				generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method dig_sphere], [method build_sphere], [method clear_terrain_edits], [method invalidate_density_region]
+			</description>
+		</method>
+		<method name="dig_sphere">
+			<return type="void" />
+			<param index="0" name="center" type="Vector3" />
+			<param index="1" name="radius" type="float" />
+			<param index="2" name="strength" type="float" />
+			<description>
+				Convenience method to dig (remove) terrain in a sphere.
+
+				[b]Parameters:[/b]
+				[code]center[/code] - Sphere center.
+				[code]radius[/code] - Sphere radius.
+				[code]strength[/code] - Dig intensity (default 1.0). Higher = deeper excavation.
+
+				[b]Equivalent To:[/b]
+				[code]modify_terrain(center, radius, -strength)[/code]
+
+				[b]Example:[/b]
+				[code]
+				generator.dig_sphere(player_pos, 5.0, 1.5)  # Dig where player stands
+				[/code]
+
+				[b]See Also:[/b]
+				[method build_sphere], [method modify_terrain]
+			</description>
+		</method>
+		<method name="build_sphere">
+			<return type="void" />
+			<param index="0" name="center" type="Vector3" />
+			<param index="1" name="radius" type="float" />
+			<param index="2" name="strength" type="float" />
+			<description>
+				Convenience method to build (add) terrain in a sphere.
+
+				[b]Parameters:[/b]
+				[code]center[/code] - Sphere center.
+				[code]radius[/code] - Sphere radius.
+				[code]strength[/code] - Build intensity (default 1.0). Higher = more terrain added.
+
+				[b]Equivalent To:[/b]
+				[code]modify_terrain(center, radius, +strength)[/code]
+
+				[b]Example:[/b]
+				[code]
+				generator.build_sphere(world_pos, 3.0, 1.0)  # Build wall
+				[/code]
+
+				[b]See Also:[/b]
+				[method dig_sphere], [method modify_terrain]
+			</description>
+		</method>
+		<method name="clear_terrain_edits">
+			<return type="void" />
+			<description>
+				Clears all terrain edits, resetting to procedurally generated terrain.
+
+				[b]Effect:[/b]
+				Removes all dig/build modifications. Terrain reverts to noise-based generation.
+
+				[b]Thread Safety:[/b]
+				Safe to call anytime.
+
+				[b]Example:[/b]
+				[code]
+				# Make edits
+				generator.dig_sphere(pos1, 10.0, 1.0)
+				generator.build_sphere(pos2, 5.0, 1.0)
+
+				# Reset
+				generator.clear_terrain_edits()
+				generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method modify_terrain], [method get_terrain_edit_count]
+			</description>
+		</method>
+		<method name="get_terrain_edit_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the number of stored terrain edits (voxels modified by dig/build).
+
+				[b]Return Value:[/b]
+				Number of edited voxels.
+
+				[b]Use Case:[/b]
+				Check if terrain has unsaved edits or gauge edit complexity.
+
+				[b]Example:[/b]
+				[code]
+				if generator.get_terrain_edit_count() > 0:
+					print("Unsaved edits present")
+				[/code]
+
+				[b]See Also:[/b]
+				[method clear_terrain_edits], [method get_terrain_edits_data]
+			</description>
+		</method>
+		<method name="get_terrain_edits_data" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<description>
+				Serializes terrain edits to a packed array for saving.
+
+				[b]Return Value:[/b]
+				Array of floats encoding all edits: [x, y, z, delta, x, y, z, delta, ...].
+
+				[b]Use Case:[/b]
+				Call before save_map() or for manual persistence.
+
+				[b]Format:[/b]
+				Array is length = 4 × num_edits. Each edit is 4 floats: (x, y, z, delta).
+
+				[b]Example:[/b]
+				[code]
+				var edits_data = generator.get_terrain_edits_data()
+				save_file.store_var(edits_data)  # Save
+				[/code]
+
+				[b]See Also:[/b]
+				[method set_terrain_edits_data], [method save_map]
+			</description>
+		</method>
+		<method name="set_terrain_edits_data">
+			<return type="void" />
+			<param index="0" name="data" type="PackedFloat32Array" />
+			<description>
+				Deserializes terrain edits from a packed array.
+
+				[b]Parameters:[/b]
+				[code]data[/code] - Array from [method get_terrain_edits_data].
+
+				[b]Effect:[/b]
+				Restores edits from saved format. Replaces any existing edits.
+
+				[b]Example:[/b]
+				[code]
+				var edits_data = save_file.get_var()  # Load
+				generator.set_terrain_edits_data(edits_data)
+				generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_terrain_edits_data], [method load_map]
+			</description>
+		</method>
+		<method name="set_forcefield_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Enables/disables the forcefield (world boundary system).
+
+				[b]Parameters:[/b]
+				[code]enabled[/code] - true to enable, false to disable.
+
+				[b]Effect:[/b]
+				When enabled, creates 6 boundary walls (north, south, east, west, top, bottom) around the world. Players are contained within. When disabled, walls are removed.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread. Modifies scene graph.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_forcefield_enabled(true)
+				generator.set_forcefield_height(100.0)
+				generator.create_forcefield_nodes()
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_forcefield_enabled], [method set_forcefield_height], [method set_forcefield_wall_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether the forcefield is enabled.
+
+				[b]See Also:[/b]
+				[method set_forcefield_enabled]
+			</description>
+		</method>
+		<method name="set_forcefield_height">
+			<return type="void" />
+			<param index="0" name="h" type="float" />
+			<description>
+				Sets the height of forcefield walls.
+
+				[b]Parameters:[/b]
+				[code]h[/code] - Height in world units (default 300.0).
+
+				[b]Effect:[/b]
+				Extends walls vertically. Taller walls contain taller objects.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_forcefield_height(500.0)  # Very tall barrier
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_forcefield_height], [method set_forcefield_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_height" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current forcefield height.
+
+				[b]See Also:[/b]
+				[method set_forcefield_height]
+			</description>
+		</method>
+		<method name="set_forcefield_collision_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Enables/disables collision on forcefield walls.
+
+				[b]Parameters:[/b]
+				[code]enabled[/code] - true for solid walls, false for invisible barriers.
+
+				[b]Effect:[/b]
+				When true, walls have physics and block movement. When false, walls are visual only.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_forcefield_collision_enabled(true)  # Players can't pass
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_forcefield_collision_enabled], [method set_forcefield_detection_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_collision_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether collision is enabled on forcefields.
+
+				[b]See Also:[/b]
+				[method set_forcefield_collision_enabled]
+			</description>
+		</method>
+		<method name="set_forcefield_detection_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Enables/disables detection zones (Area3D) on forcefield walls.
+
+				[b]Parameters:[/b]
+				[code]enabled[/code] - true to detect bodies entering walls, false to disable.
+
+				[b]Effect:[/b]
+				When enabled, forcefield provides [signal forcefield_body_entered], [signal forcefield_body_exited] signals. Walls can fade visibility when player is inside.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_forcefield_detection_enabled(true)
+				generator.forcefield_body_entered.connect(_on_forcefield_entered)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_forcefield_detection_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_detection_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether detection zones are enabled.
+
+				[b]See Also:[/b]
+				[method set_forcefield_detection_enabled]
+			</description>
+		</method>
+		<method name="set_forcefield_buffer">
+			<return type="void" />
+			<param index="0" name="buf" type="float" />
+			<description>
+				Sets the inward buffer distance from world boundary to wall placement.
+
+				[b]Parameters:[/b]
+				[code]buf[/code] - Distance in voxel units (default 0.5). Walls are inset by this amount.
+
+				[b]Effect:[/b]
+				Prevents walls from being exactly at boundary edge, giving them some clearance.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_forcefield_buffer(2.0)  # Walls inset 2 voxels
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_forcefield_buffer], [method set_forcefield_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_buffer" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current forcefield buffer distance.
+
+				[b]See Also:[/b]
+				[method set_forcefield_buffer]
+			</description>
+		</method>
+		<method name="set_forcefield_shader_material">
+			<return type="void" />
+			<param index="0" name="material" type="Ref&lt;ShaderMaterial&gt;" />
+			<description>
+				Sets a custom shader material for forcefield walls.
+
+				[b]Parameters:[/b]
+				[code]material[/code] - A [ShaderMaterial] resource for rendering walls.
+
+				[b]Effect:[/b]
+				Applied to all forcefield wall meshes. Allows custom visuals (glow, fade, animation, etc.).
+
+				[b]Example:[/b]
+				[code]
+				var mat = ShaderMaterial.new()
+				mat.shader = load("res://shaders/forcefield.gdshader")
+				generator.set_forcefield_shader_material(mat)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_forcefield_shader_material], [method set_forcefield_shader_param]
+			</description>
+		</method>
+		<method name="get_forcefield_shader_material" qualifiers="const">
+			<return type="Ref&lt;ShaderMaterial&gt;" />
+			<description>
+				Returns the current forcefield shader material.
+
+				[b]See Also:[/b]
+				[method set_forcefield_shader_material]
+			</description>
+		</method>
+		<method name="set_forcefield_wall_enabled">
+			<return type="void" />
+			<param index="0" name="wall_index" type="int" />
+			<param index="1" name="enabled" type="bool" />
+			<description>
+				Enables/disables a specific forcefield wall by index.
+
+				[b]Parameters:[/b]
+				[code]wall_index[/code] - 0=North, 1=South, 2=East, 3=West, 4=Top, 5=Bottom.
+				[code]enabled[/code] - true to enable, false to disable.
+
+				[b]Effect:[/b]
+				Individual walls can be toggled independently. Useful for portals or gaps.
+
+				[b]Example:[/b]
+				[code]
+				# Allow north exit
+				generator.set_forcefield_wall_enabled(0, false)  # Disable north
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_forcefield_wall_enabled], [method set_forcefield_north_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_wall_enabled" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="wall_index" type="int" />
+			<description>
+				Returns whether a specific wall is enabled.
+
+				[b]Parameters:[/b]
+				[code]wall_index[/code] - 0=North, 1=South, 2=East, 3=West, 4=Top, 5=Bottom.
+
+				[b]See Also:[/b]
+				[method set_forcefield_wall_enabled]
+			</description>
+		</method>
+		<method name="set_forcefield_north_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Convenience method to enable/disable the north wall.
+
+				[b]Equivalent To:[/b]
+				[code]set_forcefield_wall_enabled(0, enabled)[/code]
+
+				[b]See Also:[/b]
+				[method set_forcefield_south_enabled], [method set_forcefield_east_enabled], [method set_forcefield_west_enabled], [method set_forcefield_top_enabled], [method set_forcefield_bottom_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_north_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether the north wall is enabled.
+
+				[b]See Also:[/b]
+				[method set_forcefield_north_enabled]
+			</description>
+		</method>
+		<method name="set_forcefield_south_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Convenience method to enable/disable the south wall.
+
+				[b]Equivalent To:[/b]
+				[code]set_forcefield_wall_enabled(1, enabled)[/code]
+
+				[b]See Also:[/b]
+				[method set_forcefield_north_enabled], [method set_forcefield_east_enabled], [method set_forcefield_west_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_south_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether the south wall is enabled.
+
+				[b]See Also:[/b]
+				[method set_forcefield_south_enabled]
+			</description>
+		</method>
+		<method name="set_forcefield_east_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Convenience method to enable/disable the east wall.
+
+				[b]Equivalent To:[/b]
+				[code]set_forcefield_wall_enabled(2, enabled)[/code]
+
+				[b]See Also:[/b]
+				[method set_forcefield_north_enabled], [method set_forcefield_west_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_east_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether the east wall is enabled.
+
+				[b]See Also:[/b]
+				[method set_forcefield_east_enabled]
+			</description>
+		</method>
+		<method name="set_forcefield_west_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Convenience method to enable/disable the west wall.
+
+				[b]Equivalent To:[/b]
+				[code]set_forcefield_wall_enabled(3, enabled)[/code]
+
+				[b]See Also:[/b]
+				[method set_forcefield_north_enabled], [method set_forcefield_east_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_west_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether the west wall is enabled.
+
+				[b]See Also:[/b]
+				[method set_forcefield_west_enabled]
+			</description>
+		</method>
+		<method name="set_forcefield_top_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Convenience method to enable/disable the top (ceiling) wall.
+
+				[b]Equivalent To:[/b]
+				[code]set_forcefield_wall_enabled(4, enabled)[/code]
+
+				[b]See Also:[/b]
+				[method set_forcefield_bottom_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_top_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether the top wall is enabled.
+
+				[b]See Also:[/b]
+				[method set_forcefield_top_enabled]
+			</description>
+		</method>
+		<method name="set_forcefield_bottom_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Convenience method to enable/disable the bottom (floor) wall.
+
+				[b]Equivalent To:[/b]
+				[code]set_forcefield_wall_enabled(5, enabled)[/code]
+
+				[b]See Also:[/b]
+				[method set_forcefield_top_enabled]
+			</description>
+		</method>
+		<method name="get_forcefield_bottom_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether the bottom wall is enabled.
+
+				[b]See Also:[/b]
+				[method set_forcefield_bottom_enabled]
+			</description>
+		</method>
+		<method name="create_forcefield_nodes">
+			<return type="void" />
+			<description>
+				Creates the forcefield wall scene nodes (MeshInstance3D, StaticBody3D, CollisionShape3D, Area3D).
+
+				[b]Effect:[/b]
+				Builds and adds forcefield geometry to the scene tree as children of this generator node.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_forcefield_enabled(true)
+				generator.set_forcefield_height(300.0)
+				generator.create_forcefield_nodes()
+				[/code]
+
+				[b]See Also:[/b]
+				[method update_forcefield_nodes], [method remove_forcefield_nodes]
+			</description>
+		</method>
+		<method name="update_forcefield_nodes">
+			<return type="void" />
+			<description>
+				Updates forcefield wall geometry (e.g., after changing height or buffer).
+
+				[b]Effect:[/b]
+				Rebuilds wall meshes and collision shapes with current parameters.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_forcefield_height(500.0)
+				generator.update_forcefield_nodes()
+				[/code]
+
+				[b]See Also:[/b]
+				[method create_forcefield_nodes], [method remove_forcefield_nodes]
+			</description>
+		</method>
+		<method name="remove_forcefield_nodes">
+			<return type="void" />
+			<description>
+				Removes the forcefield wall nodes from the scene tree.
+
+				[b]Effect:[/b]
+				Cleans up all forcefield geometry.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_forcefield_enabled(false)
+				generator.remove_forcefield_nodes()
+				[/code]
+
+				[b]See Also:[/b]
+				[method create_forcefield_nodes]
+			</description>
+		</method>
+		<method name="save_map">
+			<return type="void" />
+			<param index="0" name="dir" type="String" />
+			<param index="1" name="map_name" type="String" />
+			<description>
+				Saves the terrain map (chunks and edits) to disk.
+
+				[b]Parameters:[/b]
+				[code]dir[/code] - Base directory (e.g., "user://maps", "res://maps").
+				[code]map_name[/code] - Subdirectory name for this map within base directory.
+
+				[b]Structure:[/b]
+				Files saved to: [code]{dir}/{map_name}/*[/code]
+				- Chunk meshes stored as binary .chunk files
+				- Terrain edits stored in metadata
+
+				[b]Thread Safety:[/b]
+				Safe to call. Background writer thread handles I/O.
+
+				[b]Example:[/b]
+				[code]
+				generator.save_map("user://maps", "my_world")
+				[/code]
+
+				[b]See Also:[/b]
+				[method load_map], [method start_background_writer], [method stop_background_writer]
+			</description>
+		</method>
+		<method name="load_map">
+			<return type="void" />
+			<param index="0" name="dir" type="String" />
+			<param index="1" name="map_name" type="String" />
+			<param index="2" name="strict_match" type="bool" />
+			<description>
+				Loads a previously saved terrain map.
+
+				[b]Parameters:[/b]
+				[code]dir[/code] - Base directory path.
+				[code]map_name[/code] - Map subdirectory name.
+				[code]strict_match[/code] - If true, map must match current world size. If false, load what's available.
+
+				[b]Effect:[/b]
+				Loads chunk meshes and terrain edits, reconstructing previous state.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread.
+
+				[b]Example:[/b]
+				[code]
+				generator.load_map("user://maps", "my_world", true)
+				[/code]
+
+				[b]See Also:[/b]
+				[method save_map]
+			</description>
+		</method>
+		<method name="set_debug_mode">
+			<return type="void" />
+			<param index="0" name="p_enabled" type="bool" />
+			<description>
+				Enables/disables debug output logging.
+
+				[b]Parameters:[/b]
+				[code]p_enabled[/code] - true to enable, false to disable.
+
+				[b]Effect:[/b]
+				When enabled, generator emits debug messages to console. Output level controlled by [method set_debug_verbosity].
+
+				[b]Example:[/b]
+				[code]
+				generator.set_debug_mode(true)
+				generator.set_debug_verbosity(2)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_debug_mode], [method set_debug_verbosity]
+			</description>
+		</method>
+		<method name="get_debug_mode" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether debug mode is enabled.
+
+				[b]See Also:[/b]
+				[method set_debug_mode]
+			</description>
+		</method>
+		<method name="set_visualize_noise_values">
+			<return type="void" />
+			<param index="0" name="p_enabled" type="bool" />
+			<description>
+				Enables/disables noise field visualization.
+
+				[b]Parameters:[/b]
+				[code]p_enabled[/code] - true to visualize, false to disable.
+
+				[b]Effect:[/b]
+				When enabled, a 2D slice of noise values is rendered for debugging noise configuration.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_visualize_noise_values(true)
+				generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_visualize_noise_values], [method debug_draw_noise_slice]
+			</description>
+		</method>
+		<method name="get_visualize_noise_values" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether noise visualization is enabled.
+
+				[b]See Also:[/b]
+				[method set_visualize_noise_values]
+			</description>
+		</method>
+		<method name="set_debug_verbosity">
+			<return type="void" />
+			<param index="0" name="p_level" type="int" />
+			<description>
+				Sets the debug output verbosity level (0-3).
+
+				[b]Parameters:[/b]
+				[code]p_level[/code] - 0=silent, 1=errors, 2=info, 3=verbose.
+
+				[b]Effect:[/b]
+				Higher levels produce more console output. Only active if [method set_debug_mode] enabled.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_debug_mode(true)
+				generator.set_debug_verbosity(3)  # Maximum verbosity
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_debug_verbosity], [method set_debug_mode]
+			</description>
+		</method>
+		<method name="get_debug_verbosity" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current debug verbosity level.
+
+				[b]See Also:[/b]
+				[method set_debug_verbosity]
+			</description>
+		</method>
+		<method name="set_debug_dump_chunk_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Enables/disables per-chunk density sampling dump (instrumentation).
+
+				[b]Parameters:[/b]
+				[code]enabled[/code] - true to enable, false to disable.
+
+				[b]Effect:[/b]
+				When enabled, designated chunk outputs detailed density samples to console for analysis. Used to verify density calculations.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_debug_dump_chunk_enabled(true)
+				generator.set_debug_dump_chunk_coord(Vector3i(1, 0, 0))
+				generator.generate()
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_debug_dump_chunk_enabled], [method set_debug_dump_chunk_coord], [method dump_chunk_density_samples]
+			</description>
+		</method>
+		<method name="get_debug_dump_chunk_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether chunk density dump is enabled.
+
+				[b]See Also:[/b]
+				[method set_debug_dump_chunk_enabled]
+			</description>
+		</method>
+		<method name="set_debug_dump_chunk_coord">
+			<return type="void" />
+			<param index="0" name="coord" type="Vector3i" />
+			<description>
+				Sets which chunk to sample density for dumping.
+
+				[b]Parameters:[/b]
+				[code]coord[/code] - 3D chunk coordinate (e.g., Vector3i(1, 0, 0)).
+
+				[b]Effect:[/b]
+				When chunk dump is enabled, this chunk's density values are logged.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_debug_dump_chunk_coord(Vector3i(5, 2, 5))
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_debug_dump_chunk_coord], [method dump_chunk_density_samples]
+			</description>
+		</method>
+		<method name="get_debug_dump_chunk_coord" qualifiers="const">
+			<return type="Vector3i" />
+			<description>
+				Returns the chunk coordinate set for density dump.
+
+				[b]See Also:[/b]
+				[method set_debug_dump_chunk_coord]
+			</description>
+		</method>
+		<method name="dump_chunk_density_samples">
+			<return type="void" />
+			<param index="0" name="chunk_index" type="int" />
+			<description>
+				Manually triggers density sampling dump for a chunk.
+
+				[b]Parameters:[/b]
+				[code]chunk_index[/code] - Linear chunk index.
+
+				[b]Effect:[/b]
+				Outputs detailed density values at all corner points of the chunk to console.
+
+				[b]Use Case:[/b]
+				Debugging terrain generation issues or verifying noise output.
+
+				[b]Example:[/b]
+				[code]
+				generator.dump_chunk_density_samples(5)
+				[/code]
+
+				[b]See Also:[/b]
+				[method set_debug_dump_chunk_enabled]
+			</description>
+		</method>
+		<method name="set_voxel_highlight_enabled">
+			<return type="void" />
+			<param index="0" name="enabled" type="bool" />
+			<description>
+				Enables/disables voxel highlighting (debug visualization).
+
+				[b]Parameters:[/b]
+				[code]enabled[/code] - true to enable, false to disable.
+
+				[b]Effect:[/b]
+				When enabled, voxel at [member highlight_position] is highlighted with [member highlight_color].
+
+				[b]Example:[/b]
+				[code]
+				generator.set_voxel_highlight_enabled(true)
+				generator.set_highlight_position(player.get_position())
+				generator.set_highlight_color(Color.GREEN)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_voxel_highlight_enabled], [method set_highlight_position], [method set_highlight_color]
+			</description>
+		</method>
+		<method name="get_voxel_highlight_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether voxel highlighting is enabled.
+
+				[b]See Also:[/b]
+				[method set_voxel_highlight_enabled]
+			</description>
+		</method>
+		<method name="set_highlight_position">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" />
+			<description>
+				Sets the world position to highlight.
+
+				[b]Parameters:[/b]
+				[code]position[/code] - World position for highlight.
+
+				[b]Effect:[/b]
+				Used with [method set_voxel_highlight_enabled]. Nearest voxel to this position is highlighted.
+
+				[b]Example:[/b]
+				[code]
+				func _process(_delta):
+					generator.set_highlight_position(player.get_position())
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_highlight_position], [method set_voxel_highlight_enabled]
+			</description>
+		</method>
+		<method name="get_highlight_position" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				Returns the current highlight position.
+
+				[b]See Also:[/b]
+				[method set_highlight_position]
+			</description>
+		</method>
+		<method name="set_highlight_color">
+			<return type="void" />
+			<param index="0" name="color" type="Color" />
+			<description>
+				Sets the color of highlighted voxels.
+
+				[b]Parameters:[/b]
+				[code]color[/code] - Highlight color (default bright yellow).
+
+				[b]Example:[/b]
+				[code]
+				generator.set_highlight_color(Color.RED)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_highlight_color]
+			</description>
+		</method>
+		<method name="get_highlight_color" qualifiers="const">
+			<return type="Color" />
+			<description>
+				Returns the current highlight color.
+
+				[b]See Also:[/b]
+				[method set_highlight_color]
+			</description>
+		</method>
+		<method name="clear_highlight">
+			<return type="void" />
+			<description>
+				Clears all highlight visualization.
+
+				[b]Effect:[/b]
+				Disables highlighting without changing enable flag.
+
+				[b]See Also:[/b]
+				[method set_voxel_highlight_enabled]
+			</description>
+		</method>
+		<method name="set_show_lod_colors">
+			<return type="void" />
+			<param index="0" name="value" type="bool" />
+			<description>
+				Enables/disables LOD color visualization.
+
+				[b]Parameters:[/b]
+				[code]value[/code] - true to color chunks by LOD, false for normal colors.
+
+				[b]Effect:[/b]
+				When enabled, chunks are colored from green (LOD 0) to red (LOD 7) for visual validation of LOD assignment.
+
+				[b]Example:[/b]
+				[code]
+				generator.set_enable_distance_lod(true)
+				generator.set_show_lod_colors(true)
+				generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_show_lod_colors], [method set_enable_distance_lod]
+			</description>
+		</method>
+		<method name="get_show_lod_colors" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether LOD color visualization is enabled.
+
+				[b]See Also:[/b]
+				[method set_show_lod_colors]
+			</description>
+		</method>
+		<method name="set_use_textures">
+			<return type="void" />
+			<param index="0" name="value" type="bool" />
+			<description>
+				Toggles between textured and vertex-color rendering.
+
+				[b]Parameters:[/b]
+				[code]value[/code] - true for textured, false for vertex colors.
+
+				[b]Effect:[/b]
+				When true, terrain uses texture maps. When false, uses per-vertex colors (useful for debug/biome visualization).
+
+				[b]Example:[/b]
+				[code]
+				generator.set_use_textures(false)  # Show biome colors
+				generator.regenerate_dirty_chunks()
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_use_textures], [method set_terrain_material]
+			</description>
+		</method>
+		<method name="get_use_textures" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether textured rendering is enabled.
+
+				[b]See Also:[/b]
+				[method set_use_textures]
+			</description>
+		</method>
+		<method name="set_terrain_material">
+			<return type="void" />
+			<param index="0" name="value" type="Ref&lt;Material&gt;" />
+			<description>
+				Sets the material applied to all terrain chunks.
+
+				[b]Parameters:[/b]
+				[code]value[/code] - A [Material] (StandardMaterial3D, ShaderMaterial, etc.).
+
+				[b]Effect:[/b]
+				Applied to all chunk MeshInstance3D nodes. Useful for consistent styling, lighting, or special effects.
+
+				[b]Example:[/b]
+				[code]
+				var mat = StandardMaterial3D.new()
+				mat.albedo_color = Color.GREEN
+				generator.set_terrain_material(mat)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_terrain_material], [method set_use_textures]
+			</description>
+		</method>
+		<method name="get_terrain_material" qualifiers="const">
+			<return type="Ref&lt;Material&gt;" />
+			<description>
+				Returns the current terrain material.
+
+				[b]See Also:[/b]
+				[method set_terrain_material]
+			</description>
+		</method>
+		<method name="sample_density_at" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="world_pos" type="Vector3" />
+			<description>
+				Samples the density at a world position.
+
+				[b]Parameters:[/b]
+				[code]world_pos[/code] - World position to sample.
+
+				[b]Return Value:[/b]
+				Density value (negative = solid, positive = air, zero = surface).
+
+				[b]Use Case:[/b]
+				Querying density for gameplay logic (digging, building, etc.).
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread (uses read-write lock on cache).
+
+				[b]Example:[/b]
+				[code]
+				var density = generator.sample_density_at(player.position)
+				if density &lt; 0:
+					print("Player is underground")
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_voxel_at]
+			</description>
+		</method>
+		<method name="get_voxel_at" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="voxel_pos" type="Vector3i" />
+			<description>
+				Gets the voxel type at integer voxel coordinates.
+
+				[b]Parameters:[/b]
+				[code]voxel_pos[/code] - Integer voxel position (e.g., Vector3i(100, 50, 100)).
+
+				[b]Return Value:[/b]
+				Voxel type ID (0 = AIR, 1+ = specific voxel type like STONE, DIRT, etc.).
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]Example:[/b]
+				[code]
+				var voxel_type = generator.get_voxel_at(Vector3i(100, 50, 100))
+				if voxel_type == VOXEL_STONE:
+					print("Stone found")
+				[/code]
+
+				[b]See Also:[/b]
+				[method sample_density_at]
+			</description>
+		</method>
+		<method name="debug_print_state">
+			<return type="void" />
+			<description>
+				Prints generator state information to console (debug).
+
+				[b]Effect:[/b]
+				Outputs world size, chunk size, resolution, LOD mode, noise generators, timings, etc.
+
+				[b]Example:[/b]
+				[code]
+				generator.debug_print_state()
+				[/code]
+			</description>
+		</method>
+		<method name="debug_draw_noise_slice">
+			<return type="void" />
+			<param index="0" name="y_level" type="float" />
+			<description>
+				Draws a debug visualization of noise values at a specific Y level.
+
+				[b]Parameters:[/b]
+				[code]y_level[/code] - Y world coordinate to slice at.
+
+				[b]Effect:[/b]
+				Creates an ImmediateMesh visualization showing the noise profile at that height level.
+
+				[b]Example:[/b]
+				[code]
+				generator.debug_draw_noise_slice(10.0)  # Slice at Y=10
+				[/code]
+
+				[b]See Also:[/b]
+				[method set_visualize_noise_values]
+			</description>
+		</method>
+		<method name="reset">
+			<return type="void" />
+			<description>
+				Resets the generator to initial state.
+
+				[b]Effect:[/b]
+				Clears density cache, terrain edits, chunks, and resets flags. Allows changing world_size again.
+
+				[b]Thread Safety:[/b]
+				Must be called from main thread when generation is not in progress.
+
+				[b]Example:[/b]
+				[code]
+				generator.reset()
+				generator.set_world_size(Vector3i(32, 32, 32))
+				generator.generate()
+				[/code]
+			</description>
+		</method>
+	</methods>
+	<members>
+	</members>
+	<signals>
+	</signals>
+	<constants>
+	</constants>
+</class>

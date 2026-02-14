@@ -1,0 +1,637 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="TerrainConfig" inherits="Resource" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Serializable resource for complete terrain generation configuration.
+	</brief_description>
+	<description>
+		[b]TerrainConfig[/b] is a [Resource]-based preset container that stores all terrain generation parameters and can be reused across multiple VoxelGenerator instances.
+
+		[b]Key Features:[/b]
+		[ul]
+		[li]Serializable to .tres files for easy sharing and version control[/li]
+		[li]Contains world structure, generation parameters, and references to biome/feature generators[/li]
+		[li]Can be applied to any VoxelGenerator via [method apply_to_voxel_generator][/li]
+		[li]Inspector-friendly with clear property categories[/li]
+		[/ul]
+
+		[b]Architecture:[/b]
+		A TerrainConfig aggregates all the settings needed to generate terrain:
+		- World structure: world_size, chunk_size
+		- Generation parameters: resolution, cutoff, terrain_height, terrain_amplitude, rock_influence
+		- Noise configuration: noise_generator reference
+		- Biome configuration: biome_generator reference
+		- LOD settings: lod_levels
+		- Rendering: terrain_material, use_textures
+
+		[b]Typical Usage:[/b]
+		[code]
+		# Create and configure in editor or code
+		var config = TerrainConfig.new()
+		config.set_config_name("Mountains")
+		config.set_world_size(Vector3i(16, 16, 16))
+		config.set_chunk_size(8)
+		config.set_terrain_height(20.0)
+		config.set_terrain_amplitude(15.0)
+
+		# Create noise
+		var noise = NoiseGenerator.new()
+		noise.set_period(64.0)
+		config.set_noise_generator(noise)
+
+		# Save for reuse
+		ResourceSaver.save(config, "res://configs/mountains.tres")
+
+		# Later: load and apply
+		var saved_config = ResourceLoader.load("res://configs/mountains.tres")
+		var generator = VoxelGenerator.new()
+		add_child(generator)
+		saved_config.apply_to_voxel_generator(generator)
+		generator.generate()
+		[/code]
+
+		[b]Related Classes:[/b]
+		[ul]
+		[li][VoxelGenerator] - Engine that uses this configuration[/li]
+		[li][NoiseGenerator] - Noise implementation reference[/li]
+		[li][BiomeGenerator] - Biome system reference[/li]
+		[li][BiomePreset] - Individual biome configuration[/li]
+		[li][VoxelEngine] - Can load configs via [method VoxelEngine.load_terrain][/li]
+		[/ul]
+
+		[b]Directory Layout:[/b]
+		Store configs in [code]res://configs/[/code] for organization. The [method VoxelEngine.load_terrain] method expects this structure.
+	</description>
+	<tutorials>
+		<link title="Getting Started">res://doc_classes/guides/GettingStarted.md</link>
+		<link title="Terrain Presets">res://doc_classes/guides/TerrainGeneration.md#presets</link>
+		<link title="Biome System">res://doc_classes/guides/BiomeSystem.md</link>
+	</tutorials>
+	<methods>
+		<method name="set_config_name">
+			<return type="void" />
+			<param index="0" name="p_name" type="String" />
+			<description>
+				Sets the configuration name (metadata).
+
+				[b]Parameters:[/b]
+				[code]p_name[/code] - String identifier for this configuration (e.g., "Mountains", "Desert", "Flatlands").
+
+				[b]Effect:[/b]
+				Used for organization and documentation. No effect on generation.
+
+				[b]Example:[/b]
+				[code]
+				config.set_config_name("Tropical Biome")
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_config_name]
+			</description>
+		</method>
+		<method name="get_config_name" qualifiers="const">
+			<return type="String" />
+			<description>
+				Returns the configuration name.
+
+				[b]See Also:[/b]
+				[method set_config_name]
+			</description>
+		</method>
+		<method name="set_world_size">
+			<return type="void" />
+			<param index="0" name="p_size" type="Vector3i" />
+			<description>
+				Sets the world grid dimensions (in chunks).
+
+				[b]Parameters:[/b]
+				[code]p_size[/code] - Grid size as Vector3i. Default (5, 5, 5).
+
+				[b]Effect:[/b]
+				When applied to a generator, sets [method VoxelGenerator.set_world_size].
+
+				[b]Example:[/b]
+				[code]
+				config.set_world_size(Vector3i(16, 16, 16))  # 16×16×16 chunks
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_world_size], [method set_chunk_size]
+			</description>
+		</method>
+		<method name="get_world_size" qualifiers="const">
+			<return type="Vector3i" />
+			<description>
+				Returns the configured world size (in chunks).
+
+				[b]See Also:[/b]
+				[method set_world_size]
+			</description>
+		</method>
+		<method name="set_chunk_size">
+			<return type="void" />
+			<param index="0" name="p_size" type="int" />
+			<description>
+				Sets the chunk dimensions (voxels per chunk edge).
+
+				[b]Parameters:[/b]
+				[code]p_size[/code] - Size. Default 8. Common values: 4, 8, 16, 32, 64.
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_chunk_size].
+
+				[b]Example:[/b]
+				[code]
+				config.set_chunk_size(16)  # Larger chunks = fewer total
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_chunk_size], [method set_world_size]
+			</description>
+		</method>
+		<method name="get_chunk_size" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the configured chunk size.
+
+				[b]See Also:[/b]
+				[method set_chunk_size]
+			</description>
+		</method>
+		<method name="set_resolution">
+			<return type="void" />
+			<param index="0" name="p_resolution" type="int" />
+			<description>
+				Sets the sampling resolution (samples per voxel edge).
+
+				[b]Parameters:[/b]
+				[code]p_resolution[/code] - Resolution level. Default 2. Range: 1-3 typical.
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_resolution]. Higher = smoother surface but slower generation.
+
+				[b]Example:[/b]
+				[code]
+				config.set_resolution(1)  # Fast, blocky
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_resolution]
+			</description>
+		</method>
+		<method name="get_resolution" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the configured resolution.
+
+				[b]See Also:[/b]
+				[method set_resolution]
+			</description>
+		</method>
+		<method name="set_cutoff">
+			<return type="void" />
+			<param index="0" name="p_cutoff" type="float" />
+			<description>
+				Sets the marching cubes density cutoff threshold.
+
+				[b]Parameters:[/b]
+				[code]p_cutoff[/code] - Threshold value. Default 0.1. Negative = more solid, positive = more air.
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_cutoff].
+
+				[b]Example:[/b]
+				[code]
+				config.set_cutoff(-0.2)  # More solid terrain
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_cutoff]
+			</description>
+		</method>
+		<method name="get_cutoff" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the configured cutoff threshold.
+
+				[b]See Also:[/b]
+				[method set_cutoff]
+			</description>
+		</method>
+		<method name="set_seeder">
+			<return type="void" />
+			<param index="0" name="p_seeder" type="int" />
+			<description>
+				Sets the random seed for noise generation.
+
+				[b]Parameters:[/b]
+				[code]p_seeder[/code] - Seed integer. Default 1240. Same seed produces identical terrain.
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_seeder].
+
+				[b]Example:[/b]
+				[code]
+				config.set_seeder(42)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_seeder]
+			</description>
+		</method>
+		<method name="get_seeder" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the configured seed.
+
+				[b]See Also:[/b]
+				[method set_seeder]
+			</description>
+		</method>
+		<method name="set_terrain_height">
+			<return type="void" />
+			<param index="0" name="p_height" type="float" />
+			<description>
+				Sets the base terrain height (center height of terrain).
+
+				[b]Parameters:[/b]
+				[code]p_height[/code] - Height in world units. Default 4.0.
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_terrain_height].
+
+				[b]Example:[/b]
+				[code]
+				config.set_terrain_height(20.0)  # Terrain centered at Y=20
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_terrain_height], [method set_terrain_amplitude]
+			</description>
+		</method>
+		<method name="get_terrain_height" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the configured terrain height.
+
+				[b]See Also:[/b]
+				[method set_terrain_height]
+			</description>
+		</method>
+		<method name="set_terrain_amplitude">
+			<return type="void" />
+			<param index="0" name="p_amplitude" type="float" />
+			<description>
+				Sets the terrain height variation range.
+
+				[b]Parameters:[/b]
+				[code]p_amplitude[/code] - Amplitude in world units. Default 8.0. Larger = more dramatic height variation.
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_terrain_amplitude].
+
+				[b]Example:[/b]
+				[code]
+				config.set_terrain_amplitude(25.0)  # Mountainous
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_terrain_amplitude], [method set_terrain_height]
+			</description>
+		</method>
+		<method name="get_terrain_amplitude" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the configured terrain amplitude.
+
+				[b]See Also:[/b]
+				[method set_terrain_amplitude]
+			</description>
+		</method>
+		<method name="set_terrain_material">
+			<return type="void" />
+			<param index="0" name="p_material" type="Ref&lt;Material&gt;" />
+			<description>
+				Sets the material applied to terrain chunks.
+
+				[b]Parameters:[/b]
+				[code]p_material[/code] - A [Material] resource (StandardMaterial3D, ShaderMaterial, etc.).
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_terrain_material].
+
+				[b]Example:[/b]
+				[code]
+				var mat = StandardMaterial3D.new()
+				mat.albedo_color = Color.DARK_SLATE_GRAY
+				config.set_terrain_material(mat)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_terrain_material], [method set_use_textures]
+			</description>
+		</method>
+		<method name="get_terrain_material" qualifiers="const">
+			<return type="Ref&lt;Material&gt;" />
+			<description>
+				Returns the configured terrain material.
+
+				[b]See Also:[/b]
+				[method set_terrain_material]
+			</description>
+		</method>
+		<method name="set_use_textures">
+			<return type="void" />
+			<param index="0" name="p_use_textures" type="bool" />
+			<description>
+				Sets whether to use textures for rendering.
+
+				[b]Parameters:[/b]
+				[code]p_use_textures[/code] - true for textured, false for vertex colors. Default true.
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_use_textures].
+
+				[b]See Also:[/b]
+				[method get_use_textures], [method set_terrain_material]
+			</description>
+		</method>
+		<method name="get_use_textures" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether textures are enabled.
+
+				[b]See Also:[/b]
+				[method set_use_textures]
+			</description>
+		</method>
+		<method name="set_noise_generator">
+			<return type="void" />
+			<param index="0" name="p_noise_generator" type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Sets the noise generator reference for base terrain height.
+
+				[b]Parameters:[/b]
+				[code]p_noise_generator[/code] - A [NoiseGenerator] resource.
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_terrain_noise].
+
+				[b]Example:[/b]
+				[code]
+				var noise = NoiseGenerator.new()
+				noise.set_period(64.0)
+				noise.set_octaves(6)
+				config.set_noise_generator(noise)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_noise_generator], [method NoiseGenerator]
+			</description>
+		</method>
+		<method name="get_noise_generator" qualifiers="const">
+			<return type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Returns the configured noise generator reference.
+
+				[b]See Also:[/b]
+				[method set_noise_generator]
+			</description>
+		</method>
+		<method name="set_biome_generator">
+			<return type="void" />
+			<param index="0" name="p_biome_generator" type="Ref&lt;BiomeGenerator&gt;" />
+			<description>
+				Sets the biome generator reference.
+
+				[b]Parameters:[/b]
+				[code]p_biome_generator[/code] - A [BiomeGenerator] resource with configured biomes.
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_biome_generator].
+
+				[b]Example:[/b]
+				[code]
+				var biome_gen = BiomeGenerator.new()
+				# Configure biomes...
+				config.set_biome_generator(biome_gen)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_biome_generator], [method BiomeGenerator]
+			</description>
+		</method>
+		<method name="get_biome_generator" qualifiers="const">
+			<return type="Ref&lt;BiomeGenerator&gt;" />
+			<description>
+				Returns the configured biome generator reference.
+
+				[b]See Also:[/b]
+				[method set_biome_generator]
+			</description>
+		</method>
+		<method name="set_rock_influence">
+			<return type="void" />
+			<param index="0" name="p_influence" type="float" />
+			<description>
+				Sets the strength of detail noise (rocky features).
+
+				[b]Parameters:[/b]
+				[code]p_influence[/code] - Blend factor 0.0-1.0. Default 0.3.
+
+				[b]Effect:[/b]
+				When applied, sets [method VoxelGenerator.set_rock_influence].
+
+				[b]Example:[/b]
+				[code]
+				config.set_rock_influence(0.5)  # Moderate roughness
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_rock_influence]
+			</description>
+		</method>
+		<method name="get_rock_influence" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the configured rock influence.
+
+				[b]See Also:[/b]
+				[method set_rock_influence]
+			</description>
+		</method>
+		<method name="set_sea_level">
+			<return type="void" />
+			<param index="0" name="p_level" type="float" />
+			<description>
+				Sets the sea level (for biome calculations).
+
+				[b]Parameters:[/b]
+				[code]p_level[/code] - Y-coordinate of sea level. Default 0.0. Used for water biome areas.
+
+				[b]Effect:[/b]
+				Referenced by biome system for determining which areas are underwater vs above-water.
+
+				[b]Example:[/b]
+				[code]
+				config.set_sea_level(5.0)  # Water at Y=5
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_sea_level]
+			</description>
+		</method>
+		<method name="get_sea_level" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the configured sea level.
+
+				[b]See Also:[/b]
+				[method set_sea_level]
+			</description>
+		</method>
+		<method name="set_lod_levels">
+			<return type="void" />
+			<param index="0" name="p_levels" type="int" />
+			<description>
+				Sets the number of LOD levels (0-7).
+
+				[b]Parameters:[/b]
+				[code]p_levels[/code] - Number of LOD levels. Default 6. Range: 1-8.
+
+				[b]Effect:[/b]
+				Configuration parameter for documentation. LOD system depends on both this and per-generator settings.
+
+				[b]See Also:[/b]
+				[method get_lod_levels]
+			</description>
+		</method>
+		<method name="get_lod_levels" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the configured LOD level count.
+
+				[b]See Also:[/b]
+				[method set_lod_levels]
+			</description>
+		</method>
+		<method name="set_biome_presets">
+			<return type="void" />
+			<param index="0" name="p_presets" type="Array" />
+			<description>
+				Sets the array of biome presets.
+
+				[b]Parameters:[/b]
+				[code]p_presets[/code] - Array of [BiomePreset] resources.
+
+				[b]Effect:[/b]
+				Storage for preset configurations that can be applied to the biome generator.
+
+				[b]Example:[/b]
+				[code]
+				var presets = []
+				# Add presets...
+				config.set_biome_presets(presets)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_biome_presets], [method get_biome_preset]
+			</description>
+		</method>
+		<method name="get_biome_presets" qualifiers="const">
+			<return type="Array" />
+			<description>
+				Returns the array of biome presets.
+
+				[b]See Also:[/b]
+				[method set_biome_presets]
+			</description>
+		</method>
+		<method name="get_biome_preset">
+			<return type="Ref&lt;BiomePreset&gt;" />
+			<param index="0" name="p_index" type="int" />
+			<description>
+				Gets a specific biome preset by index.
+
+				[b]Parameters:[/b]
+				[code]p_index[/code] - Index in presets array.
+
+				[b]Return Value:[/b]
+				The [BiomePreset] at that index, or null if out of bounds.
+
+				[b]Example:[/b]
+				[code]
+				var preset = config.get_biome_preset(0)
+				if preset != null:
+					print("Preset name: ", preset.get_name())
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_biome_preset_count], [method get_biome_presets]
+			</description>
+		</method>
+		<method name="get_biome_preset_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the number of biome presets.
+
+				[b]Return Value:[/b]
+				Count of presets in array.
+
+				[b]Example:[/b]
+				[code]
+				for i in range(config.get_biome_preset_count()):
+					var preset = config.get_biome_preset(i)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_biome_preset], [method set_biome_presets]
+			</description>
+		</method>
+		<method name="apply_to_voxel_generator">
+			<return type="bool" />
+			<param index="0" name="p_generator" type="Object" />
+			<description>
+				Applies all stored configuration to a [VoxelGenerator] instance.
+
+				[b]Parameters:[/b]
+				[code]p_generator[/code] - A [VoxelGenerator] instance (passed as Object for binding flexibility).
+
+				[b]Return Value:[/b]
+				true if successfully applied, false on error (e.g., invalid generator type).
+
+				[b]Effect:[/b]
+				Sets all properties on the generator:
+				[ul]
+				[li][method VoxelGenerator.set_world_size][/li]
+				[li][method VoxelGenerator.set_chunk_size][/li]
+				[li][method VoxelGenerator.set_resolution][/li]
+				[li][method VoxelGenerator.set_cutoff][/li]
+				[li][method VoxelGenerator.set_seeder][/li]
+				[li][method VoxelGenerator.set_terrain_height][/li]
+				[li][method VoxelGenerator.set_terrain_amplitude][/li]
+				[li][method VoxelGenerator.set_rock_influence][/li]
+				[li][method VoxelGenerator.set_terrain_noise][/li]
+				[li][method VoxelGenerator.set_biome_generator][/li]
+				[li][method VoxelGenerator.set_terrain_material][/li]
+				[/ul]
+
+				[b]Typical Usage:[/b]
+				[code]
+				var generator = VoxelGenerator.new()
+				add_child(generator)
+				if config.apply_to_voxel_generator(generator):
+					generator.generate_async()
+				[/code]
+
+				[b]See Also:[/b]
+				[method VoxelEngine.load_terrain]
+			</description>
+		</method>
+	</methods>
+	<members>
+	</members>
+	<signals>
+	</signals>
+	<constants>
+	</constants>
+</class>

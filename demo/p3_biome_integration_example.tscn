@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://cxhbgo5ykaojt"]
+[gd_scene format=3 uid="uid://cxhbgo5ykaojt"]
 
 [ext_resource type="Script" uid="uid://bmnobpfsn1u4k" path="res://p3_biome_integration_example.gd" id="1_jvaau"]
 [ext_resource type="PackedScene" uid="uid://cp6m8e8v6rkjm" path="res://player/picele.tscn" id="2_l7bkx"]
@@ -21,26 +21,26 @@ sky_material = SubResource("ShaderMaterial_8bfdq")
 background_mode = 2
 sky = SubResource("Sky_tlwt5")
 
-[node name="P3BiomeIntegration" type="Node3D"]
+[node name="P3BiomeIntegration" type="Node3D" unique_id=1286008966]
 script = ExtResource("1_jvaau")
 WORLD_SIZE = 30
 WORLD_DEPTH = 16
 
-[node name="WorldCamera" type="Camera3D" parent="."]
+[node name="WorldCamera" type="Camera3D" parent="." unique_id=1292545787]
 transform = Transform3D(-0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, -0.70710677, -40, 0, -40)
 fov = 26.8
 
-[node name="Lighting" type="Node3D" parent="."]
+[node name="Lighting" type="Node3D" parent="." unique_id=1759230877]
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="Lighting"]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="Lighting" unique_id=247011853]
 environment = SubResource("Environment_v5enw")
 
-[node name="Sun" type="DirectionalLight3D" parent="Lighting"]
+[node name="Sun" type="DirectionalLight3D" parent="Lighting" unique_id=1485838190]
 transform = Transform3D(-0.5976251, -0.24376634, 0.7638208, 0, 0.9526615, 0.30403307, -0.8017757, 0.1816978, -0.5693344, -10000, 10000, -10000)
 shadow_enabled = true
 
-[node name="VoxelEngine" type="VoxelEngine" parent="."]
+[node name="VoxelEngine" type="VoxelEngine" parent="." unique_id=179130987]
 
-[node name="Picele" parent="." instance=ExtResource("2_l7bkx")]
+[node name="Picele" parent="." unique_id=2116827189 instance=ExtResource("2_l7bkx")]
 
-[node name="CentralDebugGUI" parent="." instance=ExtResource("6_qlgxh")]
+[node name="CentralDebugGUI" parent="." unique_id=1627857446 instance=ExtResource("6_qlgxh")]

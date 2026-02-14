@@ -1,0 +1,586 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="BiomeGenerator" inherits="Resource" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Biome system for terrain generation with height, temperature, humidity, and Y-range based layering.
+	</brief_description>
+	<description>
+		[b]BiomeGenerator[/b] determines terrain composition through biome-based voxel assignment. Biomes are region-based constraints defined by height, temperature, and humidity ranges that blend together smoothly.
+
+		[b]Key Features:[/b]
+		[ul]
+		[li]Multi-biome terrain with smooth blending transitions[/li]
+		[li]Height-based sampling (beach, grassland, mountains, etc.)[/li]
+		[li]Temperature and humidity noise for climate variety[/li]
+		[li]Y-range based subsurface layering (new preferred method)[/li]
+		[li]Deterministic voxel selection (reproducible results)[/li]
+		[li]Sea level control for water biomes[/li]
+		[/ul]
+
+		[b]Biome Concept:[/b]
+		Each biome defines:
+		- [b]Height range:[/b] Min/max altitude where biome appears
+		- [b]Climate ranges:[/b] Temperature (-1 to 1) and humidity (-1 to 1)
+		- [b]Surface blocks:[/b] What blocks appear at the surface
+		- [b]Subsurface layers:[/b] Block types at specific Y ranges (new Y-range system)
+		- [b]Bedrock/filler:[/b] Default blocks for bottom/fallback
+
+		When multiple biomes overlap, they blend smoothly over the blend_distance. Voxel selection is deterministic (seeded) to ensure reproducibility.
+
+		[b]Typical Usage:[/b]
+		[code]
+		var biome_gen = BiomeGenerator.new()
+
+		# Add grassland biome (height 5-15)
+		biome_gen.add_biome_with_y_ranges(
+			"grassland",           # name
+			5.0, 15.0,             # height range
+			0.4, 0.8,              # temperature
+			0.4, 0.8,              # humidity
+			[1],                   # surface blocks (grass)
+			[                      # Y-range layers
+				{\"min_y\": 0, \"max_y\": 3, \"blocks\": [2]},  # dirt layer
+				{\"min_y\": -100, \"max_y\": 0, \"blocks\": [3]} # stone below
+			],
+			3, 3                   # bedrock, filler
+		)
+
+		# Add desert biome (hot, dry)
+		biome_gen.add_biome_with_y_ranges(
+			"desert",
+			2.0, 8.0,
+			0.8, 1.0,              # very hot
+			-1.0, 0.2,             # dry
+			[4],                   # sand
+			[
+				{\"min_y\": 0, \"max_y\": 2, \"blocks\": [4]},  # sand
+				{\"min_y\": -100, \"max_y\": 0, \"blocks\": [3]} # stone
+			],
+			3, 3
+		)
+
+		generator.set_biome_generator(biome_gen)
+		[/code]
+
+		[b]Related Classes:[/b]
+		[ul]
+		[li][VoxelGenerator] - Uses biome generator for voxel assignment[/li]
+		[li][NoiseGenerator] - Provides height, temperature, humidity sampling[/li]
+		[li][FeatureGenerator] - Places features after biome terrain is set[/li]
+		[li][Voxel] - Individual voxel representation with type data[/li]
+		[/ul]
+	</description>
+	<tutorials>
+		<link title="Getting Started">res://doc_classes/guides/GettingStarted.md</link>
+		<link title="Biome System">res://doc_classes/guides/BiomeSystem.md</link>
+	</tutorials>
+	<methods>
+		<method name="set_height_noise">
+			<return type="void" />
+			<param index="0" name="p_noise" type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Sets the noise generator for height sampling (heightmap).
+
+				[b]Parameters:[/b]
+				[code]p_noise[/code] - A [NoiseGenerator] that samples base terrain height.
+
+				[b]Effect:[/b]
+				Used by all biomes to sample their base height at any world position.
+
+				[b]Example:[/b]
+				[code]
+				var height_noise = NoiseGenerator.new()
+				height_noise.set_period(128.0)
+				height_noise.set_octaves(6)
+				biome_gen.set_height_noise(height_noise)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_height_noise], [method set_temperature_noise], [method set_humidity_noise]
+			</description>
+		</method>
+		<method name="get_height_noise" qualifiers="const">
+			<return type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Returns the height noise generator.
+
+				[b]See Also:[/b]
+				[method set_height_noise]
+			</description>
+		</method>
+		<method name="set_temperature_noise">
+			<return type="void" />
+			<param index="0" name="p_noise" type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Sets the noise generator for temperature sampling.
+
+				[b]Parameters:[/b]
+				[code]p_noise[/code] - A [NoiseGenerator] for climate variety.
+
+				[b]Effect:[/b]
+				Samples temperature (-1 to 1) at terrain positions. Biomes with matching temperature ranges appear.
+
+				[b]Example:[/b]
+				[code]
+				var temp_noise = NoiseGenerator.new()
+				temp_noise.set_period(256.0)  # Large-scale climate zones
+				biome_gen.set_temperature_noise(temp_noise)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_temperature_noise], [method set_humidity_noise]
+			</description>
+		</method>
+		<method name="get_temperature_noise" qualifiers="const">
+			<return type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Returns the temperature noise generator.
+
+				[b]See Also:[/b]
+				[method set_temperature_noise]
+			</description>
+		</method>
+		<method name="set_humidity_noise">
+			<return type="void" />
+			<param index="0" name="p_noise" type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Sets the noise generator for humidity sampling.
+
+				[b]Parameters:[/b]
+				[code]p_noise[/code] - A [NoiseGenerator] for humidity variety.
+
+				[b]Effect:[/b]
+				Samples humidity (-1 to 1) for wet/dry zones.
+
+				[b]See Also:[/b]
+				[method get_humidity_noise]
+			</description>
+		</method>
+		<method name="get_humidity_noise" qualifiers="const">
+			<return type="Ref&lt;NoiseGenerator&gt;" />
+			<description>
+				Returns the humidity noise generator.
+
+				[b]See Also:[/b]
+				[method set_humidity_noise]
+			</description>
+		</method>
+		<method name="set_sea_level">
+			<return type="void" />
+			<param index="0" name="p_sea_level" type="float" />
+			<description>
+				Sets the sea level (Y coordinate for water).
+
+				[b]Parameters:[/b]
+				[code]p_sea_level[/code] - Y world coordinate. Terrain below this is water biome.
+
+				[b]Example:[/b]
+				[code]
+				biome_gen.set_sea_level(5.0)
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_sea_level]
+			</description>
+		</method>
+		<method name="get_sea_level" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the current sea level.
+
+				[b]See Also:[/b]
+				[method set_sea_level]
+			</description>
+		</method>
+		<method name="set_seed">
+			<return type="void" />
+			<param index="0" name="p_seed" type="int" />
+			<description>
+				Sets the random seed for deterministic voxel selection.
+
+				[b]Parameters:[/b]
+				[code]p_seed[/code] - Seed value. Same seed = same biome distribution.
+
+				[b]Effect:[/b]
+				Used for position-seeded hashing to determine which surface block is selected when multiple options exist.
+
+				[b]See Also:[/b]
+				[method get_seed]
+			</description>
+		</method>
+		<method name="get_seed" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current seed.
+
+				[b]See Also:[/b]
+				[method set_seed]
+			</description>
+		</method>
+		<method name="set_default_voxel">
+			<return type="void" />
+			<param index="0" name="p_voxel_id" type="int" />
+			<description>
+				Sets the default voxel type for fallback cases.
+
+				[b]Parameters:[/b]
+				[code]p_voxel_id[/code] - Voxel type ID. Used when no biome matches.
+
+				[b]See Also:[/b]
+				[method get_default_voxel]
+			</description>
+		</method>
+		<method name="get_default_voxel" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the default voxel type.
+
+				[b]See Also:[/b]
+				[method set_default_voxel]
+			</description>
+		</method>
+		<method name="set_blend_distance">
+			<return type="void" />
+			<param index="0" name="p_distance" type="int" />
+			<description>
+				Sets the biome transition blend distance (blocks).
+
+				[b]Parameters:[/b]
+				[code]p_distance[/code] - Distance (8-32 blocks). Controls smooth transition zone between biomes.
+
+				[b]Effect:[/b]
+				Larger blend distance = softer transitions. Smaller = sharper boundaries.
+
+				[b]Example:[/b]
+				[code]
+				biome_gen.set_blend_distance(16)  # Smooth transitions
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_blend_distance]
+			</description>
+		</method>
+		<method name="get_blend_distance" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the blend distance.
+
+				[b]See Also:[/b]
+				[method set_blend_distance]
+			</description>
+		</method>
+		<method name="add_biome">
+			<return type="void" />
+			<param index="0" name="name" type="String" />
+			<param index="1" name="min_height" type="float" />
+			<param index="2" name="max_height" type="float" />
+			<param index="3" name="min_temperature" type="float" />
+			<param index="4" name="max_temperature" type="float" />
+			<param index="5" name="min_humidity" type="float" />
+			<param index="6" name="max_humidity" type="float" />
+			<param index="7" name="surface_blocks" type="TypedArray&lt;int32_t&gt;" />
+			<param index="8" name="subsurface_blocks" type="TypedArray&lt;int32_t&gt;" />
+			<param index="9" name="depth" type="int" />
+			<description>
+				Adds a biome with simple depth-based subsurface (deprecated method, use add_biome_with_y_ranges).
+
+				[b]Parameters:[/b]
+				[code]name[/code] - Biome name (e.g., "grassland")
+				[code]min_height, max_height[/code] - Height range where biome appears
+				[code]min_temperature, max_temperature[/code] - Temperature range (-1 to 1)
+				[code]min_humidity, max_humidity[/code] - Humidity range (-1 to 1)
+				[code]surface_blocks[/code] - Array of voxel types for surface
+				[code]subsurface_blocks[/code] - Array of voxel types for subsurface
+				[code]depth[/code] - How many blocks deep subsurface layer is
+
+				[b]Note:[/b]
+				This method is deprecated. Use [method add_biome_with_y_ranges] instead for better control over layering.
+
+				[b]See Also:[/b]
+				[method add_biome_with_y_ranges]
+			</description>
+		</method>
+		<method name="add_biome_with_y_ranges">
+			<return type="void" />
+			<param index="0" name="name" type="String" />
+			<param index="1" name="min_height" type="float" />
+			<param index="2" name="max_height" type="float" />
+			<param index="3" name="min_temperature" type="float" />
+			<param index="4" name="max_temperature" type="float" />
+			<param index="5" name="min_humidity" type="float" />
+			<param index="6" name="max_humidity" type="float" />
+			<param index="7" name="surface_blocks" type="TypedArray&lt;int32_t&gt;" />
+			<param index="8" name="subsurface_layers_array" type="Array" />
+			<param index="9" name="bedrock_block" type="int" />
+			<param index="10" name="filler_block" type="int" />
+			<description>
+				Adds a biome with Y-range based subsurface layers (preferred method).
+
+				[b]Parameters:[/b]
+				[code]name[/code] - Biome identifier
+				[code]min_height, max_height[/code] - Altitude range
+				[code]min_temperature, max_temperature[/code] - Climate range
+				[code]min_humidity, max_humidity[/code] - Moisture range
+				[code]surface_blocks[/code] - Array of voxel types for surface layer
+				[code]subsurface_layers_array[/code] - Array of layer dictionaries with keys:
+				  - [code]"min_y"[/code] - Minimum Y coordinate for this layer
+				  - [code]"max_y"[/code] - Maximum Y coordinate for this layer
+				  - [code]"blocks"[/code] - Array of voxel types to use in this Y range
+				[code]bedrock_block[/code] - Voxel type at world bottom
+				[code]filler_block[/code] - Fallback block type
+
+				[b]Example:[/b]
+				[code]
+				biome_gen.add_biome_with_y_ranges(
+					"mountain",
+					15.0, 30.0,              # High altitude
+					0.3, 0.7,                # Moderate temp
+					0.3, 0.7,                # Moderate humidity
+					[5],                     # Snow surface
+					[
+						{\"min_y\": 5, \"max_y\": 10, \"blocks\": [6]},  # Rock layer
+						{\"min_y\": -50, \"max_y\": 5, \"blocks\": [3]}, # Deep stone
+						{\"min_y\": -100, \"max_y\": -50, \"blocks\": [7]} # Mineral layer
+					],
+					3,                       # bedrock
+					3                        # filler
+				)
+				[/code]
+
+				[b]Note:[/b]
+				When Y-ranges overlap, the first registered layer wins (priority by registration order).
+
+				[b]See Also:[/b]
+				[method add_biome], [method clear_biomes]
+			</description>
+		</method>
+		<method name="clear_biomes">
+			<return type="void" />
+			<description>
+				Removes all configured biomes.
+
+				[b]Effect:[/b]
+				Clears biome list. After this, terrain will use default voxel type.
+
+				[b]See Also:[/b]
+				[method get_biome_count]
+			</description>
+		</method>
+		<method name="get_biome_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the number of configured biomes.
+
+				[b]See Also:[/b]
+				[method get_biome_data]
+			</description>
+		</method>
+		<method name="get_biome_data" qualifiers="const">
+			<return type="Dictionary" />
+			<param index="0" name="index" type="int" />
+			<description>
+				Returns biome configuration as a dictionary.
+
+				[b]Parameters:[/b]
+				[code]index[/code] - Biome index (0 to get_biome_count()-1)
+
+				[b]Return Value:[/b]
+				Dictionary with keys: name, min_height, max_height, min_temperature, max_temperature, min_humidity, max_humidity, surface_blocks, subsurface_layers, bedrock_block, filler_block
+
+				[b]See Also:[/b]
+				[method get_biome_count]
+			</description>
+		</method>
+		<method name="get_height_at" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<param index="1" name="z" type="float" />
+			<description>
+				Samples height at world position (X, Z).
+
+				[b]Parameters:[/b]
+				[code]x, z[/code] - Horizontal position.
+
+				[b]Return Value:[/b]
+				Height value (Y coordinate of terrain surface at this location).
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]See Also:[/b]
+				[method get_blended_height_at]
+			</description>
+		</method>
+		<method name="get_voxel_at" qualifiers="const">
+			<return type="Ref&lt;Voxel&gt;" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="y" type="int" />
+			<param index="2" name="z" type="int" />
+			<description>
+				Gets the voxel at world coordinates.
+
+				[b]Parameters:[/b]
+				[code]x, y, z[/code] - Integer world position.
+
+				[b]Return Value:[/b]
+				[Voxel] object with type and material info.
+
+				[b]See Also:[/b]
+				[method get_voxel_at]
+			</description>
+		</method>
+		<method name="get_biome_index_at" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="x" type="float" />
+			<param index="1" name="z" type="float" />
+			<description>
+				Gets the primary biome index at a location.
+
+				[b]Parameters:[/b]
+				[code]x, z[/code] - Horizontal position.
+
+				[b]Return Value:[/b]
+				Biome index (0 to get_biome_count()-1).
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]See Also:[/b]
+				[method get_blended_biome_weights]
+			</description>
+		</method>
+		<method name="get_blended_biome_weights" qualifiers="const">
+			<return type="Array" />
+			<param index="0" name="x" type="float" />
+			<param index="1" name="z" type="float" />
+			<description>
+				Gets blended biome weights at a location (smooth transitions).
+
+				[b]Parameters:[/b]
+				[code]x, z[/code] - Horizontal position.
+
+				[b]Return Value:[/b]
+				Array of {biome_index, weight} dictionaries representing contribution of each nearby biome.
+
+				[b]Effect:[/b]
+				Used internally for smooth biome transitions. Biomes closer to blend_distance contribute more.
+
+				[b]See Also:[/b]
+				[method get_biome_index_at]
+			</description>
+		</method>
+		<method name="select_voxel_with_blending" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="y" type="int" />
+			<param index="2" name="z" type="int" />
+			<param index="3" name="biome_weights" type="Array" />
+			<param index="4" name="is_surface" type="bool" />
+			<description>
+				Selects a voxel type using blended biome weights.
+
+				[b]Parameters:[/b]
+				[code]x, y, z[/code] - Position
+				[code]biome_weights[/code] - Array from [method get_blended_biome_weights]
+				[code]is_surface[/code] - true for surface blocks, false for subsurface
+
+				[b]Return Value:[/b]
+				Voxel type ID to place.
+
+				[b]Note:[/b]
+				Deterministic selection based on position and seed.
+
+				[b]See Also:[/b]
+				[method get_blended_biome_weights]
+			</description>
+		</method>
+		<method name="get_blended_height_at" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<param index="1" name="z" type="float" />
+			<description>
+				Gets height blended across nearby biomes.
+
+				[b]Parameters:[/b]
+				[code]x, z[/code] - Horizontal position.
+
+				[b]Return Value:[/b]
+				Blended height value (smooth transitions between biome heights).
+
+				[b]See Also:[/b]
+				[method get_height_at]
+			</description>
+		</method>
+		<method name="get_temperature_at" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<param index="1" name="z" type="float" />
+			<description>
+				Samples temperature at position.
+
+				[b]Return Value:[/b]
+				Temperature value (-1 to 1).
+
+				[b]See Also:[/b]
+				[method get_humidity_at]
+			</description>
+		</method>
+		<method name="get_humidity_at" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<param index="1" name="z" type="float" />
+			<description>
+				Samples humidity at position.
+
+				[b]Return Value:[/b]
+				Humidity value (-1 to 1).
+
+				[b]See Also:[/b]
+				[method get_temperature_at]
+			</description>
+		</method>
+		<method name="select_block_deterministic" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="y" type="int" />
+			<param index="2" name="z" type="int" />
+			<param index="3" name="blocks" type="TypedArray&lt;int32_t&gt;" />
+			<description>
+				Deterministically selects one block from an array.
+
+				[b]Parameters:[/b]
+				[code]x, y, z[/code] - Position (used for seeding)
+				[code]blocks[/code] - Array of voxel type IDs to choose from
+
+				[b]Return Value:[/b]
+				One of the blocks in the array (deterministic based on position).
+
+				[b]Effect:[/b]
+				Allows surface variety without randomness. Same position always selects same block.
+
+				[b]See Also:[/b]
+				[method set_seed]
+			</description>
+		</method>
+		<method name="ensure_noise_generators">
+			<return type="void" />
+			<description>
+				Initializes default noise generators if not already set.
+
+				[b]Effect:[/b]
+				Creates standard Perlin noise generators for height, temperature, humidity if they don't exist.
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread (internally serialized).
+
+				[b]Note:[/b]
+				Automatically called during generation if needed.
+			</description>
+		</method>
+	</methods>
+	<members>
+	</members>
+	<signals>
+	</signals>
+	<constants>
+	</constants>
+</class>

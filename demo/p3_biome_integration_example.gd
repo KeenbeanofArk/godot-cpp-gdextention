@@ -420,7 +420,7 @@ func demonstrate_voxel_registry() -> void:
 
 	var all_type_ids = registry.get_all_type_ids()
 	for type_id in all_type_ids:
-		var name = registry.get_voxel_name(type_id)
+		var vox_name = registry.get_voxel_name(type_id)
 		var hardness = registry.get_hardness(type_id)
 		var is_solid = registry.is_solid(type_id)
 		var is_transparent = registry.is_transparent(type_id)
@@ -429,7 +429,7 @@ func demonstrate_voxel_registry() -> void:
 		var light_emission = registry.get_light_emission(type_id)
 
 		print("  [%d] %s - hardness: %.2f, solid: %s, transparent: %s, liquid: %s, material_id: %d, emission: %.2f" % [
-			type_id, name, hardness, is_solid, is_transparent, is_liquid, material_id, light_emission
+			type_id, vox_name, hardness, is_solid, is_transparent, is_liquid, material_id, light_emission
 		])
 
 # Demonstrate accessing material rendering properties
@@ -444,14 +444,14 @@ func demonstrate_voxel_material_library() -> void:
 	for material_id in all_material_ids:
 		var material = library.get_material(material_id)
 		if material:
-			var name = material.get_material_name()
+			var mat_name = material.get_material_name()
 			var color = material.get_color_tint()
 			var emission = material.get_emission_strength()
 			var roughness = material.get_roughness()
 			var metallic = material.get_metallic()
 
 			print("  [%d] %s - color: %s, emission: %.2f, roughness: %.2f, metallic: %.2f" % [
-				material_id, name, color, emission, roughness, metallic
+				material_id, mat_name, color, emission, roughness, metallic
 			])
 
 # Demonstrate linking voxel types to materials
@@ -464,7 +464,7 @@ func demonstrate_voxel_full_info() -> void:
 
 	var all_type_ids = registry.get_all_type_ids()
 	for type_id in all_type_ids:
-		var name = registry.get_voxel_name(type_id)
+		var vox_name = registry.get_voxel_name(type_id)
 		var material_id = registry.get_material_id(type_id)
 		var material = library.get_material(material_id)
 
@@ -472,11 +472,11 @@ func demonstrate_voxel_full_info() -> void:
 			var material_name = material.get_material_name()
 			var color = material.get_color_tint()
 			print("  Voxel '%s' (id %d) uses Material '%s' (id %d) with color %s" % [
-				name, type_id, material_name, material_id, color
+				vox_name, type_id, material_name, material_id, color
 			])
 		else:
 			print("  Voxel '%s' (id %d) references material_id %d, but material not found" % [
-				name, type_id, material_id
+				vox_name, type_id, material_id
 			])
 
 func _voxel_type_name(voxel_type: int) -> String:

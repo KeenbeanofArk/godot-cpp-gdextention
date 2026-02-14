@@ -93,7 +93,8 @@ func _show_selected_terrain() -> void:
 	
 func _on_voxel_generator_forcefield_body_entered(_wall_index: int, body: Object) -> void:
 	# Get current voxel generator from terrain manager
-	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
+	#var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
+	terrain_manager = get_tree().root.find_child("MultiTerrainManager", true, false)
 	if terrain_manager and terrain_manager.current_voxel_generator:
 		terrain_manager.current_voxel_generator.set_forcefield_shader_param("base_alpha", 0.85)
 
@@ -104,6 +105,7 @@ func _on_voxel_generator_forcefield_body_entered(_wall_index: int, body: Object)
 			
 func _on_voxel_generator_forcefield_body_exited(_wall_index: int, _body: Object) -> void:
 	# Get current voxel generator from terrain manager
-	var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
+	#var terrain_manager = get_node_or_null("/root/MultiTerrainManager")
+	terrain_manager = get_tree().root.find_child("MultiTerrainManager", true, false)
 	if terrain_manager and terrain_manager.current_voxel_generator:
 		terrain_manager.current_voxel_generator.set_forcefield_shader_param("base_alpha", 0.0)

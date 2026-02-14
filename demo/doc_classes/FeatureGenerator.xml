@@ -1,0 +1,438 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FeatureGenerator" inherits="Resource" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Feature placement system for decorations, ores, trees, and other structures.
+	</brief_description>
+	<description>
+		[b]FeatureGenerator[/b] handles placement of decorative features and structures after biome terrain is generated. Features include trees, ore veins, rocks, and custom structures placed according to probabilistic rules.
+
+		[b]Key Features:[/b]
+		[ul]
+		[li]Rule-based feature placement (trees, ores, rocks, foliage, structures)[/li]
+		[li]Probabilistic spawning with configurable density[/li]
+		[li]Biome-specific feature placement[/li]
+		[li]Height-range filtering (mountains vs valleys)[/li]
+		[li]Cluster generation for ore veins and rock formations[/li]
+		[li]Deterministic placement (reproducible with same seed)[/li]
+		[/ul]
+
+		[b]Feature Types:[/b]
+		[ul]
+		[li][b]TREE:[/b] Large vegetation (1-5 blocks tall)[/li]
+		[li][b]ORE_VEIN:[/b] Mineral clusters (varying density)[/li]
+		[li][b]ROCK:[/b] Rock formations and boulders[/li]
+		[li][b]FOLIAGE:[/b] Flowers, grass, small plants[/li]
+		[li][b]STRUCTURE:[/b] Custom structures and decorations[/li]
+		[/ul]
+
+		[b]Rule System:[/b]
+		Each feature rule defines:
+		- [b]Type:[/b] What kind of feature (tree, ore, etc.)
+		- [b]Probability:[/b] Chance of spawning (0.0-1.0)
+		- [b]Allowed biomes:[/b] Which biomes allow this feature
+		- [b]Height range:[/b] Min/max Y for placement
+		- [b]Voxel type:[/b] What voxel ID to place
+		- [b]Cluster size:[/b] How many voxels per placement
+		- [b]Spacing:[/b] Minimum distance between features
+
+		[b]Typical Usage:[/b]
+		[code]
+		var feature_gen = FeatureGenerator.new()
+
+		# Add trees to grasslands (10% chance in height range 5-20)
+		feature_gen.add_tree_rule(
+			0.1,                              # 10% probability
+			[0],                              # biome index 0 (grassland)
+			5, 20                             # height range
+		)
+
+		# Add iron ore (30% chance, cluster size 8)
+		feature_gen.add_ore_rule(
+			IRON_VOXEL_ID,                    # ore type
+			0.3,                              # probability
+			0, 50,                            # height range
+			8                                 # cluster size
+		)
+
+		# Add rocks to mountains (20% probability)
+		feature_gen.add_rock_rule(
+			0.2,
+			[2],                              # biome index 2 (mountains)
+			15, 30
+		)
+
+		generator.set_feature_generator(feature_gen)
+		[/code]
+
+		[b]Related Classes:[/b]
+		[ul]
+		[li][VoxelGenerator] - Applies features after biome generation[/li]
+		[li][BiomeGenerator] - Defines where features can spawn[/li]
+		[li][Voxel] - Individual voxel representation[/li]
+		[/ul]
+	</description>
+	<tutorials>
+		<link title="Getting Started">res://doc_classes/guides/GettingStarted.md</link>
+		<link title="Feature Placement">res://doc_classes/guides/FeaturePlacement.md</link>
+	</tutorials>
+	<methods>
+		<method name="set_seed">
+			<return type="void" />
+			<param index="0" name="p_seed" type="int" />
+			<description>
+				Sets the random seed for deterministic feature placement.
+
+				[b]Parameters:[/b]
+				[code]p_seed[/code] - Seed value. Same seed = same feature distribution.
+
+				[b]Effect:[/b]
+				Used for position-seeded hashing. Ensures reproducible feature placement.
+
+				[b]See Also:[/b]
+				[method get_seed]
+			</description>
+		</method>
+		<method name="get_seed" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the current seed.
+
+				[b]See Also:[/b]
+				[method set_seed]
+			</description>
+		</method>
+		<method name="add_rule">
+			<return type="void" />
+			<param index="0" name="feature_type" type="int" />
+			<param index="1" name="spawn_probability" type="float" />
+			<param index="2" name="allowed_biomes" type="TypedArray&lt;int&gt;" />
+			<param index="3" name="min_height" type="int" />
+			<param index="4" name="max_height" type="int" />
+			<param index="5" name="voxel_type" type="int" />
+			<param index="6" name="cluster_size" type="int" />
+			<param index="7" name="min_spacing" type="int" />
+			<description>
+				Adds a feature placement rule.
+
+				[b]Parameters:[/b]
+				[code]feature_type[/code] - Type constant (FEATURE_TREE, FEATURE_ORE_VEIN, FEATURE_ROCK, FEATURE_FOLIAGE, FEATURE_STRUCTURE)
+				[code]spawn_probability[/code] - 0.0-1.0. Higher = more frequent.
+				[code]allowed_biomes[/code] - Array of biome indices where this can spawn
+				[code]min_height, max_height[/code] - Y range for placement
+				[code]voxel_type[/code] - Voxel ID to place
+				[code]cluster_size[/code] - Number of voxels in cluster (1 = single block)
+				[code]min_spacing[/code] - Minimum distance to next feature (in blocks)
+
+				[b]Example:[/b]
+				[code]
+				feature_gen.add_rule(
+					FeatureGenerator.FEATURE_ORE_VEIN,  # Iron ore
+					0.25,                                # 25% probability
+					[0, 1, 2],                           # In biomes 0, 1, 2
+					0, 100,                              # Y 0-100
+					IRON_VOXEL_TYPE,                     # Place iron
+					12,                                  # Cluster size 12
+					16                                   # Min 16 blocks apart
+				)
+				[/code]
+
+				[b]See Also:[/b]
+				[method add_tree_rule], [method add_ore_rule], [method add_rock_rule]
+			</description>
+		</method>
+		<method name="remove_rule">
+			<return type="void" />
+			<param index="0" name="index" type="int" />
+			<description>
+				Removes a feature rule by index.
+
+				[b]Parameters:[/b]
+				[code]index[/code] - Rule index (0 to get_rule_count()-1)
+
+				[b]See Also:[/b]
+				[method add_rule], [method clear_rules]
+			</description>
+		</method>
+		<method name="clear_rules">
+			<return type="void" />
+			<description>
+				Removes all feature rules.
+
+				[b]Effect:[/b]
+				No features will be placed until new rules are added.
+
+				[b]See Also:[/b]
+				[method get_rule_count]
+			</description>
+		</method>
+		<method name="get_rule_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the number of configured rules.
+
+				[b]See Also:[/b]
+				[method get_rule]
+			</description>
+		</method>
+		<method name="get_rule" qualifiers="const">
+			<return type="Dictionary" />
+			<param index="0" name="index" type="int" />
+			<description>
+				Returns rule configuration as a dictionary.
+
+				[b]Parameters:[/b]
+				[code]index[/code] - Rule index (0 to get_rule_count()-1)
+
+				[b]Return Value:[/b]
+				Dictionary with keys: feature_type, spawn_probability, allowed_biomes, min_height, max_height, voxel_type, cluster_size, min_spacing
+
+				[b]See Also:[/b]
+				[method get_rule_count]
+			</description>
+		</method>
+		<method name="add_tree_rule">
+			<return type="void" />
+			<param index="0" name="probability" type="float" />
+			<param index="1" name="biomes" type="TypedArray&lt;int&gt;" />
+			<param index="2" name="min_h" type="int" />
+			<param index="3" name="max_h" type="int" />
+			<description>
+				Convenience method to add a tree placement rule.
+
+				[b]Parameters:[/b]
+				[code]probability[/code] - Spawn rate (0.0-1.0)
+				[code]biomes[/code] - Allowed biome indices
+				[code]min_h, max_h[/code] - Height range
+
+				[b]Equivalent To:[/b]
+				[code]add_rule(FEATURE_TREE, probability, biomes, min_h, max_h, TREE_VOXEL, 1, 4)[/code]
+
+				[b]Example:[/b]
+				[code]
+				# 15% trees in grassland (biome 0) between Y5-Y20
+				feature_gen.add_tree_rule(0.15, [0], 5, 20)
+				[/code]
+
+				[b]See Also:[/b]
+				[method add_ore_rule], [method add_rock_rule]
+			</description>
+		</method>
+		<method name="add_ore_rule">
+			<return type="void" />
+			<param index="0" name="ore_voxel_type" type="int" />
+			<param index="1" name="probability" type="float" />
+			<param index="2" name="min_h" type="int" />
+			<param index="3" name="max_h" type="int" />
+			<param index="4" name="cluster_size" type="int" />
+			<description>
+				Convenience method to add ore vein placement.
+
+				[b]Parameters:[/b]
+				[code]ore_voxel_type[/code] - Ore type ID
+				[code]probability[/code] - Spawn rate
+				[code]min_h, max_h[/code] - Depth range
+				[code]cluster_size[/code] - Size of ore veins
+
+				[b]Equivalent To:[/b]
+				[code]add_rule(FEATURE_ORE_VEIN, probability, [], min_h, max_h, ore_voxel_type, cluster_size, 0)[/code]
+
+				[b]Example:[/b]
+				[code]
+				# Iron ore: 20% chance, 8-block clusters, Y0-Y60
+				feature_gen.add_ore_rule(IRON_VOXEL, 0.2, 0, 60, 8)
+
+				# Gold ore: 10% chance, Y40-Y100
+				feature_gen.add_ore_rule(GOLD_VOXEL, 0.1, 40, 100, 12)
+
+				# Diamond: 5% chance, Y0-Y50 (rare)
+				feature_gen.add_ore_rule(DIAMOND_VOXEL, 0.05, 0, 50, 4)
+				[/code]
+
+				[b]See Also:[/b]
+				[method add_tree_rule], [method add_rock_rule]
+			</description>
+		</method>
+		<method name="add_rock_rule">
+			<return type="void" />
+			<param index="0" name="probability" type="float" />
+			<param index="1" name="biomes" type="TypedArray&lt;int&gt;" />
+			<param index="2" name="min_h" type="int" />
+			<param index="3" name="max_h" type="int" />
+			<description>
+				Convenience method to add rock formation placement.
+
+				[b]Parameters:[/b]
+				[code]probability[/code] - Spawn rate
+				[code]biomes[/code] - Allowed biome indices
+				[code]min_h, max_h[/code] - Height range
+
+				[b]Example:[/b]
+				[code]
+				# Rocks in mountains (biome 2), Y15-Y40
+				feature_gen.add_rock_rule(0.25, [2], 15, 40)
+				[/code]
+
+				[b]See Also:[/b]
+				[method add_tree_rule], [method add_ore_rule]
+			</description>
+		</method>
+		<method name="add_foliage_rule">
+			<return type="void" />
+			<param index="0" name="foliage_voxel" type="int" />
+			<param index="1" name="probability" type="float" />
+			<param index="2" name="biomes" type="TypedArray&lt;int&gt;" />
+			<description>
+				Convenience method to add foliage (flowers, grass) placement.
+
+				[b]Parameters:[/b]
+				[code]foliage_voxel[/code] - Foliage voxel type
+				[code]probability[/code] - Spawn rate (typically high, 0.3-0.8)
+				[code]biomes[/code] - Allowed biome indices
+
+				[b]Example:[/b]
+				[code]
+				# Flowers in grassland (biome 0), 40% density
+				feature_gen.add_foliage_rule(FLOWER_VOXEL, 0.4, [0])
+
+				# Mushrooms in forest (biome 1), 20% density
+				feature_gen.add_foliage_rule(MUSHROOM_VOXEL, 0.2, [1])
+				[/code]
+
+				[b]See Also:[/b]
+				[method add_tree_rule], [method add_rock_rule]
+			</description>
+		</method>
+		<method name="should_spawn_at" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="y" type="int" />
+			<param index="2" name="z" type="int" />
+			<param index="3" name="rule_index" type="int" />
+			<description>
+				Checks if a feature should spawn at a position based on a rule.
+
+				[b]Parameters:[/b]
+				[code]x, y, z[/code] - World position
+				[code]rule_index[/code] - Rule to check against
+
+				[b]Return Value:[/b]
+				true if feature should spawn, false otherwise (checked against probability and height range).
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]See Also:[/b]
+				[method is_biome_allowed]
+			</description>
+		</method>
+		<method name="is_biome_allowed" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="biome_index" type="int" />
+			<param index="1" name="rule_index" type="int" />
+			<description>
+				Checks if a biome is allowed for a rule.
+
+				[b]Parameters:[/b]
+				[code]biome_index[/code] - Biome index from BiomeGenerator
+				[code]rule_index[/code] - Feature rule index
+
+				[b]Return Value:[/b]
+				true if biome allows this feature.
+
+				[b]See Also:[/b]
+				[method should_spawn_at]
+			</description>
+		</method>
+		<method name="get_features_in_region" qualifiers="const">
+			<return type="Array" />
+			<param index="0" name="start_x" type="int" />
+			<param index="1" name="start_y" type="int" />
+			<param index="2" name="start_z" type="int" />
+			<param index="3" name="size_x" type="int" />
+			<param index="4" name="size_y" type="int" />
+			<param index="5" name="size_z" type="int" />
+			<param index="6" name="surface_heights" type="TypedArray&lt;int&gt;" />
+			<param index="7" name="biome_indices" type="TypedArray&lt;int&gt;" />
+			<description>
+				Generates features for a chunk region.
+
+				[b]Parameters:[/b]
+				[code]start_x, start_y, start_z[/code] - Region origin
+				[code]size_x, size_y, size_z[/code] - Region dimensions
+				[code]surface_heights[/code] - Array of Y values for each surface position
+				[code]biome_indices[/code] - Array of biome IDs for each position
+
+				[b]Return Value:[/b]
+				Array of feature placement dictionaries with keys: position (Vector3i), feature_type, voxel_type, size
+
+				[b]Note:[/b]
+				Called internally during chunk generation. Applies all rules to the region.
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread (deterministic).
+
+				[b]See Also:[/b]
+				[method get_feature_at]
+			</description>
+		</method>
+		<method name="get_feature_at" qualifiers="const">
+			<return type="Dictionary" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="y" type="int" />
+			<param index="2" name="z" type="int" />
+			<param index="3" name="surface_height" type="int" />
+			<param index="4" name="biome_index" type="int" />
+			<description>
+				Checks if a feature should be placed at a specific position.
+
+				[b]Parameters:[/b]
+				[code]x, y, z[/code] - World position
+				[code]surface_height[/code] - Y coordinate of terrain surface
+				[code]biome_index[/code] - Current biome at position
+
+				[b]Return Value:[/b]
+				Dictionary if feature should spawn: {position, feature_type, voxel_type, size}
+				Empty dictionary if no feature at this position.
+
+				[b]See Also:[/b]
+				[method get_features_in_region]
+			</description>
+		</method>
+		<method name="generate_ore_cluster" qualifiers="const">
+			<return type="Array" />
+			<param index="0" name="center_x" type="int" />
+			<param index="1" name="center_y" type="int" />
+			<param index="2" name="center_z" type="int" />
+			<param index="3" name="cluster_size" type="int" />
+			<description>
+				Generates ore cluster positions around a center point.
+
+				[b]Parameters:[/b]
+				[code]center_x, center_y, center_z[/code] - Cluster center
+				[code]cluster_size[/code] - Number of ore blocks in cluster
+
+				[b]Return Value:[/b]
+				Array of Vector3i positions to place ore.
+
+				[b]Effect:[/b]
+				Creates a randomish cluster pattern around center (deterministic with seed).
+
+				[b]Example:[/b]
+				[code]
+				var ore_positions = feature_gen.generate_ore_cluster(50, 30, 50, 12)
+				for pos in ore_positions:
+					generator.set_voxel(pos, IRON_VOXEL)
+				[/code]
+
+				[b]See Also:[/b]
+				[method add_ore_rule]
+			</description>
+		</method>
+	</methods>
+	<members>
+	</members>
+	<signals>
+	</signals>
+	<constants>
+	</constants>
+</class>

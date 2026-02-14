@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="VoxelEngine" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		High-level facade for managing voxel terrain generation and configuration.
+	</brief_description>
+	<description>
+		[b]VoxelEngine[/b] is a simplified entry point for using the terrain generation system. It manages the lifecycle of a [VoxelGenerator] instance and provides convenient factory methods for creating terrain.
+
+		[b]Key Features:[/b]
+		[ul]
+		[li]Single-point access to voxel terrain generation[/li]
+		[li]Automatic lifecycle management of VoxelGenerator[/li]
+		[li]Terrain loading from configuration files (.tres)[/li]
+		[li]Simple voxel read/write API[/li]
+		[/ul]
+
+		[b]Architecture:[/b]
+		VoxelEngine acts as a [Node] manager that owns a [VoxelGenerator] instance. When a VoxelEngine node is freed from the scene tree, it automatically cleans up its owned VoxelGenerator. This pattern is recommended for most gameplay scenarios where you want simple, integrated terrain management.
+
+		[b]Usage Pattern:[/b]
+		[code]
+		extends Node
+
+		func _ready():
+			var engine = VoxelEngine.new()
+			add_child(engine)
+			var generator = engine.create_generator()
+			# Configure generator as needed
+			generator.set_world_size(Vector3i(16, 16, 16))
+			generator.generate()
+		[/code]
+
+		[b]Alternative: Direct VoxelGenerator[/b]
+		For advanced use cases, you can instantiate [VoxelGenerator] directly without VoxelEngine for more control over lifecycle.
+
+		[b]Related Classes:[/b]
+		[ul]
+		[li][VoxelGenerator] - Core terrain generation engine[/li]
+		[li][TerrainConfig] - Reusable terrain configuration resource[/li]
+		[/ul]
+	</description>
+	<tutorials>
+		<link title="Getting Started with VoxelEngine">res://doc_classes/guides/GettingStarted.md</link>
+		<link title="Terrain Generation Overview">res://doc_classes/guides/TerrainGeneration.md</link>
+	</tutorials>
+	<methods>
+		<method name="create_generator" qualifiers="const">
+			<return type="VoxelGenerator" />
+			<description>
+				Creates a new [VoxelGenerator] instance and stores it as owned by this VoxelEngine. The VoxelEngine maintains ownership of the generator and will automatically delete it when the VoxelEngine node is freed.
+
+				If a generator already exists, it is destroyed before creating the new one.
+
+				[b]Return Value:[/b]
+				A newly created [VoxelGenerator] instance ready for configuration.
+
+				[b]Thread Safety:[/b]
+				Must be called from the main thread.
+
+				[b]Example:[/b]
+				[code]
+				var engine = VoxelEngine.new()
+				var gen = engine.create_generator()
+				gen.set_resolution(2)
+				gen.generate()
+				[/code]
+			</description>
+		</method>
+		<method name="destroy_generator">
+			<return type="void" />
+			<description>
+				Explicitly destroys the owned [VoxelGenerator]. Calling this is optional - the generator is automatically destroyed when the VoxelEngine is freed.
+
+				This is useful when you want to reset the generator without destroying the VoxelEngine node itself.
+
+				[b]Thread Safety:[/b]
+				Must be called from the main thread. If generation is in progress, ensure it's cancelled first.
+
+				[b]Example:[/b]
+				[code]
+				engine.destroy_generator()
+				# Generator is now null, safe to create a new one
+				var new_gen = engine.create_generator()
+				[/code]
+			</description>
+		</method>
+		<method name="get_voxel_generator" qualifiers="const">
+			<return type="VoxelGenerator" />
+			<description>
+				Returns the currently owned [VoxelGenerator] instance, or [code]null[/code] if no generator exists.
+
+				[b]Return Value:[/b]
+				The [VoxelGenerator] instance, or null.
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread, but the returned generator should only be configured/used from the main thread.
+
+				[b]Example:[/b]
+				[code]
+				var gen = engine.get_voxel_generator()
+				if gen != null:
+					gen.set_debug_mode(true)
+				[/code]
+			</description>
+		</method>
+		<method name="load_terrain">
+			<return type="VoxelGenerator" />
+			<param index="0" name="terrain_name" type="String" />
+			<description>
+				Loads a terrain configuration from a resource file and creates/configures a [VoxelGenerator] with those settings.
+
+				This method:
+				[ol]
+				[li]Loads the configuration from [code]res://configs/{terrain_name}.tres[/code][/li]
+				[li]Creates a new [VoxelGenerator] (destroying any existing one)[/li]
+				[li]Applies the configuration to the generator[/li]
+				[li]Returns the configured generator[/li]
+				[/ol]
+
+				[b]Parameters:[/b]
+				[code]terrain_name[/code] - Name of the terrain configuration (without path or extension). For example, "grassland" loads "res://configs/grassland.tres".
+
+				[b]Return Value:[/b]
+				The newly created and configured [VoxelGenerator], or null if the configuration file cannot be loaded.
+
+				[b]File Format:[/b]
+				The configuration file must be a [TerrainConfig] resource (.tres format).
+
+				[b]Thread Safety:[/b]
+				Must be called from the main thread.
+
+				[b]Example:[/b]
+				[code]
+				var gen = engine.load_terrain("grassland")
+				if gen != null:
+					gen.generate_async()
+				[/code]
+
+				[b]See Also:[/b]
+				[method TerrainConfig.apply_to_voxel_generator]
+			</description>
+		</method>
+		<method name="set_voxel_generator_node">
+			<return type="void" />
+			<param index="0" name="node" type="Node" />
+			<description>
+				[b]DEPRECATED:[/b] This method is kept for backward compatibility. Use [method create_generator] instead.
+
+				Previously this method allowed setting a pre-existing [VoxelGenerator] node as the managed generator. This functionality is discouraged in favor of the factory pattern.
+
+				[b]Thread Safety:[/b]
+				Must be called from the main thread.
+			</description>
+		</method>
+		<method name="set_voxel">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3i" />
+			<param index="1" name="type" type="int" />
+			<description>
+				Sets a voxel at the given world position to the specified voxel type.
+
+				This is a convenience method that proxies the call to the owned [VoxelGenerator].
+
+				[b]Parameters:[/b]
+				[code]position[/code] - World position of the voxel (in voxel coordinates).
+				[code]type[/code] - The voxel type ID to set. Voxel type IDs are defined by your voxel registry.
+
+				[b]Thread Safety:[/b]
+				Must be called from the main thread.
+
+				[b]Performance Note:[/b]
+				Setting individual voxels is relatively slow. For bulk terrain modifications, use [method VoxelGenerator.modify_terrain] instead with terrain edits.
+
+				[b]Example:[/b]
+				[code]
+				engine.set_voxel(Vector3i(100, 50, 100), 1)  # Set stone at position
+				[/code]
+
+				[b]See Also:[/b]
+				[method get_voxel], [method VoxelGenerator.set_voxel], [method VoxelGenerator.modify_terrain]
+			</description>
+		</method>
+		<method name="get_voxel" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="position" type="Vector3i" />
+			<description>
+				Gets the voxel type at the given world position.
+
+				This is a convenience method that proxies the call to the owned [VoxelGenerator].
+
+				[b]Parameters:[/b]
+				[code]position[/code] - World position of the voxel (in voxel coordinates).
+
+				[b]Return Value:[/b]
+				The voxel type ID at the position, or 0 if the voxel doesn't exist or is air.
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]Example:[/b]
+				[code]
+				var voxel_type = engine.get_voxel(Vector3i(100, 50, 100))
+				print("Voxel type: ", voxel_type)
+				[/code]
+
+				[b]See Also:[/b]
+				[method set_voxel], [method VoxelGenerator.get_voxel_at]
+			</description>
+		</method>
+		<method name="get_total_voxel_count" qualifiers="const">
+			<return type="int64_t" />
+			<description>
+				Returns the total number of voxels in the currently loaded world.
+
+				This is calculated as: [code]world_size.x * world_size.y * world_size.z * (chunk_size ^ 3)[/code]
+
+				[b]Return Value:[/b]
+				The total number of voxels in the world as a 64-bit integer.
+
+				[b]Performance Note:[/b]
+				This is a cheap O(1) calculation.
+
+				[b]Thread Safety:[/b]
+				Safe to call from any thread.
+
+				[b]Example:[/b]
+				[code]
+				var total = engine.get_total_voxel_count()
+				print("Total voxels: ", total)
+				[/code]
+
+				[b]See Also:[/b]
+				[method VoxelGenerator.set_world_size], [method VoxelGenerator.set_chunk_size]
+			</description>
+		</method>
+	</methods>
+	<members>
+	</members>
+	<signals>
+	</signals>
+	<constants>
+	</constants>
+</class>
