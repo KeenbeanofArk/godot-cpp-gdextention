@@ -1,0 +1,8 @@
+C:/Users/Brian/godot-cpp-gdextention/build/CMakeFiles/voxel-engine-gd.dir
+C:/Users/Brian/godot-cpp-gdextention/build/CMakeFiles/generate_doc_source.dir
+C:/Users/Brian/godot-cpp-gdextention/build/CMakeFiles/edit_cache.dir
+C:/Users/Brian/godot-cpp-gdextention/build/CMakeFiles/rebuild_cache.dir
+C:/Users/Brian/godot-cpp-gdextention/build/godot-cpp/CMakeFiles/generate_bindings.dir
+C:/Users/Brian/godot-cpp-gdextention/build/godot-cpp/CMakeFiles/godot-cpp.dir
+C:/Users/Brian/godot-cpp-gdextention/build/godot-cpp/CMakeFiles/edit_cache.dir
+C:/Users/Brian/godot-cpp-gdextention/build/godot-cpp/CMakeFiles/rebuild_cache.dir

@@ -1,5 +1,4 @@
 [configuration]
-
 entry_symbol = "voxel_engine_library_init"
 compatibility_minimum = "4.5"
 

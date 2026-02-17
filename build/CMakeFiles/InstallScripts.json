@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/Brian/godot-cpp-gdextention/build/cmake_install.cmake",
+		"C:/Users/Brian/godot-cpp-gdextention/build/godot-cpp/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
